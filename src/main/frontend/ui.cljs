@@ -52,22 +52,21 @@
   "A resize provider that uses react-use-measure for resize detection"
   [{:keys [onSizeChanged onMouseUp onClick className style children]}]
   (let [[bounds ref] (use-measure-ref)
-        prev-size (atom nil)
-        size-ref (atom nil)]
-    (rum/useEffect!
+        prev-size (atom nil)]
+    (rum/use-effect!
       (fn []
         (when bounds
           (let [current-size #js {:width (.-width bounds) :height (.-height bounds)}]
             (when (and onSizeChanged (not= current-size @prev-size))
               (reset! prev-size current-size)
-              (onSizeChanged current-size))))))
+              (onSizeChanged current-size)))))
+      [bounds])
     [:div
      {:class className
       :style style
       :ref ref
       :onMouseUp onMouseUp
-      :onClick onClick
-      :onResize onSizeChanged}
+      :onClick onClick}
      children]))
 
 (rum/defc resize-consumer
