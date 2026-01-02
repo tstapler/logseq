@@ -459,28 +459,28 @@
     (shui/dialog-close! :ls-dialog-cmdk)))
 
 (defmethod handle-action :open-block [_ state _event]
-  (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
-    (p/let [repo (state/get-current-repo)
-            _ (db-async/<get-block repo block-id :children? false)
-            block (db/entity [:block/uuid block-id])
-            parents (db-async/<get-block-parents (state/get-current-repo) (:db/id block) 1000)
-            created-from-block (some (fn [block']
-                                       (let [block (db/entity (:db/id block'))]
-                                         (when (:logseq.property/created-from-property block)
-                                           (:block/parent block)))) parents)
-            [block-id block] (if created-from-block
-                               (let [block (db/entity (:db/id created-from-block))]
-                                 [(:block/uuid block) block])
-                               [block-id block])]
-      (let [get-block-page (partial model/get-block-page repo)]
-        (when block
-          (when-let [page (some-> block-id get-block-page)]
-            (cond
-              (model/parents-collapsed? (state/get-current-repo) block-id)
-              (route-handler/redirect-to-page! block-id)
-              :else
-              (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
-            (shui/dialog-close! :ls-dialog-cmdk)))))))
+   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
+     (p/let [repo (state/get-current-repo)
+             _ (db-async/<get-block repo block-id :children? false)
+             block (db/entity [:block/uuid block-id])
+             parent-blocks (db-async/<get-block-parents (state/get-current-repo) (:db/id block) 1000)
+             created-from-block (some (fn [block']
+                                        (let [block (db/entity (:db/id block'))]
+                                          (when (:logseq.property/created-from-property block)
+                                            (:block/parent block)))) parent-blocks)
+             [block-id block] (if created-from-block
+                                (let [block (db/entity (:db/id created-from-block))]
+                                  [(:block/uuid block) block])
+                                [block-id block])]
+       (let [get-block-page (partial model/get-block-page repo)]
+         (when block
+           (when-let [page (some-> block-id get-block-page)]
+             (cond
+               (model/parents-collapsed? (state/get-current-repo) block-id)
+               (route-handler/redirect-to-page! block-id)
+               :else
+               (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
+             (shui/dialog-close! :ls-dialog-cmdk)))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
