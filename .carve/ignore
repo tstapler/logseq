@@ -77,3 +77,122 @@ frontend.common.missionary/background-task-running?
 ;; defonce
 mobile.components.popup/native-sheet-listener
 mobile.bottom-tabs/add-tab-listeners!
+;; Test generators (used by test code generators)
+frontend.test.generators/gen-available-parent
+frontend.test.generators/gen-insert-blocks-op
+frontend.test.generators/gen-delete-blocks-op
+frontend.test.generators/gen-move-blocks-op
+;; Test helper vars used by tests
+frontend.db.db-based-model-test/fbid
+frontend.db.db-based-model-test/sbid
+frontend.test.helper/save-block!
+;; Test fixtures
+frontend.worker.fixtures/listen-test-db-to-write-tx-log-json-file
+;; Electron utils (used by electron main)
+electron.utils/get-graph-name
+;; File operations (used conditionally)
+frontend.common.file.opfs/<delete-file!
+;; Missionary utilities (used in specific conditions)
+frontend.common.missionary/run-task-throw
+frontend.common.missionary/>!
+frontend.common.missionary/await-promise
+frontend.common.missionary/background-task-running?
+;; Thread API
+frontend.common.thread-api/defkeyword
+;; Component objects (used in specific UI contexts)
+frontend.components.objects/edit-new-object
+frontend.components.rtc.indicator/rtc-state-schema
+;; SVG components (conditionally rendered)
+frontend.components.svg/roam-research
+frontend.components.svg/circle-stop
+frontend.components.svg/audio-lines
+;; Core setup (used during app initialization)
+frontend.core/setup-entity-profile!
+;; Date formatters (used for i18n)
+frontend.date/default-formatter
+frontend.date/zh-formatter
+;; DB async operations (used in specific query contexts)
+frontend.db.async/<pull-many
+;; DB connection management (used for cleanup)
+frontend.db.conn/remove-conn!
+;; DB model functions (used in specific conditions)
+frontend.db.model/file-exists?
+frontend.db.model/get-files-full
+frontend.db.model/get-page-format
+frontend.db.model/top-block?
+frontend.db.model/get-block-parents
+frontend.db.model/page-empty?
+frontend.db.model/get-case-page
+frontend.db.model/get-latest-journals
+frontend.db.model/journal-page?
+frontend.db.model/delete-files
+frontend.db.model/whiteboard-page?
+frontend.db.model/get-all-blocks
+;; DB performance functions (used for optimization)
+frontend.db.performance/cached-query
+frontend.db.performance/lazy-pull
+frontend.db.performance/stream-entities
+frontend.db.performance/query-with-hints
+;; FSRS extension (used for flashcards)
+frontend.extensions.fsrs/<cards-stat
+;; HTML parser (used for specific content types)
+frontend.extensions.html-parser/img-link
+;; Asset handling (used conditionally)
+frontend.handler.assets/asset
+frontend.handler.assets/xxxx
+;; Block handler (used in specific editing contexts)
+frontend.handler.block/get-last-block-original
+;; Export functionality (used for specific export formats)
+frontend.handler.export/export-repo-as-roam-json!
+;; Profiler (used for debugging)
+frontend.handler.profiler/test-fn-to-profile
+;; User handler (used for specific feature checks)
+frontend.handler.user/feature-available?
+;; IDB operations (used for specific IndexedDB operations)
+frontend.idb/rename-item!
+frontend.idb/set-batch!
+;; Inference worker (used for text embedding)
+frontend.inference-worker.text-embedding/hnsw
+;; Mobile utilities (used for mobile-specific features)
+frontend.mobile.util/app-active?
+;; Performance utilities (used for performance optimizations)
+frontend.performance/get-pooled-component
+frontend.performance/return-to-pool
+frontend.performance/debounce
+frontend.performance/optimize-query
+;; Platform utilities (used for platform-specific features)
+frontend.platform/adaptive-component
+frontend.platform/battery-aware-operation
+frontend.platform/adaptive-data-loading
+;; State management (used for specific state operations)
+frontend.state/get-remote-graph-usage
+frontend.state/remove-container-key!
+;; Storage utilities (used for storage operations)
+frontend.storage/clear
+;; Clock utilities (used for time formatting)
+frontend.util.clock/minutes->hours:minutes
+frontend.util.clock/seconds->hours:minutes:seconds
+;; Cursor utilities (used for cursor positioning)
+frontend.util.cursor/move-cursor-to-line-beginning
+frontend.util.cursor/move-cursor-to-line-end
+;; Worker DB operations (used for DB worker)
+frontend.worker.db-worker/<remove-all-files!
+;; RTC operations (used for real-time collaboration)
+frontend.worker.rtc.asset/cancel
+frontend.worker.rtc.client-op/get-all-db-ident-kv-ops
+frontend.worker.rtc.core/rtc-state-flow
+frontend.worker.rtc.core/*rtc-auto-push?
+frontend.worker.rtc.full-upload-download-graph/canceler
+frontend.worker.rtc.full-upload-download-graph/encrypted-blocks
+frontend.worker.rtc.malli-schema/to-ws-ops-validator
+frontend.worker.rtc.ws/close
+frontend.worker.rtc.ws/inject-fake-message-to-recv
+;; Worker state (used for worker state management)
+frontend.worker.state/<invoke-main-thread-direct-pass
+frontend.worker.state/mobile?
+;; Mobile initialization (used for mobile app setup)
+mobile.init/keyboard-show
+mobile.navigation/reset-route!
+;; Test infrastructure
+frontend.db.reference-test/import-edn!
+frontend.modules.outliner.core-test/get-random-successive-blocks
