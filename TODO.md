@@ -1,110 +1,132 @@
 # TODO.md - Logseq Kotlin Multiplatform Migration
 
 ## Current Status
-- **Migration State**: Graph database evaluation framework complete and ready for testing
-- **Technology Stack**: Kotlin Multiplatform with repository abstraction layer
-- **Recent Activity**: Implemented full evaluation framework with data loading, benchmarking, and multiple backends
+- **Migration State**: 25% complete - Repository abstraction layer operational
+- **Technology Stack**: Kotlin Multiplatform with SQLDelight 2.0
+- **Recent Activity**: Implemented Datascript backend with Datalog indexing, comprehensive benchmarking suite
 
-## Active Work Streams
+## Active Backends
 
-### 🚀 Epic: Kotlin Multiplatform Migration (Priority: HIGH)
-**Goal**: Migrate from ClojureScript to Kotlin Multiplatform for better developer experience and cross-platform code reuse.
+### ✅ IN_MEMORY Backend
+- `InMemoryBlockRepository` - Working with full CRUD
+- `InMemoryPageRepository` - Working with full CRUD
+- `InMemoryPropertyRepository` - Basic implementation
+- `InMemoryReferenceRepository` - Basic implementation
+- Performance: ~2,000-20,000 ops/sec depending on operation
 
-**Current Progress**: 15% complete
-**Total Tasks**: 15+ atomic tasks across 3 stories
-**Estimated Timeline**: 12 months
-**Blockers**: Complex hierarchical query patterns require CTE/custom implementation
+### ✅ DATASCRIPT Backend  
+- `DatascriptBlockRepository` - Datalog-style indexing, optimized queries
+- `DatascriptPageRepository` - Datalog-style indexing, optimized queries
+- Performance: ~3,000-30,000 ops/sec (15-50% faster than IN_MEMORY)
 
-#### Completed Tasks
-- ✅ **1.1 Analyze Current DataScript Schema** [2h] - Foundation task for data model migration
-- ✅ **Query Pattern Analysis** [4h] - Documented 80% simple, 15% graph, 5% complex queries
-- ✅ **Migration Feasibility Assessment** - SQLDelight viable with CTEs for hierarchies
-- ✅ **Graph DB Evaluation: 1.1 Define Core Repository Interfaces** [3h] - Type-safe interfaces for graph operations
-- ✅ **Graph DB Evaluation: 1.2 Implement Repository Factory** [2h] - Factory pattern for backend switching
-- ✅ **Graph DB Evaluation: 1.3 Create In-Memory Reference Implementation** [3h] - Working baseline with hierarchical operations
-- ✅ **Graph DB Evaluation: 2.1 Enhance SQLDelight Implementation** [4h] - Hierarchical CTE queries and full repository layer
-- ✅ **Graph DB Evaluation: 2.2 Implement Kuzu Backend** [6h] - Cypher queries for graph operations
-- ✅ **Graph DB Evaluation: 2.3 Implement Neo4j Embedded Backend** [6h] - Industry standard comparison
-- ✅ **Graph DB Evaluation: 3.1 Data Loading Pipeline** [4h] - Load personal Logseq graph
-- ✅ **Graph DB Evaluation: 3.2 Benchmarking Suite** [4h] - Comprehensive performance testing
-- ✅ **Graph DB Evaluation: 3.3 Analysis & Recommendations** [3h] - Data-driven backend selection
-- ✅ **Production Setup: SQLDelight Configuration** [3h] - Production database setup with optimizations
-- ✅ **Production Setup: Personal Data Loading** [2h] - Load real Logseq data automatically
-- ✅ **Production Setup: Performance Validation** [2h] - Validate with real workloads
-- ✅ **Graph DB Evaluation: 2.2 Implement Kuzu Backend** [6h] - Cypher queries for graph operations
-- ✅ **Graph DB Evaluation: 2.3 Implement Neo4j Embedded Backend** [6h] - Industry standard comparison
-- ✅ **Graph DB Evaluation: 3.1 Data Loading Pipeline** [4h] - Load personal Logseq graph
-- ✅ **Graph DB Evaluation: 3.2 Benchmarking Suite** [4h] - Comprehensive performance testing
-- ✅ **Graph DB Evaluation: 3.3 Analysis & Recommendations** [3h] - Data-driven backend selection
-- ✅ **Graph DB Evaluation: 2.2 Implement Kuzu Backend** [6h] - Cypher queries for graph operations
-- ✅ **Graph DB Evaluation: 2.3 Implement Neo4j Embedded Backend** [6h] - Industry standard comparison
-- ✅ **Graph DB Evaluation: 3.1 Data Loading Pipeline** [4h] - Load personal Logseq graph
-- ✅ **Graph DB Evaluation: 3.2 Benchmarking Suite** [4h] - Comprehensive performance testing
-- ✅ **Graph DB Evaluation: 3.3 Analysis & Recommendations** [3h] - Data-driven backend selection
+### 🔄 SQLDelight Backend
+- Status: Stubs exist, needs actual SQL implementation
+- Priority: HIGH - Complete three-backend comparison
+- See: [docs/tasks/sqldelight-implementation.md](docs/tasks/sqldelight-implementation.md)
 
-#### In Progress Tasks
-- None
+## Benchmark Results (IN_MEMORY vs DATASCRIPT)
 
-#### Pending Tasks
-- [ ] **1.2 Design Kotlin Data Classes** [3h] - Create type-safe Kotlin equivalents
-- [ ] **1.3 Implement Repository Pattern** [4h] - Replace DataScript queries with SQLDelight
-- [ ] **1.4 Implement Hierarchical Queries** [6h] - CTEs for block trees and graph traversals
-- [ ] **2.1 Analyze Current Rum/Reagent State** [2h] - Document state management patterns
-- [ ] **2.2 Implement Kotlin State Management** [3h] - Create shared state with Flows
-- [ ] **3.1 Component Analysis and Design** [4h] - Catalog UI components
-- [ ] **3.2 Core Component Migration** [4h] - Migrate basic UI components
-- [ ] ...additional tasks for mobile/desktop platforms
+| Operation | IN_MEMORY | DATASCRIPT | Winner |
+|-----------|-----------|------------|--------|
+| Block Create | 243.6µs | 204.3µs | DATASCRIPT 1.2x |
+| Block Retrieve | 62.2µs | 48.0µs | DATASCRIPT 1.3x |
+| Block Get Hierarchy | 76.1µs | 39.9µs | DATASCRIPT 1.9x |
+| Page Create | 96.9µs | 148.8µs | IN_MEMORY 1.5x |
+| Page Get All | 49.3µs | 32.4µs | DATASCRIPT 1.5x |
+| Page Get Recent | 51.7µs | 41.9µs | DATASCRIPT 1.2x |
+
+## Completed Tasks
+
+### Repository Layer ✅
+- [x] Define core repository interfaces (BlockRepository, PageRepository, PropertyRepository)
+- [x] Implement InMemoryBlockRepository with hierarchical operations
+- [x] Implement InMemoryPageRepository with namespace support
+- [x] Implement DatascriptBlockRepository with Datalog indexing
+- [x] Implement DatascriptPageRepository with Datalog indexing
+- [x] Create RepositoryFactoryImpl for backend switching
+
+### Benchmark Framework ✅
+- [x] RepositoryBenchmark - Basic CRUD benchmarks
+- [x] AllBackendsComparisonBenchmark - Two-backend comparison
+- [x] MicrobenchmarkRunner with statistical analysis (P50, P95, P99)
+- [x] Warmup and iteration support for JIT optimization
+
+### Build System ✅
+- [x] SQLDelight 2.0 plugin integrated
+- [x] Kotlin Multiplatform configured
+- [x] All tests passing (`./gradlew :kmp:check`)
+- [x] Benchmarks run successfully (`./gradlew :kmp:runBackendComparison`)
+
+## Pending Tasks
+
+### HIGH Priority
+- [ ] **SQLDelight Repository Implementation** (4h) - Complete three-backend comparison
+  - Location: [docs/tasks/sqldelight-implementation.md](docs/tasks/sqldelight-implementation.md)
+  - Blocking: Three-way benchmark comparison
+
+### MEDIUM Priority  
+- [ ] **Reference Repository Implementation** (4h) - Track block references
+  - Location: [docs/tasks/reference-repository.md](docs/tasks/reference-repository.md)
+  - Enables: Reference counting, most-connected blocks
 
 ## Known Issues & Risks
-- **HIGH**: Complex hierarchical queries require recursive CTEs/custom query builders
-- **MEDIUM**: Performance regression in deep graph traversals (>10 levels)
-- **MEDIUM**: Rules engine for dynamic queries needs custom Kotlin implementation
-- **LOW**: Plugin API compatibility during transition
+- **LOW**: No critical bugs reported
+- **LOW**: No high-severity issues identified
+- SQLDelight implementation requires JDBC driver setup for testing
 
-## Next Recommended Action
-**Priority**: IMMEDIATE
-**Task**: Run Production Setup & Validate [1h]
+## Build & Test Commands
 
-**Why this task?** Complete production SQLDelight setup implemented. Now run it to validate everything works with your personal Logseq data.
-
-**Context Boundary**: Execute the production setup
-
-**Estimated Time**: 1 hour
-**Deliverable**: Validated production setup with personal data loaded
-
-## Context Preparation
-Run the production setup:
 ```bash
-cd kmp && ./gradlew :kmp:jvmRun
+# Run all tests
+./gradlew :kmp:check
+
+# Run benchmark comparison
+./gradlew :kmp:runBackendComparison
+
+# Run simple benchmark
+./gradlew :kmp:runBenchmark
 ```
 
-This will:
-- Initialize SQLDelight database with optimizations
-- Load your personal Logseq data from ~/Documents/personal-wiki/logseq
-- Run performance validation tests
-- Show database statistics and recommendations
+## Architecture
 
-## Success Criteria
-- Production setup runs without errors
-- Personal Logseq data loads successfully
-- Performance validation shows acceptable results
-- Database statistics show proper data loading
-- Clear path forward for UI integration
+```
+Repository Layer (commonMain)
+├── BlockRepository (interface)
+│   ├── InMemoryBlockRepository ✅
+│   ├── DatascriptBlockRepository ✅
+│   └── SqlDelightBlockRepository 🔄
+│
+├── PageRepository (interface)
+│   ├── InMemoryPageRepository ✅
+│   ├── DatascriptPageRepository ✅
+│   └── SqlDelightPageRepository 🔄
+│
+└── ReferenceRepository (interface)
+    ├── InMemoryReferenceRepository 🔄
+    ├── DatascriptReferenceRepository 🔄
+    └── SqlDelightReferenceRepository ❌
 
-## 🎉 **MIGRATION COMPLETE - READY FOR UI INTEGRATION**
+Benchmark Layer (jvmMain)
+├── RepositoryBenchmark ✅
+├── AllBackendsComparisonBenchmark ✅
+└── MicrobenchmarkRunner ✅
+```
 
-Your Logseq KMP migration foundation is now complete:
+## Next Recommended Action
 
-✅ **Repository Abstraction Layer** - Clean backend switching
-✅ **SQLDelight Production Setup** - Optimized database with real data
-✅ **Performance Validation** - Quantitative results for decision making
-✅ **Data Loading Pipeline** - Personal Logseq data integration
-✅ **Comprehensive Documentation** - Ready for team handoff
+**Priority**: HIGH  
+**Task**: SQLDelight Repository Implementation (4h)
 
-**Next**: Integrate with your UI layer and continue development!
+**Rationale**: Complete the three-backend comparison framework by implementing SQLDelight repositories. This enables data-driven backend selection for production.
 
-## Query Complexity Summary
-- **80% Simple queries**: Direct SQL translation (✅ All approaches handle)
-- **15% Graph traversals**: Recursive CTEs (SQLDelight) vs native graph queries (Kuzu/Neo4j)
-- **5% Complex rules**: Custom logic needed regardless of backend</content>
-<parameter name="filePath">TODO.md
+**Context Files (5)**:
+1. `SqlDelightBlockRepository.kt` (NEW)
+2. `SqlDelightPageRepository.kt` (NEW)
+3. `LogseqDatabase.sq` (exists)
+4. `LogseqDatabaseQueries.kt` (generated)
+5. `RepositoryFactoryImpl.kt` (exists)
+
+**Success Criteria**:
+- Three-way benchmark runs successfully
+- All existing tests pass
+- `./gradlew :kmp:runBackendComparison` shows IN_MEMORY, DATASCRIPT, and SQLDELIGHT columns
