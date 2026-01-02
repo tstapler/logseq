@@ -2,9 +2,9 @@
   "Main ns for reusable components"
   (:require ["@logseq/react-tweet-embed" :as react-tweet-embed]
             ["react-intersection-observer" :as react-intersection-observer]
-            ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
+            ["react-use-measure" :as use-measure]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -42,11 +42,39 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
-(def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
-(def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
+
+(defonce use-measure-ref (gobj/get use-measure "default"))
+
+(rum/defc resize-provider
+  "A resize provider that uses react-use-measure for resize detection"
+  [{:keys [onSizeChanged onMouseUp onClick className style children]}]
+  (let [[bounds ref] (use-measure-ref)
+        prev-size (atom nil)
+        size-ref (atom nil)]
+    (rum/useEffect!
+      (fn []
+        (when bounds
+          (let [current-size #js {:width (.-width bounds) :height (.-height bounds)}]
+            (when (and onSizeChanged (not= current-size @prev-size))
+              (reset! prev-size current-size)
+              (onSizeChanged current-size))))))
+    [:div
+     {:class className
+      :style style
+      :ref ref
+      :onMouseUp onMouseUp
+      :onClick onClick
+      :onResize onSizeChanged}
+     children]))
+
+(rum/defc resize-consumer
+  "A placeholder for resize-consumer pattern - returns children unchanged"
+  [{:keys [children]}]
+  (let [children (if (sequential? children) children [children])]
+    (first children)))
 
 (defn reset-ios-whole-page-offset!
   []
