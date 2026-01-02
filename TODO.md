@@ -41,29 +41,35 @@
 
 ## Next Recommended Action
 **Priority**: IMMEDIATE
-**Task**: 1.2 Design Kotlin Data Classes [3h]
+**Task**: Evaluate Graph Database Alternatives [4h]
 
-**Why this task?** Query analysis complete - now need to ensure data models properly support hierarchical relationships and relationships for SQLDelight implementation.
+**Why this task?** Query analysis revealed that hierarchical traversals are core to Logseq (15% of queries). Research shows embedded graph databases like Kuzu may provide better performance than SQLDelight CTEs for complex graph operations.
 
-**Context Boundary**: 3 files max - Models.kt, repository interfaces, and test data
+**Context Boundary**: Review GRAPH_DATABASE_ALTERNATIVES.md and existing KMP setup
 
-**Estimated Time**: 3 hours
-**Deliverable**: Complete Kotlin data models with validation, relationships, and test coverage
+**Estimated Time**: 4 hours
+**Deliverable**: Decision on whether to stick with SQLDelight or implement repository pattern for graph database testing
 
 ## Context Preparation
-To work on the next task, load these files:
-- `kmp/src/commonMain/kotlin/com/logseq/kmp/model/Models.kt` - Current data classes
-- `kmp/src/commonMain/kotlin/com/logseq/kmp/repository/Repositories.kt` - Repository interfaces
-- `kmp/src/businessTest/kotlin/com/logseq/kmp/model/ModelTests.kt` - Existing tests
+To work on the next task, review:
+- `GRAPH_DATABASE_ALTERNATIVES.md` - Comprehensive analysis of embedded graph databases
+- `QUERY_ANALYSIS.md` - Query complexity breakdown
+- `kmp/src/commonMain/kotlin/com/logseq/kmp/` - Current KMP implementation
 
 ## Success Criteria
-- All entities support hierarchical relationships (parent/child/sibling)
-- Validation rules prevent invalid relationships
-- Models support all required query patterns
-- Comprehensive test coverage for edge cases
+- Clear decision on database approach based on performance requirements
+- Repository pattern design if multiple backends will be tested
+- Implementation plan for chosen approach
+- Risk assessment and timeline impact
+
+## Database Decision Matrix
+- **SQLDelight (Current)**: ✅ Already implemented, multiplatform, good for simple queries
+- **Kuzu**: ⭐⭐⭐⭐⭐ Best for graph traversals, embedded, high performance
+- **Neo4j Embedded**: ⭐⭐⭐ Good Cypher support, licensing concerns
+- **Repository Pattern**: 🛡️ Enables testing multiple backends, future-proof
 
 ## Query Complexity Summary
-- **80% Simple queries**: Direct SQL translation (✅ Ready)
-- **15% Graph traversals**: Require recursive CTEs (⚠️ Needs implementation)
-- **5% Complex rules**: Custom query builders needed (⚠️ Needs design)</content>
+- **80% Simple queries**: Direct SQL translation (✅ All approaches handle)
+- **15% Graph traversals**: Recursive CTEs (SQLDelight) vs native graph queries (Kuzu/Neo4j)
+- **5% Complex rules**: Custom logic needed regardless of backend</content>
 <parameter name="filePath">TODO.md
