@@ -58,6 +58,11 @@ kotlin {
             dependsOn(uiMain)
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
+
+                // Graph databases for performance evaluation
+                implementation("com.kuzudb:kuzu-jdbc:0.7.0")
+                implementation("org.neo4j.driver:neo4j-java-driver:5.21.0")
+                implementation("org.neo4j:neo4j:5.21.0")
             }
         }
 
