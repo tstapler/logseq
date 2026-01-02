@@ -8,20 +8,222 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 
 /**
- * Main entry point for Graph Database Performance Evaluation.
- * Loads personal Logseq data and runs benchmarks across different backends.
+ * Production main entry point for Logseq KMP application.
+ * Initializes SQLDelight database and loads personal Logseq data.
  */
 fun main() = runBlocking {
-    println("🚀 Graph Database Performance Evaluation")
-    println("========================================")
+    println("🚀 Logseq KMP - Production Database Setup")
+    println("==========================================")
 
-    val personalWikiPath = System.getProperty("user.home") + "/Documents/personal-wiki/logseq"
+    try {
+        // Initialize production database
+        println("📊 Initializing SQLDelight database...")
+        val database = DatabaseConfig.initializeDatabase()
+        println("✅ Database initialized successfully")
 
-    if (!File(personalWikiPath).exists()) {
-        println("❌ Personal Logseq wiki not found at: $personalWikiPath")
-        println("Please ensure your Logseq graph is at ~/Documents/personal-wiki/logseq")
-        return@runBlocking
+        // Show database statistics
+        val stats = DatabaseConfig.getDatabaseStats(database)
+        println("\n$stats")
+
+        // Check for personal wiki data
+        val personalWikiPath = System.getProperty("user.home") + "/Documents/personal-wiki/logseq"
+
+        if (!File(personalWikiPath).exists()) {
+            println("⚠️  Personal Logseq wiki not found at: $personalWikiPath")
+            println("   You can still test with sample data or create the directory structure.")
+
+            // Test with empty database
+            testDatabaseOperations(database)
+            return@runBlocking
+        }
+
+        println("📁 Found personal wiki at: $personalWikiPath")
+
+        // Load personal Logseq data
+        println("\n📥 Loading personal Logseq data...")
+        loadPersonalData(personalWikiPath, database)
+
+        // Run performance validation
+        println("\n🏃 Running performance validation...")
+        validatePerformance(database)
+
+        println("\n✅ Production setup complete!")
+        println("   Your Logseq KMP application is ready for development.")
+
+    } catch (e: Exception) {
+        println("❌ Error during setup: ${e.message}")
+        e.printStackTrace()
+    } finally {
+        // Note: In a real application, you'd manage database lifecycle properly
+        println("\n🔄 Database connection remains active for application use")
     }
+}
+
+/**
+ * Load personal Logseq data into the database
+ */
+private suspend fun loadPersonalData(personalWikiPath: String, database: com.logseq.kmp.db.LogseqDatabase) {
+    // Create data loader with SQLDelight repositories
+    val dataLoader = LogseqDataLoader(
+        SqlDelightBlockRepository(database),
+        SqlDelightPageRepository(database),
+        SqlDelightPropertyRepository(database),
+        SqlDelightReferenceRepository(database)
+    )
+
+    val loadResult = dataLoader.loadGraph(personalWikiPath)
+    loadResult.fold(
+        onSuccess = { stats ->
+            println("✅ Personal data loaded successfully!")
+            println("   Pages: ${stats.pagesLoaded}")
+            println("   Blocks: ${stats.blocksLoaded}")
+            println("   References: ${stats.referencesFound}")
+            println("   Properties: ${stats.propertiesFound}")
+
+            if (stats.errors.isNotEmpty()) {
+                println("   ⚠️  Load errors: ${stats.errors.size}")
+                stats.errors.take(5).forEach { println("      - $it") }
+                if (stats.errors.size > 5) {
+                    println("      ... and ${stats.errors.size - 5} more")
+                }
+            }
+
+            // Show updated statistics
+            val updatedStats = DatabaseConfig.getDatabaseStats(database)
+            println("\n📊 Updated database statistics:")
+            println("$updatedStats")
+        },
+        onFailure = { error ->
+            println("❌ Failed to load personal data: ${error.message}")
+            println("   Testing with empty database instead...")
+            testDatabaseOperations(database)
+        }
+    )
+}
+
+/**
+ * Test basic database operations with sample data
+ */
+private suspend fun testDatabaseOperations(database: com.logseq.kmp.db.LogseqDatabase) {
+    println("\n🧪 Testing database operations with sample data...")
+
+    // Get repositories
+    val blockRepo = SqlDelightBlockRepository(database)
+    val pageRepo = SqlDelightPageRepository(database)
+
+    // Create sample page
+    val samplePage = com.logseq.kmp.model.Page(
+        id = 1L,
+        uuid = "sample-page-uuid",
+        name = "Sample Page",
+        namespace = null,
+        filePath = "/sample/page.md",
+        createdAt = kotlinx.datetime.Clock.System.now(),
+        updatedAt = kotlinx.datetime.Clock.System.now(),
+        properties = mapOf("type" to "sample")
+    )
+
+    // Test page operations
+    val pageResult = pageRepo.savePage(samplePage)
+    pageResult.fold(
+        onSuccess = { println("✅ Sample page created successfully") },
+        onFailure = { println("❌ Failed to create sample page: ${it.message}") }
+    )
+
+    val retrievedPage = pageRepo.getPageByUuid("sample-page-uuid").first()
+    retrievedPage.fold(
+        onSuccess = { page ->
+            if (page != null) {
+                println("✅ Sample page retrieved successfully: ${page.name}")
+            } else {
+                println("❌ Sample page not found")
+            }
+        },
+        onFailure = { println("❌ Failed to retrieve sample page: ${it.message}") }
+    )
+
+    // Create sample block
+    val sampleBlock = com.logseq.kmp.model.Block(
+        id = 1L,
+        uuid = "sample-block-uuid",
+        pageId = 1L,
+        parentId = null,
+        leftId = null,
+        content = "This is a sample block for testing",
+        level = 0,
+        position = 0,
+        createdAt = kotlinx.datetime.Clock.System.now(),
+        updatedAt = kotlinx.datetime.Clock.System.now(),
+        properties = emptyMap()
+    )
+
+    // Test block operations
+    val blockResult = blockRepo.saveBlock(sampleBlock)
+    blockResult.fold(
+        onSuccess = { println("✅ Sample block created successfully") },
+        onFailure = { println("❌ Failed to create sample block: ${it.message}") }
+    )
+
+    val retrievedBlock = blockRepo.getBlockByUuid("sample-block-uuid").first()
+    retrievedBlock.fold(
+        onSuccess = { block ->
+            if (block != null) {
+                println("✅ Sample block retrieved successfully: ${block.content.take(30)}...")
+            } else {
+                println("❌ Sample block not found")
+            }
+        },
+        onFailure = { println("❌ Failed to retrieve sample block: ${it.message}") }
+    )
+
+    println("✅ Basic database operations test completed")
+}
+
+/**
+ * Run performance validation tests
+ */
+private suspend fun validatePerformance(database: com.logseq.kmp.db.LogseqDatabase) {
+    println("\n⚡ Running performance validation...")
+
+    // Get repositories
+    val blockRepo = SqlDelightBlockRepository(database)
+    val pageRepo = SqlDelightPageRepository(database)
+    val referenceRepo = SqlDelightReferenceRepository(database)
+
+    // Create benchmark
+    val benchmark = GraphBenchmark(blockRepo, pageRepo, referenceRepo)
+
+    // Run basic benchmark
+    val results = benchmark.runAllBenchmarks()
+
+    println("📊 Performance validation results:")
+    val successful = results.count { it.success }
+    val failed = results.size - successful
+
+    println("   Operations tested: ${results.size}")
+    println("   Successful: $successful")
+    println("   Failed: $failed")
+
+    if (failed > 0) {
+        println("   Failed operations:")
+        results.filter { !it.success }.forEach { result ->
+            println("     - ${result.operation}: ${result.notes}")
+        }
+    }
+
+    // Show some timing examples
+    results.filter { it.success }.take(3).forEach { result ->
+        println("   ✅ ${result.operation}: ${result.duration.inWholeMilliseconds}ms")
+    }
+
+    if (successful > 0) {
+        val avgTime = results.filter { it.success }
+            .sumOf { it.duration.inWholeMilliseconds } / successful
+        println("   📈 Average operation time: ${avgTime}ms")
+    }
+
+    println("✅ Performance validation completed")
+}
 
     println("📁 Found personal wiki at: $personalWikiPath")
 
