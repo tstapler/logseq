@@ -110,7 +110,8 @@ jobs:
         run: |
           # Run lint with warnings allowed for CLJS compatibility
           # CLJS destructuring creates many false positives for clj-kondo
-          clojure -M:clj-kondo --parallel --lint src --config '{:linters {:unresolved-symbol {:level :warning}}}'
+          # Use --fail-level error to only fail on actual errors, not warnings
+          clojure -M:clj-kondo --parallel --lint src --fail-level error --config '{:linters {:unresolved-symbol {:level :warning}}}'
           echo "Lint completed (CLJS warnings allowed)"
 
       - name: Carve lint for unused vars
