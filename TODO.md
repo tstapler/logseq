@@ -41,32 +41,26 @@
 
 ## Next Recommended Action
 **Priority**: IMMEDIATE
-**Task**: Evaluate Graph Database Alternatives [4h]
+**Task**: Start Graph Database Performance Evaluation [3h]
 
-**Why this task?** Query analysis revealed that hierarchical traversals are core to Logseq (15% of queries). Research shows embedded graph databases like Kuzu may provide better performance than SQLDelight CTEs for complex graph operations.
+**Why this task?** Feature plan created - now implement repository abstraction layer as foundation for evaluating SQLDelight vs Kuzu vs Neo4j performance with real Logseq data.
 
-**Context Boundary**: Review GRAPH_DATABASE_ALTERNATIVES.md and existing KMP setup
+**Context Boundary**: 1 primary file - repository interfaces
 
-**Estimated Time**: 4 hours
-**Deliverable**: Decision on whether to stick with SQLDelight or implement repository pattern for graph database testing
+**Estimated Time**: 3 hours
+**Deliverable**: Core repository interfaces defined and testable
 
 ## Context Preparation
-To work on the next task, review:
-- `GRAPH_DATABASE_ALTERNATIVES.md` - Comprehensive analysis of embedded graph databases
-- `QUERY_ANALYSIS.md` - Query complexity breakdown
-- `kmp/src/commonMain/kotlin/com/logseq/kmp/` - Current KMP implementation
+To work on the next task, load:
+- `docs/tasks/graph-db-evaluation.md` - Complete feature plan with task 1.1 details
+- `kmp/src/commonMain/kotlin/com/logseq/kmp/model/Models.kt` - Existing domain models
+- `GRAPH_DATABASE_ALTERNATIVES.md` - Backend requirements
 
 ## Success Criteria
-- Clear decision on database approach based on performance requirements
-- Repository pattern design if multiple backends will be tested
-- Implementation plan for chosen approach
-- Risk assessment and timeline impact
-
-## Database Decision Matrix
-- **SQLDelight (Current)**: ✅ Already implemented, multiplatform, good for simple queries
-- **Kuzu**: ⭐⭐⭐⭐⭐ Best for graph traversals, embedded, high performance
-- **Neo4j Embedded**: ⭐⭐⭐ Good Cypher support, licensing concerns
-- **Repository Pattern**: 🛡️ Enables testing multiple backends, future-proof
+- Repository interfaces compile and support all required operations
+- Interfaces follow Kotlin best practices with Flow for reactive queries
+- Clear separation between different graph operation types
+- Ready for multiple backend implementations
 
 ## Query Complexity Summary
 - **80% Simple queries**: Direct SQL translation (✅ All approaches handle)
