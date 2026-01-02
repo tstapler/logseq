@@ -38,10 +38,74 @@ CREATE TABLE properties (
     FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE
 );
 
+CREATE TABLE block_references (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_block_uuid TEXT NOT NULL,
+    to_block_uuid TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(from_block_uuid, to_block_uuid),
+    FOREIGN KEY (from_block_uuid) REFERENCES blocks(uuid) ON DELETE CASCADE,
+    FOREIGN KEY (to_block_uuid) REFERENCES blocks(uuid) ON DELETE CASCADE
+);
+
 CREATE INDEX idx_pages_uuid ON pages(uuid);
 CREATE INDEX idx_pages_name ON pages(name);
+CREATE INDEX idx_pages_namespace ON pages(namespace);
 CREATE INDEX idx_blocks_uuid ON blocks(uuid);
 CREATE INDEX idx_blocks_page_id ON blocks(page_id);
 CREATE INDEX idx_blocks_parent_id ON blocks(parent_id);
+CREATE INDEX idx_blocks_level ON blocks(level);
 CREATE INDEX idx_properties_block_id ON properties(block_id);
 CREATE INDEX idx_properties_key ON properties(key);
+CREATE INDEX idx_references_from ON block_references(from_block_uuid);
+CREATE INDEX idx_references_to ON block_references(to_block_uuid);
+
+-- Views for common hierarchical queries
+CREATE VIEW block_hierarchy AS
+WITH RECURSIVE hierarchy AS (
+    SELECT
+        uuid,
+        parent_id,
+        content,
+        level,
+        0 as depth,
+        uuid as root_uuid
+    FROM blocks
+    WHERE parent_id IS NULL
+
+    UNION ALL
+
+    SELECT
+        b.uuid,
+        b.parent_id,
+        b.content,
+        b.level,
+        h.depth + 1,
+        h.root_uuid
+    FROM blocks b
+    JOIN hierarchy h ON b.parent_id = h.uuid
+)
+SELECT * FROM hierarchy;
+
+-- View for block ancestry (all ancestors of a block)
+CREATE VIEW block_ancestry AS
+WITH RECURSIVE ancestry AS (
+    SELECT
+        uuid,
+        parent_id,
+        content,
+        0 as generations_up
+    FROM blocks
+    WHERE parent_id IS NULL
+
+    UNION ALL
+
+    SELECT
+        b.uuid,
+        b.parent_id,
+        b.content,
+        a.generations_up + 1
+    FROM blocks b
+    JOIN ancestry a ON a.uuid = b.parent_id
+)
+SELECT * FROM ancestry;

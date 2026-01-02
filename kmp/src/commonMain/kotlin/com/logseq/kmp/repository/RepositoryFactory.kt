@@ -10,14 +10,17 @@ data class RepositoryConfig(
     val host: String? = null,
     val port: Int? = null,
     val username: String? = null,
-    val password: String? = null
+    val password: String? = null,
+    val sqlDelightDatabase: com.logseq.kmp.db.LogseqDatabase? = null
 )
 
 /**
  * Factory implementation for creating repository instances.
  * Supports dependency injection and backend switching for performance evaluation.
  */
-class RepositoryFactoryImpl : RepositoryFactory {
+class RepositoryFactoryImpl(
+    private val sqlDelightDatabase: com.logseq.kmp.db.LogseqDatabase? = null
+) : RepositoryFactory {
 
     private val instances = mutableMapOf<String, Any>()
 
@@ -30,7 +33,8 @@ class RepositoryFactoryImpl : RepositoryFactory {
                 InMemoryBlockRepository()
             }
             GraphBackend.SQLDELIGHT -> getOrCreateInstance("block_sqldelight") {
-                SqlDelightBlockRepository() // TODO: Implement
+                sqlDelightDatabase?.let { SqlDelightBlockRepository(it) }
+                    ?: throw IllegalStateException("SQLDelight database not provided")
             }
             GraphBackend.KUZU -> getOrCreateInstance("block_kuzu") {
                 KuzuBlockRepository() // TODO: Implement
@@ -50,7 +54,8 @@ class RepositoryFactoryImpl : RepositoryFactory {
                 InMemoryPageRepository()
             }
             GraphBackend.SQLDELIGHT -> getOrCreateInstance("page_sqldelight") {
-                SqlDelightPageRepository() // TODO: Implement
+                sqlDelightDatabase?.let { SqlDelightPageRepository(it) }
+                    ?: throw IllegalStateException("SQLDelight database not provided")
             }
             GraphBackend.KUZU -> getOrCreateInstance("page_kuzu") {
                 KuzuPageRepository() // TODO: Implement
@@ -70,7 +75,20 @@ class RepositoryFactoryImpl : RepositoryFactory {
                 InMemoryPropertyRepository()
             }
             GraphBackend.SQLDELIGHT -> getOrCreateInstance("property_sqldelight") {
-                SqlDelightPropertyRepository() // TODO: Implement
+                sqlDelightDatabase?.let { SqlDelightPropertyRepository(it) }
+                    ?: throw IllegalStateException("SQLDelight database not provided")
+            }
+            GraphBackend.KUZU -> getOrCreateInstance("property_kuzu") {
+                KuzuPropertyRepository() // TODO: Implement
+            }
+            GraphBackend.NEO4J -> getOrCreateInstance("property_neo4j") {
+                Neo4jPropertyRepository() // TODO: Implement
+            }
+            GraphBackend.KUZU -> getOrCreateInstance("block_kuzu") {
+                KuzuBlockRepository() // TODO: Implement
+            }
+            GraphBackend.NEO4J -> getOrCreateInstance("block_neo4j") {
+                Neo4jBlockRepository() // TODO: Implement
             }
             GraphBackend.KUZU -> getOrCreateInstance("property_kuzu") {
                 KuzuPropertyRepository() // TODO: Implement
@@ -90,7 +108,14 @@ class RepositoryFactoryImpl : RepositoryFactory {
                 InMemoryReferenceRepository()
             }
             GraphBackend.SQLDELIGHT -> getOrCreateInstance("reference_sqldelight") {
-                SqlDelightReferenceRepository() // TODO: Implement
+                sqlDelightDatabase?.let { SqlDelightReferenceRepository(it) }
+                    ?: throw IllegalStateException("SQLDelight database not provided")
+            }
+            GraphBackend.KUZU -> getOrCreateInstance("page_kuzu") {
+                KuzuPageRepository() // TODO: Implement
+            }
+            GraphBackend.NEO4J -> getOrCreateInstance("page_neo4j") {
+                Neo4jPageRepository() // TODO: Implement
             }
             GraphBackend.KUZU -> getOrCreateInstance("reference_kuzu") {
                 KuzuReferenceRepository() // TODO: Implement
@@ -110,7 +135,8 @@ class RepositoryFactoryImpl : RepositoryFactory {
                 InMemorySearchRepository()
             }
             GraphBackend.SQLDELIGHT -> getOrCreateInstance("search_sqldelight") {
-                SqlDelightSearchRepository() // TODO: Implement
+                sqlDelightDatabase?.let { SqlDelightSearchRepository(it) }
+                    ?: throw IllegalStateException("SQLDelight database not provided")
             }
             GraphBackend.KUZU -> getOrCreateInstance("search_kuzu") {
                 KuzuSearchRepository() // TODO: Implement
@@ -175,30 +201,34 @@ data class RepositorySet(
  * Global factory instance for convenience
  */
 object Repositories {
-    private val factory = RepositoryFactoryImpl()
+    private var defaultFactory: RepositoryFactoryImpl = RepositoryFactoryImpl()
+
+    fun configure(sqlDelightDatabase: com.logseq.kmp.db.LogseqDatabase) {
+        defaultFactory = RepositoryFactoryImpl(sqlDelightDatabase)
+    }
 
     fun block(backend: GraphBackend = GraphBackend.IN_MEMORY): BlockRepository =
-        factory.createBlockRepository(backend)
+        defaultFactory.createBlockRepository(backend)
 
     fun page(backend: GraphBackend = GraphBackend.IN_MEMORY): PageRepository =
-        factory.createPageRepository(backend)
+        defaultFactory.createPageRepository(backend)
 
     fun property(backend: GraphBackend = GraphBackend.IN_MEMORY): PropertyRepository =
-        factory.createPropertyRepository(backend)
+        defaultFactory.createPropertyRepository(backend)
 
     fun reference(backend: GraphBackend = GraphBackend.IN_MEMORY): ReferenceRepository =
-        factory.createReferenceRepository(backend)
+        defaultFactory.createReferenceRepository(backend)
 
     fun search(backend: GraphBackend = GraphBackend.IN_MEMORY): SearchRepository =
-        factory.createSearchRepository(backend)
+        defaultFactory.createSearchRepository(backend)
 
     fun set(backend: GraphBackend = GraphBackend.IN_MEMORY): RepositorySet =
-        factory.createRepositorySet(backend)
+        defaultFactory.createRepositorySet(backend)
 
     fun set(config: RepositoryConfig): RepositorySet =
-        factory.createRepositorySet(config)
+        defaultFactory.createRepositorySet(config)
 
-    fun clearCache() = factory.clearCache()
+    fun clearCache() = defaultFactory.clearCache()
 }
 
 // ===== UTILITY FUNCTIONS =====
