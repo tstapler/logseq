@@ -30,7 +30,13 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+            }
+        }
 
+        // Separate source set for UI components to avoid AndroidX issues in tests
+        val uiMain by creating {
+            dependsOn(commonMain)
+            dependencies {
                 // Compose Multiplatform
                 implementation(compose.runtime)
                 implementation(compose.foundation)
@@ -49,6 +55,7 @@ kotlin {
         }
 
         val jvmMain by getting {
+            dependsOn(uiMain)
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
             }
@@ -61,6 +68,7 @@ kotlin {
         }
 
         val jsMain by getting {
+            dependsOn(uiMain)
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-js:1.8.1")
                 implementation(compose.html.core)
@@ -74,6 +82,7 @@ kotlin {
         }
 
         val androidMain by getting {
+            dependsOn(uiMain)
             dependencies {
                 implementation("androidx.activity:activity-compose:1.9.2")
                 implementation("androidx.appcompat:appcompat:1.6.1")
@@ -110,6 +119,13 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
             }
         }
+
+        // Separate test source set for business logic (no UI dependencies)
+        val businessTest by creating {
+            dependsOn(commonTest)
+        }
+
+        jvmTest.dependsOn(businessTest)
     }
 }
 
