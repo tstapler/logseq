@@ -178,11 +178,11 @@
            (keyword "right-side-bar" name'))))))
 
 (rum/defc sidebar-content-group < rum/reactive
-  [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
+  [name {:keys [class item-count more header-props enter-show-more? collapsable?]} child]
   (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
     [:div.sidebar-content-group
      {:class (util/classnames [class {:is-expand (not collapsed?)
-                                      :has-children (and (number? count) (> count 0))}])}
+                                      :has-children (and (number? item-count) (> item-count 0))}])}
      [:div.sidebar-content-group-inner
       [:div.hd.items-center
        (cond-> (merge header-props
