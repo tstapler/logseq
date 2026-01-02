@@ -1,104 +1,84 @@
 (ns frontend.components.query.result
   "Query result related functionality for query components"
-  (:require [clojure.string :as string]
-             [frontend.components.lazy :as lazy]
-             [frontend.db :as db]
-             [frontend.db.query-custom :as query-custom]
-             [frontend.db.query-dsl :as query-dsl]
-             [frontend.db.query-react :as query-react]
-             [frontend.db.utils :as db-utils]
-             [frontend.modules.outliner.tree :as tree]
-             [frontend.performance :as perf]
-             [frontend.search :as search]
-             [frontend.state :as state]
-             [frontend.template :as template]
-             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
+  (:require [frontend.db.utils :as db-utils]
+            [frontend.search :as search]
+            [frontend.db :as db]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.state :as state]
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.util :as util]
+            [clojure.string :as string]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.tree :as tree]))
 
-(defn run-custom-query
-  [config query *result *query-error]
+(defn trigger-custom-query!
+  [config query *query-error]
   (let [repo (state/get-current-repo)
+        result-atom (atom nil)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
-        _ (reset! *query-error nil)]
-    (try
-      (cond
-        (:dsl-query? config)
-        (let [result (let [q (:query query)
-                           form (common-util/safe-read-string {:log-error? false} q)]
-                       (cond
-                         (and (symbol? form)
-                              ;; Queries only containing template should trigger a query
-                              (not (re-matches template/template-re (string/trim q))))
-                         nil
-
-                         (re-matches #"^\".*\"$" q) ; full-text search
-                         (do
-                           (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+        _ (reset! *query-error nil)
+        query-atom (try
+                     (cond
+                       (:dsl-query? config)
+                       (let [q (:query query)
+                             form (gp-util/safe-read-string q)]
+                         (cond
+                           ;; Searches like 'foo' or 'foo bar' come back as symbols
+                           ;; and are meant to go directly to full text search
+                           (and (util/electron?) (symbol? form)) ; full-text search
+                           (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
                              (when (seq blocks)
-                               (let [result (->> blocks
-                                                 (keep (fn [b]
-                                                         (when-not (= (:block/uuid b) current-block-uuid)
-                                                           (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
-                                                             (when-not (ldb/hidden? entity)
-                                                               entity))))))]
-                                 (reset! *result result))))
-                           (rum/react *result))
+                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                 (reset! result-atom result))))
 
-                         :else
-                         (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
-                           (when (util/atom? result)
-                             (rum/react result)))))]
-          [nil result])
+                           (symbol? form)
+                           (atom nil)
 
-        :else
-        (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                           :built-in-query? (:built-in-query? config)
-                                                           :today-query? (:today-query? config)})]
-          [k (rum/react result)]))
-      (catch :default e
-        (js/console.error e)
-        (reset! *query-error e)
-        [nil nil]))))
+                           :else
+                           (query-dsl/query (state/get-current-repo) q)))
+
+                       :else
+                       (db/custom-query query {:current-block-uuid current-block-uuid}))
+                     (catch :default e
+                       (reset! *query-error e)
+                       (atom nil)))]
+    (if (instance? Atom query-atom)
+      query-atom
+      result-atom)))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
-                         {:keys [table? db-graph?]}]
-  (if (or table? db-graph?)
+                         {:keys [table?]}]
+  (if table?
     false ;; Immediately return false as table view can't handle grouping
     (get query-m :group-by-page?
          (and (not result-transform)
               (not (and (string? query) (string/includes? query "(by-page false)")))))))
 
-(defn transform-query-result
-  "Transforms a query result if query conditions and config indicate a transformation"
-  [{:keys [current-block-uuid] :as config} query-m query-result]
-  (let [;; exclude the current one, otherwise it'll loop forever
-         remove-blocks (if current-block-uuid [current-block-uuid] nil)
-         transformed-query-result (when query-result
-                                    (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
-                                      (if (and query-result (coll? result) (:block/uuid (first result)))
-                                        (cond-> result
-                                          (and (not (:db-graph? config)) (get query-m :remove-block-children? true))
-                                          tree/filter-top-level-blocks)
-                                        result)))
-         group-by-page? (get-group-by-page query-m config)
-         result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
-                  (let [result (db-utils/group-by-page transformed-query-result)]
-                    (if (map? result)
-                      (dissoc result nil)
-                      result))
-                  transformed-query-result)
-
-         ;; Apply lazy loading for large result sets
-         platform-config (perf/get-platform-config)
-         result-count (count result)
-         optimized-result (if (> result-count (:virtual-scroll-threshold platform-config))
-                           (perf/optimize-collection-for-reads result true)
-                           result)]
-
+(defn get-query-result
+  "Fetches a query's result, transforms it as needed and saves the result into
+  an atom that is passed in as an argument"
+  [config query-m *query-error current-block-uuid options]
+  (let [query-atom (trigger-custom-query! config query-m *query-error)
+        query-result (and query-atom (rum/react query-atom))
+        ;; exclude the current one, otherwise it'll loop forever
+        remove-blocks (if current-block-uuid [current-block-uuid] nil)
+        transformed-query-result (when query-result
+                                   (let [result (db/custom-query-result-transform query-result remove-blocks query-m)]
+                                     (if (and query-result (coll? result) (:block/uuid (first result)))
+                                       (cond-> result
+                                         (get query-m :remove-block-children? true)
+                                         tree/filter-top-level-blocks)
+                                       result)))
+        group-by-page? (get-group-by-page query-m options)
+        result (if (and group-by-page? (:block/uuid (first transformed-query-result)))
+                 (let [result (db-utils/group-by-page transformed-query-result)]
+                   (if (map? result)
+                     (dissoc result nil)
+                     result))
+                 transformed-query-result)]
     (when-let [query-result (:query-result config)]
-      (reset! query-result optimized-result))
-    optimized-result))
+      (reset! query-result result))
+    (when query-atom
+      (util/safe-with-meta result (meta @query-atom)))))
