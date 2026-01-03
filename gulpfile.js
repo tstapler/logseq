@@ -154,7 +154,7 @@ const common = {
   }
 }
 
-exports.electron = () => {
+exports.electron = async () => {
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
     cp.execSync('yarn', {
       cwd: outputPath,
@@ -166,6 +166,8 @@ exports.electron = () => {
     cwd: outputPath,
     stdio: 'inherit'
   })
+
+  return Promise.resolve()
 }
 
 exports.electronMaker = async () => {

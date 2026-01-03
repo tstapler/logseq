@@ -79,9 +79,21 @@
 (defn restore-and-setup!
   [repos]
   (when-let [repo (or (state/get-current-repo) (:url (first repos)))]
+    (js/console.time "[PERF] Total DB restore and setup")
+    (js/console.time "[PERF] DB restore (before UI interactive)")
     (-> (db/restore! repo)
         (p/then
          (fn []
+           (js/console.timeEnd "[PERF] DB restore (before UI interactive)")
+           (js/console.log "db restored, making UI interactive...")
+
+           ;; Make UI interactive IMMEDIATELY after DB loads
+           (state/set-db-restoring! false)
+           (js/console.log "✓ UI is now interactive!")
+
+           ;; Continue setup in background without blocking UI
+           (js/console.time "[PERF] Background setup (non-blocking)")
+
            ;; try to load custom css only for current repo
            (ui-handler/add-style-if-exists!)
 
@@ -101,14 +113,15 @@
                        ;; Not native local directory
                        (not (some config/local-db? (map :url repos)))
                        (not (mobile-util/native-platform?)))
-                  ;; will execute `(state/set-db-restoring! false)` inside
                   (repo-handler/setup-local-repo-if-not-exists!)
 
                   :else
-                  (state/set-db-restoring! false)))))))
+                  nil))))))
         (p/then
          (fn []
-           (js/console.log "db restored, setting up repo hooks")
+           (js/console.timeEnd "[PERF] Background setup (non-blocking)")
+           (js/console.timeEnd "[PERF] Total DB restore and setup")
+           (js/console.log "background setup complete, setting up repo hooks")
 
            (state/pub-event! [:modal/nfs-ask-permission])
 

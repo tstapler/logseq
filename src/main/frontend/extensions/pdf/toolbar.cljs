@@ -373,7 +373,7 @@
 
   (let [[active, set-active!] (rum/use-state false)]
     (rum/with-context
-     [hls-state *highlights-ctx*]
+     [^cljs.core/IVector [^any hls-state] *highlights-ctx*]
      (let [hls (sort-by :page (or (seq (:initial-hls hls-state))
                                   (:latest-hls hls-state)))]
 

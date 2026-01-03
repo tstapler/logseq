@@ -34,7 +34,8 @@
     (if-let [ignore-file (some #(when (= (:file/name %) ".gitignore")
                                   %) files)]
       (if-let [file (:file/file ignore-file)]
-        (p/let [content (.text file)]
+        (p/let [result (utils/readFileWithRetry file ".gitignore")
+                content (.-content result)]
           (when content
             (let [paths (set (common-handler/ignore-files content (map :file/path files)))]
               (when (seq paths)
@@ -225,7 +226,8 @@
     (-> (p/all (map (fn [path]
                       (when-let [file (get-file-f path new-files)]
                         (p/let [content (if nfs?
-                                          (.text (:file/file file))
+                                          (p/let [result (utils/readFileWithRetry (:file/file file) (:file/path file))]
+                                            (.-content result))
                                           (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]

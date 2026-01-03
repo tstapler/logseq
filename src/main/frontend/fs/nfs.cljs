@@ -138,28 +138,34 @@
                                     ;; Same for all handles here, even for directories and ignored directories(for backing up)
                                     ;; FileSystemDirectoryHandle or FileSystemFileHandle
                                     (when-not (string/includes? path "/.")
-                                      (add-nfs-file-handle! handle-path entry)))))]
-    (p/all (->> files
-                (remove  (fn [file]
-                           (let [rpath (string/replace-first (.-webkitRelativePath file) (str root-dir "/") "")
-                                 ext (util/get-file-ext rpath)]
-                             (or  (string/blank? rpath)
-                                  (string/starts-with? rpath ".")
-                                  (string/starts-with? rpath "logseq/bak")
-                                  (string/starts-with? rpath "logseq/version-files")
-                                  (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
-                ;; Read out using .text, Promise<string>
-                (map (fn [file]
-                       (p/let [content (.text file)]
-                         {:name        (.-name file)
-                          :path        (-> (.-webkitRelativePath file)
-                                           gp-util/path-normalize)
-                          :mtime       (.-lastModified file)
-                          :size        (.-size file)
-                          :type        (.-kind (.-handle file))
-                          :content     content
-                          :file/file   file
-                          :file/handle (.-handle file)})))))))
+                                      (add-nfs-file-handle! handle-path entry)))))
+          filtered-files (->> files
+                              (remove  (fn [file]
+                                         (let [rpath (string/replace-first (.-webkitRelativePath file) (str root-dir "/") "")
+                                               ext (util/get-file-ext rpath)]
+                                           (or  (string/blank? rpath)
+                                                (string/starts-with? rpath ".")
+                                                (string/starts-with? rpath "logseq/bak")
+                                                (string/starts-with? rpath "logseq/version-files")
+                                                (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext)))))))
+          _ (js/console.time "[nfs] Reading files")
+          _ (js/console.log "[nfs] Files to read:" (count filtered-files))
+          ;; Read files in batches to avoid overwhelming the browser
+          file-promises (map (fn [file]
+                              (let [fpath (-> (.-webkitRelativePath file)
+                                              gp-util/path-normalize)]
+                                (p/let [result (utils/readFileWithRetry file fpath)]
+                                  {:name        (.-name file)
+                                   :path        fpath
+                                   :mtime       (.-lastModified file)
+                                   :size        (.-size file)
+                                   :type        (.-kind (.-handle file))
+                                   :content     (.-content result)
+                                   :file/file   file
+                                   :file/handle (.-handle file)}))) filtered-files)
+          result (utils/promiseAllInBatches (to-array file-promises) 50)]
+    (js/console.timeEnd "[nfs] Reading files")
+    result))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -210,7 +216,8 @@
        (p/let [_ (protocol/mkdir! this recycle-dir)
                handle (get-nfs-file-handle handle-path)
                file (.getFile handle)
-               content (.text file)
+               result (utils/readFileWithRetry file fpath)
+               content (.-content result)
 
                bak-handle (get-nfs-file-handle (str "handle/" recycle-dir))
                bak-filename (-> (path/relative-path repo-dir fpath)
@@ -238,7 +245,9 @@
       (p/let [handle (or (get-nfs-file-handle handle-path)
                          (idb/get-item handle-path))
               local-file (and handle (.getFile handle))]
-        (and local-file (.text local-file)))))
+        (when local-file
+          (p/let [result (utils/readFileWithRetry local-file fpath)]
+            (.-content result))))))
 
   (write-file! [_this repo dir path content opts]
     ;; TODO: file backup handling
@@ -249,7 +258,8 @@
         (if file-handle
           ;; file exist
           (p/let [local-file (.getFile file-handle)
-                  disk-content (.text local-file)
+                  result (utils/readFileWithRetry local-file fpath)
+                  disk-content (.-content result)
                   db-content (db/get-file repo path)
                   contents-matched? (contents-matched? disk-content db-content)]
             (if (and
@@ -276,7 +286,8 @@
               (p/let [file-handle (.getFileHandle ^js parent-dir-handle basename #js {:create true})
                       _  (add-nfs-file-handle! file-handle-path file-handle)
                       file (.getFile file-handle)
-                      text (.text file)]
+                      result (utils/readFileWithRetry file fpath)
+                      text (.-content result)]
                 (if (string/blank? text)
                   (p/let [;; _ (idb/set-item! file-handle-path file-handle)
                           _ (utils/writeFile file-handle content)
@@ -323,32 +334,34 @@
                                              (add-nfs-file-handle! handle-path entry)))))
             dir-handle (first files) ;; FileSystemDirectoryHandle
             dir-name (.-name dir-handle)
-            files (->> (next files)
-                       (remove  (fn [file]
-                                  (let [rpath (.-webkitRelativePath file) ;
-                                        ; (string/replace-first (.-webkitRelativePath file) (str dir-name "/") "")
-                                        ext (util/get-file-ext rpath)]
-                                    (or  (string/blank? rpath)
-                                         (string/starts-with? rpath ".")
-                                         (string/starts-with? rpath "logseq/bak")
-                                         (string/starts-with? rpath "logseq/version-files")
-                                         (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
-                       ;; Read out using .text, Promise<string>
-                       (map (fn [file]
-                              (js/console.log "handle" file)
-                              (p/let [content (.text file)]
-                                ;; path content size mtime
-                                {:name        (.-name file)
-                                 :path        (-> (.-webkitRelativePath file)
-                                                  gp-util/path-normalize)
-                                 :mtime       (.-lastModified file)
-                                 :size        (.-size file)
-                                 :type        (.-kind (.-handle file))
-                                 :content     content
-                                 ;; expose the following, they are used by the file system
-                                 :file/file   file
-                                 :file/handle (.-handle file)}))))
-            files (p/all files)]
+            filtered-files (->> (next files)
+                                (remove  (fn [file]
+                                           (let [rpath (.-webkitRelativePath file) ;
+                                                 ; (string/replace-first (.-webkitRelativePath file) (str dir-name "/") "")
+                                                 ext (util/get-file-ext rpath)]
+                                             (or  (string/blank? rpath)
+                                                  (string/starts-with? rpath ".")
+                                                  (string/starts-with? rpath "logseq/bak")
+                                                  (string/starts-with? rpath "logseq/version-files")
+                                                  (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext)))))))
+            _ (js/console.log "[nfs] Opening directory, files to read:" (count filtered-files))
+            ;; Read out using .text, Promise<string>
+            file-promises (map (fn [file]
+                                 (js/console.log "handle" file)
+                                 (let [fpath (-> (.-webkitRelativePath file)
+                                                 gp-util/path-normalize)]
+                                   (p/let [result (utils/readFileWithRetry file fpath)]
+                                     ;; path content size mtime
+                                     {:name        (.-name file)
+                                      :path        fpath
+                                      :mtime       (.-lastModified file)
+                                      :size        (.-size file)
+                                      :type        (.-kind (.-handle file))
+                                      :content     (.-content result)
+                                      ;; expose the following, they are used by the file system
+                                      :file/file   file
+                                      :file/handle (.-handle file)}))) filtered-files)
+            files (utils/promiseAllInBatches (to-array file-promises) 50)]
       (add-nfs-file-handle! (str "handle/" dir-name) dir-handle)
       (idb/set-item! (str "handle/" dir-name) dir-handle)
       {:path dir-name

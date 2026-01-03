@@ -172,6 +172,53 @@ export const nfsSupported = () => {
   return false
 }
 
+// Read file content with retry logic for NotReadableError
+// The File System Access API can return stale file handles
+export const readFileWithRetry = async (file, fpath, maxRetries = 5) => {
+  let attempt = 0
+  const doRead = async (useFreshHandle = false) => {
+    attempt++
+    try {
+      let targetFile = file
+
+      // Only get fresh handle if explicitly requested (after a failure)
+      if (useFreshHandle && file.handle) {
+        targetFile = await file.handle.getFile()
+      }
+
+      const content = await targetFile.text()
+      return { content, file: targetFile }
+    } catch (error) {
+      if (attempt < maxRetries &&
+          (error.name === 'NotReadableError' ||
+           error.name === 'InvalidStateError' ||
+           error.name === 'SecurityError' ||
+           error.message.includes('not readable') ||
+           error.message.includes('permission'))) {
+        console.warn(`[nfs] read retry ${attempt}/${maxRetries} for ${fpath}: ${error.message}`)
+        // Exponential backoff
+        const delay = Math.min(50 * Math.pow(2, attempt - 1), 500)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        // Try with fresh handle on retry
+        return doRead(true)
+      }
+      throw error
+    }
+  }
+  return doRead(false) // Start with existing file handle (fast path)
+}
+
+// Process promises in batches to avoid overwhelming the browser
+export const promiseAllInBatches = async (promises, batchSize = 50) => {
+  const results = []
+  for (let i = 0; i < promises.length; i += batchSize) {
+    const batch = promises.slice(i, i + batchSize)
+    const batchResults = await Promise.all(batch)
+    results.push(...batchResults)
+  }
+  return results
+}
+
 const inputTypes = [
   window.HTMLInputElement,
   window.HTMLSelectElement,
