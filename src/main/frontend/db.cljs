@@ -12,6 +12,10 @@
             [frontend.db.utils]
             [frontend.db.persist :as db-persist]
             [frontend.db.migrate :as db-migrate]
+            [frontend.db.chunked :as chunked]
+            [frontend.db.manifest :as manifest]
+            [frontend.db.reader :as reader]
+            [frontend.db.writer :as writer]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -66,10 +70,143 @@
  [frontend.db.query-react
   react-query custom-query-result-transform]
 
+ [frontend.db.chunked
+  detect-storage-format create-manifest restore-chunked! persist-chunked-incremental! migrate-to-chunked!
+  compute-manifest-stats]
+
+ [frontend.db.manifest
+  create-manifest register-chunk remove-chunk compute-stats valid?]
+
+ [frontend.db.reader
+  create-reader get-cached cache-chunk! clear-cache! get-progress load-chunk
+  load-phase-1 load-phase-2 load-phase-3]
+
+ [frontend.db.writer
+  create-writer detect-changes! create-chunks add-change! clear-changes!
+  prepare-incremental-save prepare-full-migration get-stats]
+
  [logseq.db.default built-in-pages-names built-in-pages])
 
+;; Chunked database integration functions
+
+(defn- get-chunked-db-name
+  "Get chunked database name for a repo"
+  [repo]
+  (str repo "-chunked"))
+
+(defn should-use-chunked-storage?
+  "Check if chunked storage should be used for this repo"
+  [repo]
+  (let [manifest (manifest/load-manifest (get-chunked-db-name repo))]
+    (or manifest
+        (state/chunked-storage-enabled? repo)
+        ;; Auto-enable for large graphs (>10MB serialized)
+        (let [serialized-size (-> (db-persist/get-serialized-graph (datascript-db repo))
+                                count)]
+          (> serialized-size 10485760)))))
+
+(defn restore-chunked-graph!
+  "Restore graph using chunked storage format"
+  [repo]
+  (p/let [db-name (get-chunked-db-name repo)
+          manifest (manifest/load-manifest db-name)]
+    (when manifest
+      (let [reader-instance (reader/create-reader manifest)]
+        ;; Phase 1: Load essential chunks quickly
+        (reader/load-phase-1 reader-instance)
+        ;; Phase 2: Load additional chunks
+        (reader/load-phase-2 reader-instance)
+        ;; Phase 3: Load remaining chunks
+        (reader/load-phase-3 reader-instance)))))
+
+(defn persist-chunked-graph!
+  "Persist graph using chunked storage format"
+  [repo]
+  (p/let [db-name (get-chunked-db-name repo)
+          db (get-db repo)
+          manifest (or (manifest/load-manifest db-name) (chunked/create-manifest))
+          writer-instance (writer/create-writer manifest)
+          current-data (db->json db)]
+    
+    ;; Detect changes and create chunks
+    (let [chunks (writer/create-chunks writer-instance current-data)
+          save-data (writer/prepare-incremental-save writer-instance)]
+      ;; Save chunks and manifest
+      (doseq [[chunk-type chunk-id chunk-data] chunks]
+        (chunked/save-chunk! db-name chunk-type chunk-id chunk-data))
+      (manifest/save-manifest! db-name (:manifest save-data)))))
+
+(defn migrate-to-chunked-storage!
+  "Migrate existing monolithic graph to chunked storage"
+  [repo]
+  (p/let [db (get-db repo)
+          current-data (db->json db)
+          manifest (chunked/create-manifest)
+          writer-instance (writer/create-writer manifest)
+          migration-data (writer/prepare-full-migration writer-instance current-data)
+          db-name (get-chunked-db-name repo)]
+    
+    ;; Save all chunks from migration
+    (doseq [[chunk-type chunk-id chunk-data] (:chunks migration-data)]
+      (chunked/save-chunk! db-name chunk-type chunk-id chunk-data))
+    
+    ;; Save manifest
+    (manifest/save-manifest! db-name (:manifest migration-data))
+    
+    ;; Mark migration complete
+    (state/set-chunked-storage-enabled! repo true)))
+
+(defn listen-and-persist!
+  [repo]
+  (when-let [conn (get-db repo false)]
+    (d/unlisten! conn :persistence)
+    (repo-listen-to-tx! repo conn)))
+
+(defn restore-graph!
+  "Restore db from serialized db cache"
+  [repo]
+  (p/let [db-name (datascript-db repo)
+          stored (db-persist/get-serialized-graph db-name)]
+    (restore-graph-from-text! repo stored)))
+
+(defn restore-with-chunked-support!
+  "Restore graph with automatic chunked storage detection"
+  [repo]
+  (if (should-use-chunked-storage? repo)
+    (p/let [_ (restore-chunked-graph! repo)]
+      (listen-and-persist! repo))
+    (restore-graph! repo)))
+
+(defn persist-with-chunked-support!
+  "Persist graph with automatic chunked storage detection"
+  [repo]
+  (if (should-use-chunked-storage? repo)
+    (persist-chunked-graph! repo)
+    (let [key (datascript-db repo)
+          db (get-db repo)]
+      (when db
+        (let [db-str (if db (db->string db) "")]
+          (p/let [_ (db-persist/save-graph! key db-str)]))))))
+
+(defn get-storage-stats
+  "Get storage statistics for repository"
+  [repo]
+  (if (should-use-chunked-storage? repo)
+    (let [manifest (manifest/load-manifest (get-chunked-db-name repo))]
+      (when manifest
+        (manifest/compute-stats manifest)))
+    {:format :monolithic
+     :total-size (-> (db-persist/get-serialized-graph (datascript-db repo))
+                     count)}))
+
+(defn enable-chunked-storage!
+  "Enable chunked storage for a repository"
+  [repo]
+  (state/set-chunked-storage-enabled! repo true)
+  (migrate-to-chunked-storage! repo))
+
 (defn- old-schema?
-  "Requires migration if the schema version is older than db-schema/version"
+  "Requires migration if schema version is older than db-schema/version"
   [db]
   (let [v (db-migrate/get-schema-version db)
         ;; backward compatibility
@@ -80,19 +217,11 @@
 
       (< db-schema/version v)
       (do
-        (js/console.error "DB schema version is newer than the app, please update the app. " ":db-version" v)
+        (js/console.error "DB schema version is newer than app, please update app. " ":db-version" v)
         false)
 
       :else
       true)))
-
-;; persisting DBs between page reloads
-(defn persist! [repo]
-  (let [key (datascript-db repo)
-        db (get-db repo)]
-    (when db
-      (let [db-str (if db (db->string db) "")]
-        (p/let [_ (db-persist/save-graph! key db-str)])))))
 
 (defonce persistent-jobs (atom {}))
 
@@ -111,14 +240,12 @@
                         ;; It's ok to not persist here since new changes
                         ;; will be notified when restarting the app.
                         (not (state/whiteboard-route?)))
-                 (persist! repo)
-                 ;; (state/set-db-persisted! repo true)
+                (persist-with-chunked-support! repo)
+                ;; (state/set-db-persisted! repo true)
 
-                 (persist-if-idle! repo)))
+                (persist-if-idle! repo)))
              3000)]
     (swap! persistent-jobs assoc repo job)))
-
-;; only save when user's idle
 
 (defonce *db-listener (atom nil))
 
@@ -140,39 +267,7 @@
                  (when-let [db-listener @*db-listener]
                    (db-listener repo tx-report))))))
 
-(defn listen-and-persist!
-  [repo]
-  (when-let [conn (get-db repo false)]
-    (d/unlisten! conn :persistence)
-    (repo-listen-to-tx! repo conn)))
 
-(defn start-db-conn!
-  ([repo]
-   (start-db-conn! repo {}))
-  ([repo option]
-   (conn/start! repo
-                (assoc option
-                       :listen-handler listen-and-persist!))))
-
-(defn restore-graph-from-text!
-  "Swap db string into the current db status
-   stored: the text to restore from"
-  [repo stored]
-  (p/let [db-name (datascript-db repo)
-          db-conn (d/create-conn db-schema/schema)
-          _ (swap! conns assoc db-name db-conn)
-          _ (when stored
-              (let [stored-db (try (string->db stored)
-                                   (catch :default _e
-                                     (js/console.warn "Invalid graph cache")
-                                     (d/empty-db db-schema/schema)))
-                    attached-db (d/db-with stored-db
-                                           default-db/built-in-pages) ;; TODO bug overriding uuids?
-                    db (if (old-schema? attached-db)
-                         (db-migrate/migrate attached-db)
-                         attached-db)]
-                (conn/reset-conn! db-conn db)))]
-    (d/transact! db-conn [{:schema/version db-schema/version}])))
 
 (defn restore-graph!
   "Restore db from serialized db cache"
@@ -183,8 +278,7 @@
 
 (defn restore!
   [repo]
-  (p/let [_ (restore-graph! repo)]
-    (listen-and-persist! repo)))
+  (restore-with-chunked-support! repo))
 
 (defn run-batch-txs!
   []
