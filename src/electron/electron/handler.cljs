@@ -301,6 +301,63 @@
       (when (fs/existsSync file-path)
         (fs-extra/removeSync file-path)))))
 
+;; =============================================================================
+;; Chunked Storage IPC Handlers (new for chunked database storage)
+;; =============================================================================
+
+(defn- get-chunk-path
+  "Get the file path for a chunk.
+
+   Args:
+   - graph-name: String (graph identifier)
+   - chunk-key: String (e.g., 'manifest', 'pages/programming', 'journals/2025-12')
+
+   Returns: String (absolute file path to chunk file)
+
+   Examples:
+   - (get-chunk-path 'my-graph' 'manifest') → '~/.logseq/graphs/my-graph/manifest.msgpack.zst'
+   - (get-chunk-path 'my-graph' 'pages/foo') → '~/.logseq/graphs/my-graph/pages/foo.msgpack.zst'"
+  [graph-name chunk-key]
+  (when (and graph-name chunk-key)
+    (let [graph-name (sanitize-graph-name graph-name)
+          graphs-dir (get-graphs-dir)
+          ;; Create graph-specific directory
+          graph-dir (.join node-path graphs-dir graph-name)
+          ;; Append .msgpack.zst extension if not present
+          chunk-file (if (string/ends-with? chunk-key ".msgpack.zst")
+                       chunk-key
+                       (str chunk-key ".msgpack.zst"))]
+      (.join node-path graph-dir chunk-file))))
+
+(defmethod handle :getChunk [_window [_ graph-name chunk-key]]
+  "Get a chunk from filesystem.
+
+   Returns: Buffer (compressed chunk data) or nil if not found"
+  (when (and graph-name chunk-key)
+    (when-let [chunk-path (get-chunk-path graph-name chunk-key)]
+      (when (fs/existsSync chunk-path)
+        ;; Read as binary buffer (for compressed data)
+        (fs/readFileSync chunk-path)))))
+
+(defmethod handle :saveChunk [_window [_ graph-name chunk-key data]]
+  "Save a chunk to filesystem with atomic write (.tmp → rename).
+
+   Args:
+   - graph-name: String
+   - chunk-key: String
+   - data: Buffer (compressed chunk data)
+
+   Returns: nil"
+  (when (and graph-name chunk-key data)
+    (when-let [chunk-path (get-chunk-path graph-name chunk-key)]
+      (let [chunk-dir (node-path/dirname chunk-path)
+            tmp-path (str chunk-path ".tmp")]
+        ;; Ensure directory exists (create parent directories)
+        (fs-extra/ensureDirSync chunk-dir)
+        ;; Atomic write: tmp → rename
+        (fs/writeFileSync tmp-path data)
+        (fs/renameSync tmp-path chunk-path)))))
+
 (defmethod handle :persistent-dbs-saved [_window _]
   (async/put! state/persistent-dbs-chan true)
   true)

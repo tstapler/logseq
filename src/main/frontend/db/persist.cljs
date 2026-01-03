@@ -55,3 +55,39 @@
         (idb/rename-item! old-key new-key))
       (idb/rename-item! old-key new-key))))
 
+;; =============================================================================
+;; Chunked Storage Operations (new for chunked database storage)
+;; =============================================================================
+
+(defn get-chunk
+  "Get a chunk from storage (Electron filesystem or IndexedDB).
+
+   Args:
+   - graph-name: String (graph identifier)
+   - chunk-key: String (e.g., 'manifest', 'pages/programming', 'journals/2025-12')
+
+   Returns: Promise<Uint8Array | nil> (compressed chunk data)"
+  [graph-name chunk-key]
+  (if (util/electron?)
+    (p/let [result (ipc/ipc "getChunk" graph-name chunk-key)]
+      result)
+    ;; Browser: use IndexedDB with composite key
+    (let [storage-key (str graph-name "/" chunk-key)]
+      (idb/get-item storage-key))))
+
+(defn save-chunk
+  "Save a chunk to storage (Electron filesystem or IndexedDB).
+
+   Args:
+   - graph-name: String (graph identifier)
+   - chunk-key: String (e.g., 'manifest', 'pages/programming')
+   - data: Uint8Array (compressed chunk data)
+
+   Returns: Promise<void>"
+  [graph-name chunk-key data]
+  (if (util/electron?)
+    (ipc/ipc "saveChunk" graph-name chunk-key data)
+    ;; Browser: use IndexedDB with composite key
+    (let [storage-key (str graph-name "/" chunk-key)]
+      (idb/set-batch! [{:key storage-key :value data}]))))
+
