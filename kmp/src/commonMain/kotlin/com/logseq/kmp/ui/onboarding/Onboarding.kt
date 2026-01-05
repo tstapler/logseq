@@ -140,6 +140,17 @@ private fun GraphSelectionStep(
                 }) {
                     Text("Select Graph Directory")
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(onClick = {
+                    // Use the demo graph path relative to the project root
+                    val demoPath = "deps/graph-parser/test/resources/exporter-test-graph"
+                    selectedPath = demoPath
+                    onGraphSelected(demoPath)
+                }) {
+                    Text("Load Demo Graph")
+                }
             }
         }
     }
