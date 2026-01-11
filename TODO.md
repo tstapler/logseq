@@ -1,189 +1,203 @@
-# TODO.md - Logseq Kotlin Multiplatform Migration
+# TODO.md - Logseq Kotlin Compose Desktop Re-implementation
 
 ## Current Status
-- **Migration State**: 65% complete - All repository backends implemented
-- **Technology Stack**: Kotlin Multiplatform with SQLDelight 2.0
-- **Recent Activity**: Comprehensive bug analysis and strategic planning completed
-- **Last Updated**: January 1, 2026
+- **Migration State**: UI Development Phase - Compose Desktop app running successfully
+- **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
+- **Recent Activity**: Added graph switching UI and performance monitoring dashboard
+- **Last Updated**: January 11, 2026
+- **Current Focus**: Graph Loading Implementation (Story 2: Markdown Parser)
 
-## Active Backends
+## Known Issues
+- **Android & JS Targets**: Currently disabled due to build configuration issues (see [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)).
+- **Skiko Incompatibility**: Potential runtime issues on some Linux environments due to dependency resolution.
 
-### ✅ IN_MEMORY Backend
-- `InMemoryBlockRepository` - Working with full CRUD
-- `InMemoryPageRepository` - Working with full CRUD
-- `InMemoryPropertyRepository` - Inline in RepositoryFactoryImpl (needs extraction)
-- `InMemoryReferenceRepository` - Full implementation
-- Performance: ~2,000-20,000 ops/sec depending on operation
+## Project Structure (Multiplatform)
 
-### ✅ DATASCRIPT Backend
-- `DatascriptBlockRepository` - Datalog-style indexing, optimized queries
-- `DatascriptPageRepository` - Datalog-style indexing, optimized queries
-- `DatascriptPropertyRepository` - Full implementation
-- `DatascriptReferenceRepository` - Full implementation
-- Performance: ~3,000-30,000 ops/sec (15-50% faster than IN_MEMORY)
-
-### ✅ SQLDelight Backend
-- `SqlDelightBlockRepository` - Full CRUD with hierarchical queries using SQLDelight
-- `SqlDelightPageRepository` - Full CRUD with namespace support using SQLDelight
-- `SqlDelightPropertyRepository` - Full implementation with queries
-- `SqlDelightReferenceRepository` - Full implementation with queries
-- Uses `JdbcSqliteDriver` for SQLite database access
-- Performance: Benchmarked, awaiting optimization
-
-## Benchmark Results (IN_MEMORY vs DATASCRIPT)
-
-| Operation | IN_MEMORY | DATASCRIPT | Winner |
-|-----------|-----------|------------|--------|
-| Block Create | 243.6µs | 204.3µs | DATASCRIPT 1.2x |
-| Block Retrieve | 62.2µs | 48.0µs | DATASCRIPT 1.3x |
-| Block Get Hierarchy | 76.1µs | 39.9µs | DATASCRIPT 1.9x |
-| Page Create | 96.9µs | 148.8µs | IN_MEMORY 1.5x |
-| Page Get All | 49.3µs | 32.4µs | DATASCRIPT 1.5x |
-| Page Get Recent | 51.7µs | 41.9µs | DATASCRIPT 1.2x |
-
-## Completed Tasks
-
-### Repository Layer ✅
-- [x] Define core repository interfaces (BlockRepository, PageRepository, PropertyRepository)
-- [x] Implement InMemoryBlockRepository with hierarchical operations
-- [x] Implement InMemoryPageRepository with namespace support
-- [x] Implement DatascriptBlockRepository with Datalog indexing
-- [x] Implement DatascriptPageRepository with Datalog indexing
-- [x] Implement SqlDelightBlockRepository with SQL queries
-- [x] Implement SqlDelightPageRepository with SQL queries
-- [x] Create RepositoryFactoryImpl for backend switching
-- [x] Update AllBackendsComparisonBenchmark with SQLDelight
-- [x] Document architecture: docs/ARCHITECTURE_DATASCRIPT_SQLITE.md
-
-### Reference Repository Layer ✅
-- [x] Implement InMemoryReferenceRepository with reference tracking
-- [x] Implement DatascriptReferenceRepository with Datalog-style indexing
-- [x] Implement SqlDelightReferenceRepository with SQL queries
-- [x] Add reference queries to LogseqDatabase schema
-
-### Property Repository Layer ✅
-- [x] Implement DatascriptPropertyRepository with property indexing
-- [x] Implement SqlDelightPropertyRepository with SQL queries
-- [x] Add property queries to LogseqDatabase schema
-- [ ] Extract InMemoryPropertyRepository to separate file (PENDING)
-
-### Benchmark Framework ✅
-- [x] RepositoryBenchmark - Basic CRUD benchmarks
-- [x] AllBackendsComparisonBenchmark - Three-backend comparison (IN_MEMORY, DATASCRIPT, SQLDELIGHT)
-- [x] MicrobenchmarkRunner with statistical analysis (P50, P95, P99)
-- [x] Warmup and iteration support for JIT optimization
-
-### Build System ✅
-- [x] SQLDelight 2.0 plugin integrated
-- [x] Kotlin Multiplatform configured
-- [x] All tests passing (./gradlew :kmp:check)
-- [x] Benchmarks run successfully (./gradlew :kmp:runBackendComparison)
-
-## Pending Tasks
-
-### Critical Bugs (Must Fix Before Production)
-
-#### BUG-001: Data Migration Complexity [HIGH SEVERITY]
-**Status**: Investigating
-**Priority**: HIGH - Blocks production migration
-**Effort**: 3-4 hours (atomic tasks)
-**Description**: Converting from DataScript flexible document model to relational/SQL may lose plugin query capabilities.
-
-**Mitigation Tasks**:
-- [ ] Design PluginMetadata model for plugin data storage
-- [ ] Create migration utilities with data validation
-- [ ] Add SQL schema for plugin_data table
-- [ ] Implement integration tests
-
-**Documentation**: docs/tasks/bug-fixes.md
-
-#### BUG-002: Performance Regression in Graph Traversal [MEDIUM SEVERITY]
-**Status**: Investigating
-**Priority**: MEDIUM - User experience impact
-**Effort**: 4 hours (atomic tasks)
-**Description**: Kotlin stricter typing may impact graph query performance vs DataScript Datalog engine.
-
-**Mitigation Tasks**:
-- [ ] Optimize recursive CTE queries with depth limiting
-- [ ] Implement query caching for frequent operations
-- [ ] Benchmark and verify improvements
-
-**Documentation**: docs/tasks/bug-fixes.md
-
-### Feature Improvements
-
-#### Task C: Property Repository Refactoring [2h]
-**Priority**: LOW - Code quality improvement
-**Effort**: 2 hours
-**Description**: Extract inline InMemoryPropertyRepository to separate file for consistency.
-
-#### Task D: Search Repository Implementation [4h]
-**Priority**: MEDIUM - User-facing feature
-**Effort**: 4 hours
-**Description**: Implement full-text search repository using SQLite FTS5.
-
-**Documentation**: docs/tasks/search-repository.md
-
-## Known Issues & Risks
-
-See docs/bugs/open/ for active bug tracking.
-- HIGH: Data Migration Complexity (Bug 001) - Plugin compatibility risk
-- MEDIUM: Performance Regression (Bug 002) - Query optimization concern
-
-## Build & Test Commands
-
-```bash
-./gradlew :kmp:check
-./gradlew :kmp:runBackendComparison
-./gradlew :kmp:runBenchmark
+```
+kmp/
+├── build.gradle.kts           # Kotlin Multiplatform configuration
+└── src/
+    ├── commonMain/
+    │   └── kotlin/com/logseq/kmp/
+    │       ├── platform/PlatformFileSystem.kt  # expect class
+    │       ├── model/Models.kt                 # Page, Block, Property
+    │       ├── repository/                     # Repository interfaces
+    │       └── cache/                          # Caching layer
+    ├── jvmMain/
+    │   └── kotlin/com/logseq/kmp/
+    │       ├── desktop/
+    │       │   ├── Main.kt                     # Desktop entry point
+    │       │   └── ui/
+    │       │       ├── App.kt                  # Main Compose UI
+    │       │       └── theme/Theme.kt          # Material3 theming
+    │       ├── platform/PlatformFileSystem.kt  # actual JVM implementation
+    │       └── repository/                     # JVM implementations
+    ├── androidMain/
+    │   └── kotlin/com/logseq/kmp/
+    │       └── platform/PlatformFileSystem.kt  # actual Android implementation
+    ├── iosMain/
+    │   └── kotlin/com/logseq/kmp/
+    │       └── platform/PlatformFileSystem.kt  # actual iOS implementation
+    └── jsMain/
+        └── kotlin/com/logseq/kmp/
+            └── platform/PlatformFileSystem.kt  # actual JS implementation
 ```
 
-## Architecture
+## Completed Work
 
-Repository Layer (commonMain)
-- BlockRepository: InMemory ✅, Datascript ✅, SqlDelight ✅
-- PageRepository: InMemory ✅, Datascript ✅, SqlDelight ✅
-- PropertyRepository: InMemory (inline), Datascript ✅, SqlDelight ✅
-- ReferenceRepository: InMemory ✅, Datascript ✅, SqlDelight ✅
-- SearchRepository: InMemory (planned), SqlDelight (planned)
+### ✅ Kotlin Multiplatform Restructure
+- Converted from plain JVM project to proper multiplatform
+- Configured jvm, js targets with Compose support
+- Proper expect/actual pattern for PlatformFileSystem
 
-Benchmark Layer (jvmMain)
-- RepositoryBenchmark ✅
-- AllBackendsComparisonBenchmark ✅
-- MicrobenchmarkRunner ✅
+### ✅ PlatformFileSystem Implementation
+- `readFile(path: String): String?` - Read file contents
+- `writeFile(path: String, content: String): Boolean` - Write file contents
+- `listFiles(path: String): List<String>` - List directory contents
+- `listDirectories(path: String): List<String>` - List subdirectories
+- `fileExists(path: String): Boolean` - Check file existence
+- `directoryExists(path: String): Boolean` - Check directory existence
+- `createDirectory(path: String): Boolean` - Create directory
+- `deleteFile(path: String): Boolean` - Delete file
+- `expandTilde(path: String): String` - Convert ~ to home directory
+- `getDefaultGraphPath(): String` - Get default graph location
+- Security validation prevents path traversal
 
-## Next Recommended Action
+### ✅ Compose Desktop UI
+- Main application window with menu bar
+- Theme toggle (Light/Dark/System) via View dropdown
+- Clickable sidebar with Favorites and Recent pages
+- Page content display area
+- Visual selection indicators
+- Graph location display (~/Documents/logseq)
+- File menu with "Switch Graph" option
+- Demo graph loading button for onboarding
 
-### PRIMARY: Fix BUG-001 Plugin Compatibility (3-4h)
+### ✅ Performance Monitoring
+- Performance monitor infrastructure for tracking operation timing
+- Performance dashboard UI component for visualizing metrics
+- Instrumentation of critical paths (graph loading, rendering)
 
-Rationale:
-1. Severity: HIGH - Blocks production migration
-2. Value: Plugin compatibility enables ecosystem transition
-3. Dependencies: Unblocks other migration work
-4. Risk: Without fix, plugins may not work post-migration
-5. Effort: 3 hours (within atomic limits)
+---
 
-Quick Start:
-1. Read docs/tasks/bug-fixes.md
-2. Load context files: Models.kt, LogseqDatabase.sq, schema.cljs
-3. Start with Task BUG-001-A: PluginMetadata Model Definition
+## Active Development
 
-### Alternative Quick Win: Property Refactoring (2h)
-Extract InMemoryPropertyRepository to separate file
+### 🎯 GRAPH LOADING IMPLEMENTATION
 
-### Future: Search Repository (4h)
-Implement full-text search with FTS5 after bug fixes
+#### Story: Startup Performance & Debugging (COMPLETED)
+- [x] Task 1.1: Performance Monitor Infrastructure
+- [x] Task 1.2: Instrument GraphLoader
+- [x] Task 2.1: Performance Dashboard UI
+
+#### Story 1: FileSystem Enhancements (COMPLETED)
+- [x] Task 1.1: Add File Reading to PlatformFileSystem
+- [x] Task 1.2: Implement JVM File Operations
+- [x] Task 1.3: Implement Mobile/JS File Operations
+
+#### Story 2: Markdown Parser (Not Started)
+- [ ] Task 2.1: Define Markdown Parser Interface
+- [ ] Task 2.2: Implement Logseq Markdown Parser
+- [ ] Task 2.3: Add Parser Tests
+
+#### Story 3: Graph Config Parser (Not Started)
+- [ ] Task 3.1: Parse Graph Configuration (graph.json)
+- [ ] Task 3.2: Graph Discovery and Validation
+
+#### Story 4: Graph Loader Service (Not Started)
+- [ ] Task 4.1: Create GraphLoader Service
+- [ ] Task 4.2: Add Loader Tests
+
+#### Story 5: UI Integration (Not Started)
+- [ ] Task 5.1: Create GraphLoader Integration Layer
+- [ ] Task 5.2: Add Graph Selection UI
+- [ ] Task 5.3: Integrate Real Repository
+
+---
+
+### UI Features (In Progress)
+
+#### Navigation & Pages
+- [x] Connect sidebar to actual PageRepository data
+- [ ] Add page create/delete functionality
+- [ ] Implement page editing view
+- [ ] Add breadcrumbs for namespace navigation
+
+#### Keyboard Shortcuts
+- [ ] Ctrl+K - Search/command palette
+- [ ] Ctrl+N - Create new page
+- [ ] Ctrl+B - Toggle sidebar
+- [ ] Ctrl+S - Save page
+
+#### Command Palette
+- [ ] Design command palette UI
+- [ ] Implement search functionality
+- [ ] Add commands: create page, goto page, toggle theme, etc.
+
+---
 
 ## Project Status Summary
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| Repository Backends | 9/9 (100%) | Complete |
-| Benchmark Framework | 3/3 (100%) | Complete |
-| Critical Bugs (HIGH) | 1/1 | Needs Fix |
-| Medium Bugs (MEDIUM) | 1/1 | Planned |
-| Refactoring Tasks | 1/1 | Pending |
-| New Features | 1/1 | Planned |
-| Overall | 76% | In Progress |
+| Desktop App | Running | ✅ Working |
+| Theme Toggle | Implemented | ✅ Done |
+| Sidebar Navigation | Connected to data | ✅ Done |
+| PlatformFileSystem | Fully implemented | ✅ Done |
+| Performance Monitoring | Dashboard complete | ✅ Done |
+| Graph Switching | UI implemented | ✅ Done |
+| **Graph Loading** | **Story 1 complete** | ⚠️ In Progress |
+| Command Palette | Not Started | ❌ Pending |
+| Block Editor | Not Started | ❌ Pending |
 
-Estimated Remaining Effort: 9-10 hours
+---
+
+## Build & Test Commands
+
+```bash
+# Run the desktop application
+./gradlew :kmp:runApp
+
+# Compile JVM code
+./gradlew :kmp:compileKotlinJvm
+
+# Compile all targets
+./gradlew :kmp:compileKotlin
+
+# List available tasks
+./gradlew :kmp:tasks
+```
+
+---
+
+## Next Steps
+
+1. **Story 2: Markdown Parser** (4 hours) - [Details](docs/tasks/graph-loading.md)
+   - **Task 2.1: Define Markdown Parser Interface** (1h) - *Recommended Next Step*
+     - Define `MarkdownParser` interface
+     - Create `ParsedPage` and `ParsedBlock` data classes
+     - Document API usage
+   - **Task 2.2: Implement Logseq Markdown Parser** (2h)
+     - Parse logseq markdown format with properties
+     - Handle block references [[Page]] and ((Block))
+     - Support hierarchical bullet lists
+   - **Task 2.3: Add Parser Tests** (1h)
+     - Comprehensive unit tests
+
+2. **Story 3: Graph Config Parser** (2 hours)
+   - Parse graph.json configuration
+   - Validate graph directory structure
+
+3. **Story 4: Graph Loader Service** (4 hours)
+   - Orchestrate loading process
+   - Parse markdown files
+   - Populate SQLDelight database
+
+4. **Story 5: UI Integration** (5 hours)
+   - Graph selection dialog
+   - Loading progress indicator
+   - Connect real repository to UI
+
+---
+
+*Last Updated: January 11, 2026*
+*Framework: Kotlin Multiplatform 2.0.21 with Compose Desktop 1.7.1*
