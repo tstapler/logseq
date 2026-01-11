@@ -1,15 +1,16 @@
 # TODO.md - Logseq Kotlin Compose Desktop Re-implementation
 
 ## Current Status
-- **Migration State**: UI Development Phase - Compose Desktop app running successfully
+- **Migration State**: Build Stabilization Phase - Fixing KMP build failures
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
 - **Recent Activity**: Added graph switching UI and performance monitoring dashboard
 - **Last Updated**: January 11, 2026
-- **Current Focus**: Graph Loading Implementation (Story 2: Markdown Parser)
+- **Current Focus**: KMP Build Failure Resolution (Story 1: Critical Android Build Success)
 
 ## Known Issues
 - **Android & JS Targets**: Currently disabled due to build configuration issues (see [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)).
 - **Skiko Incompatibility**: Potential runtime issues on some Linux environments due to dependency resolution.
+- **Missing Platform Implementations**: Android target fails to compile due to missing `expect` implementations.
 
 ## Project Structure (Multiplatform)
 
@@ -82,7 +83,21 @@ kmp/
 
 ## Active Development
 
-### 🎯 GRAPH LOADING IMPLEMENTATION
+### 🎯 KMP BUILD FAILURE RESOLUTION (Build Stabilization)
+*See [docs/tasks/kmp-build-failure-resolution.md](docs/tasks/kmp-build-failure-resolution.md) for detailed plan*
+
+#### Story 1: Critical Android Build Success (In Progress)
+- [ ] Task 1.1: Android Platform Implementation (2h) - *Recommended Next Step*
+- [ ] Task 1.2: Missing Dependencies Resolution (1h)
+- [ ] Task 1.3: Repository Interface Alignment (2h)
+- [ ] Task 1.4: StateFlow Reactive Pattern Fixes (1h)
+
+#### Story 2: Platform Target Re-enablement (Planned)
+- [ ] Task 2.1: JS Target Node.js Resolution
+- [ ] Task 2.2: iOS Target Ivy Repository Fix
+- [ ] Task 2.3: Cross-Platform Integration Testing
+
+### ⏸️ GRAPH LOADING IMPLEMENTATION (Paused)
 
 #### Story: Startup Performance & Debugging (COMPLETED)
 - [x] Task 1.1: Performance Monitor Infrastructure
@@ -98,19 +113,6 @@ kmp/
 - [ ] Task 2.1: Define Markdown Parser Interface
 - [ ] Task 2.2: Implement Logseq Markdown Parser
 - [ ] Task 2.3: Add Parser Tests
-
-#### Story 3: Graph Config Parser (Not Started)
-- [ ] Task 3.1: Parse Graph Configuration (graph.json)
-- [ ] Task 3.2: Graph Discovery and Validation
-
-#### Story 4: Graph Loader Service (Not Started)
-- [ ] Task 4.1: Create GraphLoader Service
-- [ ] Task 4.2: Add Loader Tests
-
-#### Story 5: UI Integration (Not Started)
-- [ ] Task 5.1: Create GraphLoader Integration Layer
-- [ ] Task 5.2: Add Graph Selection UI
-- [ ] Task 5.3: Integrate Real Repository
 
 ---
 
@@ -145,7 +147,8 @@ kmp/
 | PlatformFileSystem | Fully implemented | ✅ Done |
 | Performance Monitoring | Dashboard complete | ✅ Done |
 | Graph Switching | UI implemented | ✅ Done |
-| **Graph Loading** | **Story 1 complete** | ⚠️ In Progress |
+| **Build Stabilization** | **Story 1 Started** | ⚠️ In Progress |
+| Graph Loading | Story 1 complete | ⏸️ Paused |
 | Command Palette | Not Started | ❌ Pending |
 | Block Editor | Not Started | ❌ Pending |
 
@@ -171,31 +174,17 @@ kmp/
 
 ## Next Steps
 
-1. **Story 2: Markdown Parser** (4 hours) - [Details](docs/tasks/graph-loading.md)
-   - **Task 2.1: Define Markdown Parser Interface** (1h) - *Recommended Next Step*
-     - Define `MarkdownParser` interface
-     - Create `ParsedPage` and `ParsedBlock` data classes
-     - Document API usage
-   - **Task 2.2: Implement Logseq Markdown Parser** (2h)
-     - Parse logseq markdown format with properties
-     - Handle block references [[Page]] and ((Block))
-     - Support hierarchical bullet lists
-   - **Task 2.3: Add Parser Tests** (1h)
-     - Comprehensive unit tests
+1. **Story 1: Critical Android Build Success** (6 hours) - [Details](docs/tasks/kmp-build-failure-resolution.md)
+   - **Task 1.1: Android Platform Implementation** (2h) - *Recommended Next Step*
+     - Create missing Android platform implementations for `Time.kt` and others
+     - Resolve `expect`/`actual` mismatches
+   - **Task 1.2: Missing Dependencies Resolution** (1h)
+     - Add missing dependencies to `build.gradle.kts`
+   - **Task 1.3: Repository Interface Alignment** (2h)
+     - Extend repository interfaces to match `EditorViewModel` usage
 
-2. **Story 3: Graph Config Parser** (2 hours)
-   - Parse graph.json configuration
-   - Validate graph directory structure
-
-3. **Story 4: Graph Loader Service** (4 hours)
-   - Orchestrate loading process
-   - Parse markdown files
-   - Populate SQLDelight database
-
-4. **Story 5: UI Integration** (5 hours)
-   - Graph selection dialog
-   - Loading progress indicator
-   - Connect real repository to UI
+2. **Story 2: Platform Target Re-enablement** (2 weeks)
+   - Fix JS and iOS build configurations
 
 ---
 
