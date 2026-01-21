@@ -7,7 +7,7 @@ Implement the ReferenceRepository interface to track block-to-block references, 
 **NOT STARTED** - ReferenceRepository interface exists but no implementation
 
 ## Priority
-**MEDIUM** - Enables graph features and reference counting
+**HIGH** - Blocks graph features (reference counting, most-connected blocks)
 
 ## Files Required (Context Boundary: 5 files)
 1. `kmp/src/commonMain/kotlin/com/logseq/kmp/repository/GraphRepository.kt` - EXISTS
