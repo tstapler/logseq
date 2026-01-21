@@ -1,16 +1,20 @@
 # TODO.md - Logseq Kotlin Compose Desktop Re-implementation
 
 ## Current Status
-- **Migration State**: Build Stabilization Phase - Fixing KMP build failures
+- **Migration State**: Feature Implementation Phase - Building Logseq feature parity
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
-- **Recent Activity**: Added graph switching UI and performance monitoring dashboard
-- **Last Updated**: January 11, 2026
-- **Current Focus**: KMP Build Failure Resolution (Story 1: Critical Android Build Success)
+- **Recent Activity**: Implemented journals view, wiki links, edit/view mode, content display
+- **Last Updated**: January 21, 2026
+- **Current Focus**: Feature Parity with Logseq
 
-## Known Issues
-- **Android & JS Targets**: Currently disabled due to build configuration issues (see [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)).
-- **Skiko Incompatibility**: Potential runtime issues on some Linux environments due to dependency resolution.
-- **Missing Platform Implementations**: Android target fails to compile due to missing `expect` implementations.
+## Build Status
+
+| Target | Status | Notes |
+|--------|--------|-------|
+| JVM/Desktop | ✅ BUILDS | Primary development target |
+| Android | ✅ BUILDS | Warnings only (expect/actual beta) |
+| JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
+| iOS | ⏸️ Disabled | Ivy repository issues |
 
 ## Project Structure (Multiplatform)
 
@@ -20,137 +24,119 @@ kmp/
 └── src/
     ├── commonMain/
     │   └── kotlin/com/logseq/kmp/
-    │       ├── platform/PlatformFileSystem.kt  # expect class
-    │       ├── model/Models.kt                 # Page, Block, Property
-    │       ├── repository/                     # Repository interfaces
-    │       └── cache/                          # Caching layer
-    ├── jvmMain/
-    │   └── kotlin/com/logseq/kmp/
-    │       ├── desktop/
-    │       │   ├── Main.kt                     # Desktop entry point
-    │       │   └── ui/
-    │       │       ├── App.kt                  # Main Compose UI
-    │       │       └── theme/Theme.kt          # Material3 theming
-    │       ├── platform/PlatformFileSystem.kt  # actual JVM implementation
-    │       └── repository/                     # JVM implementations
-    ├── androidMain/
-    │   └── kotlin/com/logseq/kmp/
-    │       └── platform/PlatformFileSystem.kt  # actual Android implementation
-    ├── iosMain/
-    │   └── kotlin/com/logseq/kmp/
-    │       └── platform/PlatformFileSystem.kt  # actual iOS implementation
-    └── jsMain/
-        └── kotlin/com/logseq/kmp/
-            └── platform/PlatformFileSystem.kt  # actual JS implementation
+    │       ├── platform/          # expect classes
+    │       ├── model/             # Page, Block, Property
+    │       ├── repository/        # Repository interfaces
+    │       ├── db/                # GraphLoader, GraphWriter
+    │       ├── editor/            # Editor components
+    │       └── ui/                # Compose UI components
+    ├── jvmMain/                   # JVM/Desktop implementations
+    ├── androidMain/               # Android implementations
+    ├── iosMain/                   # iOS implementations (disabled)
+    └── jsMain/                    # JS implementations (disabled)
 ```
+
+---
 
 ## Completed Work
 
-### ✅ Kotlin Multiplatform Restructure
-- Converted from plain JVM project to proper multiplatform
-- Configured jvm, js targets with Compose support
-- Proper expect/actual pattern for PlatformFileSystem
+### ✅ Build Stabilization (January 2026)
+- [x] JVM target compiles and runs
+- [x] Android target compiles successfully
+- [x] Progressive startup loading (journals-first, ~500ms to interactive)
+- [x] Java 17+ compatibility resolved
 
-### ✅ PlatformFileSystem Implementation
-- `readFile(path: String): String?` - Read file contents
-- `writeFile(path: String, content: String): Boolean` - Write file contents
-- `listFiles(path: String): List<String>` - List directory contents
-- `listDirectories(path: String): List<String>` - List subdirectories
-- `fileExists(path: String): Boolean` - Check file existence
-- `directoryExists(path: String): Boolean` - Check directory existence
-- `createDirectory(path: String): Boolean` - Create directory
-- `deleteFile(path: String): Boolean` - Delete file
-- `expandTilde(path: String): String` - Convert ~ to home directory
-- `getDefaultGraphPath(): String` - Get default graph location
-- Security validation prevents path traversal
+### ✅ Core Infrastructure
+- [x] PlatformFileSystem with all file operations
+- [x] GraphLoader with progressive loading
+- [x] Block and Page repositories (in-memory)
+- [x] Performance monitoring infrastructure
 
-### ✅ Compose Desktop UI
-- Main application window with menu bar
-- Theme toggle (Light/Dark/System) via View dropdown
-- Clickable sidebar with Favorites and Recent pages
-- Page content display area
-- Visual selection indicators
-- Graph location display (~/Documents/logseq)
-- File menu with "Switch Graph" option
-- Demo graph loading button for onboarding
+### ✅ UI Framework
+- [x] Main application window with menu bar
+- [x] Theme toggle (Light/Dark/System)
+- [x] Left sidebar with navigation
+- [x] Right sidebar (expandable)
+- [x] Status bar with encryption indicator
+- [x] Command palette infrastructure
 
-### ✅ Performance Monitoring
-- Performance monitor infrastructure for tracking operation timing
-- Performance dashboard UI component for visualizing metrics
-- Instrumentation of critical paths (graph loading, rendering)
+### ✅ Content Display (January 21, 2026)
+- [x] Block content loading from repository
+- [x] Text state initialization for blocks
+- [x] JournalsView with scrollable multi-journal display
+- [x] BlockRenderer with wiki link support `[[Page Name]]`
+- [x] Edit vs View mode for blocks
+- [x] Click-to-edit functionality
+- [x] Wiki link navigation to pages
+- [x] Linked and Unlinked References Panel
 
 ---
 
 ## Active Development
 
-### 🎯 KMP BUILD FAILURE RESOLUTION (Build Stabilization)
-*See [docs/tasks/kmp-build-failure-resolution.md](docs/tasks/kmp-build-failure-resolution.md) for detailed plan*
+### 🎯 FEATURE PARITY IMPLEMENTATION
 
-#### Story 1: Critical Android Build Success (In Progress)
-- [ ] Task 1.1: Android Platform Implementation (2h) - *Recommended Next Step*
-- [ ] Task 1.2: Missing Dependencies Resolution (1h)
-- [ ] Task 1.3: Repository Interface Alignment (2h)
-- [ ] Task 1.4: StateFlow Reactive Pattern Fixes (1h)
+#### Story 1: Block Editing (In Progress)
+- [x] Task 1.1: Persist block edits to disk (2h)
+- [ ] Task 1.2: Auto-save with debouncing (1h)
+- [ ] Task 1.3: Undo/redo support (2h)
 
-#### Story 2: Platform Target Re-enablement (Planned)
-- [ ] Task 2.1: JS Target Node.js Resolution
-- [ ] Task 2.2: iOS Target Ivy Repository Fix
-- [ ] Task 2.3: Cross-Platform Integration Testing
+#### Story 2: Block Hierarchy & Outliner (In Progress)
+- [ ] Task 2.1: Tree structure visualization (2h)
+- [ ] Task 2.2: Indent/outdent blocks (2h)
+- [x] Task 2.3: Collapse/expand blocks (1h)
+- [ ] Task 2.4: Drag-and-drop reordering (3h)
 
-### ⏸️ GRAPH LOADING IMPLEMENTATION (Paused)
+#### Story 3: Page Management (Planned) - [View Plan](docs/tasks/page-management.md)
+- [x] Task 3.1: Create new page from wiki link (1h)
+- [ ] Task 3.2: Delete page with confirmation (1h)
+- [ ] Task 3.3: Rename page with reference updates (2h)
+- [ ] Task 3.4: Page properties panel (2h)
 
-#### Story: Startup Performance & Debugging (COMPLETED)
-- [x] Task 1.1: Performance Monitor Infrastructure
-- [x] Task 1.2: Instrument GraphLoader
-- [x] Task 2.1: Performance Dashboard UI
+#### Story 4: Markdown Parser Enhancement (Not Started)
+- [ ] Task 4.1: Parse Logseq markdown syntax (3h)
+- [ ] Task 4.2: Handle block properties (2h)
+- [ ] Task 4.3: Support code blocks and formatting (2h)
 
-#### Story 1: FileSystem Enhancements (COMPLETED)
-- [x] Task 1.1: Add File Reading to PlatformFileSystem
-- [x] Task 1.2: Implement JVM File Operations
-- [x] Task 1.3: Implement Mobile/JS File Operations
-
-#### Story 2: Markdown Parser (Not Started)
-- [ ] Task 2.1: Define Markdown Parser Interface
-- [ ] Task 2.2: Implement Logseq Markdown Parser
-- [ ] Task 2.3: Add Parser Tests
+### ⏸️ Platform Re-enablement (Blocked)
+*See [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)*
+- [ ] JS Target: Fix OutOfMemoryError and Node.js resolution
+- [ ] iOS Target: Fix Ivy repository issues
 
 ---
 
-### UI Features (In Progress)
+## Known Issues
 
-#### Navigation & Pages
-- [x] Connect sidebar to actual PageRepository data
-- [ ] Add page create/delete functionality
-- [ ] Implement page editing view
-- [ ] Add breadcrumbs for namespace navigation
-
-#### Keyboard Shortcuts
-- [ ] Ctrl+K - Search/command palette
-- [ ] Ctrl+N - Create new page
-- [ ] Ctrl+B - Toggle sidebar
-- [ ] Ctrl+S - Save page
-
-#### Command Palette
-- [ ] Design command palette UI
-- [ ] Implement search functionality
-- [ ] Add commands: create page, goto page, toggle theme, etc.
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| BUG-003 | Medium | JS/iOS targets disabled | Open |
+| - | Low | ClickableText deprecated API | Warning only |
+| - | Low | expect/actual beta warnings | Cosmetic |
 
 ---
 
-## Project Status Summary
+## Feature Gap Analysis (vs Logseq)
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| Desktop App | Running | ✅ Working |
-| Theme Toggle | Implemented | ✅ Done |
-| Sidebar Navigation | Connected to data | ✅ Done |
-| PlatformFileSystem | Fully implemented | ✅ Done |
-| Performance Monitoring | Dashboard complete | ✅ Done |
-| Graph Switching | UI implemented | ✅ Done |
-| **Build Stabilization** | **Story 1 Started** | ⚠️ In Progress |
-| Graph Loading | Story 1 complete | ⏸️ Paused |
-| Command Palette | Not Started | ❌ Pending |
-| Block Editor | Not Started | ❌ Pending |
+### High Priority (Core Functionality)
+- [ ] Block editing persistence
+- [ ] Block hierarchy/outliner display
+- [ ] Create page from wiki link
+- [ ] Backlinks panel
+- [ ] Search functionality
+
+### Medium Priority (User Experience)
+- [ ] Keyboard shortcuts (Ctrl+K, Ctrl+N, etc.)
+- [ ] Block references `((block-id))`
+- [ ] Tags `#tag` support
+- [ ] Page aliases
+- [ ] Graph view
+
+### Low Priority (Advanced Features)
+- [ ] Flashcards/spaced repetition
+- [ ] PDF annotation
+- [ ] Whiteboards
+- [ ] Plugins system
+- [ ] Sync/collaboration
 
 ---
 
@@ -163,30 +149,33 @@ kmp/
 # Compile JVM code
 ./gradlew :kmp:compileKotlinJvm
 
-# Compile all targets
-./gradlew :kmp:compileKotlin
+# Compile Android code
+./gradlew :kmp:compileDebugKotlinAndroid
 
-# List available tasks
-./gradlew :kmp:tasks
+# Run tests
+./gradlew :kmp:jvmTest
 ```
 
 ---
 
-## Next Steps
+## Architecture Notes
 
-1. **Story 1: Critical Android Build Success** (6 hours) - [Details](docs/tasks/kmp-build-failure-resolution.md)
-   - **Task 1.1: Android Platform Implementation** (2h) - *Recommended Next Step*
-     - Create missing Android platform implementations for `Time.kt` and others
-     - Resolve `expect`/`actual` mismatches
-   - **Task 1.2: Missing Dependencies Resolution** (1h)
-     - Add missing dependencies to `build.gradle.kts`
-   - **Task 1.3: Repository Interface Alignment** (2h)
-     - Extend repository interfaces to match `EditorViewModel` usage
+### Data Flow
+```
+Markdown Files → GraphLoader → Repositories (In-Memory) → UI Components
+                                    ↓
+                              GraphWriter → Markdown Files
+```
 
-2. **Story 2: Platform Target Re-enablement** (2 weeks)
-   - Fix JS and iOS build configurations
+### Key Components
+- **GraphLoader**: Reads markdown files, parses content, populates repositories
+- **GraphWriter**: Persists changes back to markdown files
+- **BlockRepository**: In-memory storage for blocks with reactive Flow
+- **PageRepository**: In-memory storage for pages
+- **BlockRenderer**: Renders blocks with wiki links and edit mode
+- **JournalsView**: Displays multiple journals in scrollable list
 
 ---
 
-*Last Updated: January 11, 2026*
+*Last Updated: January 21, 2026*
 *Framework: Kotlin Multiplatform 2.0.21 with Compose Desktop 1.7.1*
