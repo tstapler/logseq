@@ -93,10 +93,11 @@ kmp/
 - [ ] Task 3.3: Rename page with reference updates (2h)
 - [ ] Task 3.4: Page properties panel (2h)
 
-#### Story 4: Markdown Parser Enhancement (Not Started)
-- [ ] Task 4.1: Parse Logseq markdown syntax (3h)
-- [ ] Task 4.2: Handle block properties (2h)
-- [ ] Task 4.3: Support code blocks and formatting (2h)
+#### Story 4: Search & Query System (Planned) - [View Plan](docs/tasks/search-system.md)
+- [ ] Task 4.1: SQLite FTS5 Implementation (2h)
+- [ ] Task 4.2: Datascript Query Engine (3h)
+- [ ] Task 4.3: Search UI & Command Palette (3h)
+- [ ] Task 4.4: Query Result Rendering (2h)
 
 ### ⏸️ Platform Re-enablement (Blocked)
 *See [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)*
