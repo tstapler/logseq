@@ -1,15 +1,15 @@
 package com.logseq.kmp.platform
 
-expect class PlatformFileSystem() {
-    fun getDefaultGraphPath(): String
-    fun expandTilde(path: String): String
-    fun readFile(path: String): String?
-    fun writeFile(path: String, content: String): Boolean
-    fun listFiles(path: String): List<String>
-    fun listDirectories(path: String): List<String>
-    fun fileExists(path: String): Boolean
-    fun directoryExists(path: String): Boolean
-    fun createDirectory(path: String): Boolean
-    fun deleteFile(path: String): Boolean
-    fun pickDirectory(): String?
+expect class PlatformFileSystem() : FileSystem {
+    override fun getDefaultGraphPath(): String
+    override fun expandTilde(path: String): String
+    override fun readFile(path: String): String?
+    override fun writeFile(path: String, content: String): Boolean
+    override fun listFiles(path: String): List<String>
+    override fun listDirectories(path: String): List<String>
+    override fun fileExists(path: String): Boolean
+    override fun directoryExists(path: String): Boolean
+    override fun createDirectory(path: String): Boolean
+    override fun deleteFile(path: String): Boolean
+    override fun pickDirectory(): String?
 }

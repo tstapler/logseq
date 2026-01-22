@@ -72,6 +72,7 @@ fun LogseqApp(
     val journalsViewModel = remember {
         com.logseq.kmp.ui.screens.JournalsViewModel(
             pageRepository,
+            blockRepository,
             scope
         )
     }

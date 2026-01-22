@@ -6,7 +6,7 @@ import com.logseq.kmp.model.ParsedBlock
 import com.logseq.kmp.outliner.JournalUtils
 import com.logseq.kmp.outliner.OutlinerPipeline
 import com.logseq.kmp.parser.MarkdownParser
-import com.logseq.kmp.platform.PlatformFileSystem
+import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SimplePageRepository
 import com.logseq.kmp.logging.Logger
@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class GraphLoader(
-    private val fileSystem: PlatformFileSystem,
+    private val fileSystem: FileSystem,
     private val pageRepository: SimplePageRepository,
     private val blockRepository: BlockRepository
 ) {

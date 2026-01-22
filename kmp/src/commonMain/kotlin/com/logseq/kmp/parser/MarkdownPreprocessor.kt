@@ -24,13 +24,7 @@ object MarkdownPreprocessor {
             
             // If it's a list item
             if (isListItem(trimmedStart)) {
-                val leadingSpaces = line.length - trimmedStart.length
-                
-                // Calculate level assuming 2 spaces per level
-                // Level 0: 0 spaces
-                // Level 1: 2 spaces
-                // Level 2: 4 spaces
-                val level = leadingSpaces / 2
+                val level = calculateLevel(line)
                 
                 // CommonMark standard is often 4 spaces for a sub-block.
                 // Let's force 4 spaces per level to be safe for the parser.
@@ -54,5 +48,26 @@ object MarkdownPreprocessor {
                trimmedLine.startsWith("* ") || 
                trimmedLine.startsWith("+ ") || 
                (trimmedLine.isNotEmpty() && trimmedLine[0].isDigit() && trimmedLine.contains(". "))
+    }
+    
+    private fun calculateLevel(line: String): Int {
+        var spaces = 0
+        var tabs = 0
+        
+        for (char in line) {
+            when (char) {
+                ' ' -> spaces++
+                '\t' -> tabs++
+                else -> break
+            }
+        }
+        
+        // Logic: 1 tab = 1 level
+        // 2 spaces = 1 level
+        // But we need to handle mixed? Usually it's one or the other.
+        // Let's assume tabs take precedence if present, or add to spaces.
+        // A tab is usually 2 or 4 spaces visually.
+        
+        return tabs + (spaces / 2)
     }
 }

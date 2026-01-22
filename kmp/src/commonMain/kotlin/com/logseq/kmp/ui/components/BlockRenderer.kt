@@ -8,7 +8,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,10 +72,10 @@ fun BlockRenderer(
             .padding(start = (block.level * 24).dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Collapse/expand indicator or bullet point
+        // Collapse/expand indicator (caret)
         if (hasChildren) {
             Icon(
-                imageVector = if (isCollapsed) Icons.Default.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
+                imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
                 contentDescription = if (isCollapsed) "Expand" else "Collapse",
                 modifier = Modifier
                     .size(18.dp)
@@ -84,14 +84,30 @@ fun BlockRenderer(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            // Regular bullet point
-            Text(
-                text = "•",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 8.dp, top = 2.dp)
-            )
+            // Spacer to align bullet if we want consistent indentation, 
+            // but usually the bullet is the "start" of the block visual.
+            // If we want [Caret] [Bullet] [Content], and Caret is optional:
+            // It looks better if the bullet aligns with parent's content? 
+            // Standard Logseq:
+            //   > • Parent
+            //     • Child
+            // So we need a placeholder for the caret if it's missing?
+            // Actually, usually bullets align.
+            // Let's add a spacer matching the Icon size if we want strict alignment,
+            // or just render the icon if present. 
+            // The user asked for "carats ... in addition to the bullet".
+            
+            // Let's add a placeholder spacer to keep bullets aligned
+            Spacer(modifier = Modifier.width(18.dp).padding(end = 4.dp))
         }
+
+        // Bullet point (Always shown)
+        Text(
+            text = "•",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp, top = 2.dp)
+        )
 
         if (isEditing) {
             // Edit mode

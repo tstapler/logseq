@@ -7,15 +7,15 @@ import java.nio.file.StandardOpenOption
 import javax.swing.JFileChooser
 import javax.swing.SwingUtilities
 
-actual class PlatformFileSystem actual constructor() {
+actual class PlatformFileSystem actual constructor() : FileSystem {
     private val maxPathLength = 4096
     private val maxFileSize = 100 * 1024 * 1024
     private val dangerousPatterns = listOf("..", "../", "..\\", "\u0000")
     private val homeDir: String by lazy { System.getProperty("user.home") }
 
-    actual fun getDefaultGraphPath(): String = "$homeDir/Documents/logseq"
+    actual override fun getDefaultGraphPath(): String = "$homeDir/Documents/logseq"
 
-    actual fun expandTilde(path: String): String {
+    actual override fun expandTilde(path: String): String {
         return if (path.startsWith("~")) {
             path.replaceFirst("~", homeDir)
         } else {
@@ -23,7 +23,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun readFile(path: String): String? {
+    actual override fun readFile(path: String): String? {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -36,7 +36,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun writeFile(path: String, content: String): Boolean {
+    actual override fun writeFile(path: String, content: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -57,7 +57,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun listFiles(path: String): List<String> {
+    actual override fun listFiles(path: String): List<String> {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -73,7 +73,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun listDirectories(path: String): List<String> {
+    actual override fun listDirectories(path: String): List<String> {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -89,7 +89,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun fileExists(path: String): Boolean {
+    actual override fun fileExists(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -100,7 +100,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun directoryExists(path: String): Boolean {
+    actual override fun directoryExists(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -111,7 +111,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun createDirectory(path: String): Boolean {
+    actual override fun createDirectory(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -130,7 +130,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun deleteFile(path: String): Boolean {
+    actual override fun deleteFile(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -142,7 +142,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun pickDirectory(): String? {
+    actual override fun pickDirectory(): String? {
         var selectedPath: String? = null
         val task = Runnable {
             val chooser = JFileChooser()
