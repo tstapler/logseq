@@ -12,13 +12,20 @@ class MarkdownParser {
     private val parser = JetbrainsMarkdownParser(flavour)
 
     fun parsePage(content: String): ParsedPage {
-        val rootNode = parser.buildMarkdownTreeFromString(content)
-        val blocks = convertToBlocks(rootNode, content)
-        val properties = emptyMap<String, String>() 
+        // Preprocess to ensure indentation compatibility
+        val normalizedContent = MarkdownPreprocessor.normalize(content)
+        
+        val rootNode = parser.buildMarkdownTreeFromString(normalizedContent)
+        val blocks = convertToBlocks(rootNode, normalizedContent)
+        
+        // Logseq pages can have page-level properties in the first block if it's a property drawer
+        // But in our block-based model, we usually just treat the first block as the page properties block 
+        // if it contains ONLY properties.
+        // For ParsedPage, we might want to extract them if needed, but for now we keep them on the block.
         
         return ParsedPage(
             title = null,
-            properties = properties,
+            properties = emptyMap(),
             blocks = blocks
         )
     }
@@ -29,14 +36,32 @@ class MarkdownParser {
         for (child in node.children) {
             val type = child.type.toString()
             // Heuristic check for Unordered List
-            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST")) {
+            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST") || type.contains("UNORDERED_LIST")) {
                 blocks.addAll(processList(child, content, 0))
             } else if (type.contains("PARAGRAPH") || type.contains("Paragraph")) {
                 // Treat top-level paragraph as a block
                 val text = getTextInNode(child, content).toString().trim()
-                val (finalContent, properties) = parseProperties(text)
+                
+                // 1. Parse Properties (Inline & Drawer)
+                val propertiesResult = PropertiesParser.parse(text)
+                
+                // 2. Parse Timestamps from remaining content
+                val timestampResult = TimestampParser.parse(propertiesResult.content)
+                val finalContent = timestampResult.content
+                
                 val references = extractReferences(finalContent)
-                blocks.add(ParsedBlock(finalContent, properties, 0, emptyList(), references))
+                
+                blocks.add(
+                    ParsedBlock(
+                        content = finalContent,
+                        properties = propertiesResult.properties,
+                        level = 0,
+                        children = emptyList(),
+                        references = references,
+                        scheduled = timestampResult.scheduled,
+                        deadline = timestampResult.deadline
+                    )
+                )
             }
         }
         
@@ -51,16 +76,25 @@ class MarkdownParser {
             // Heuristic check for List Item
             if (type.contains("LI") || type.contains("ListItem") || type.contains("LIST_ITEM")) {
                 val (rawContent, nestedBlocks) = processListItem(child, content, level)
-                val (finalContent, properties) = parseProperties(rawContent)
+                
+                // 1. Parse Properties
+                val propertiesResult = PropertiesParser.parse(rawContent)
+                
+                // 2. Parse Timestamps
+                val timestampResult = TimestampParser.parse(propertiesResult.content)
+                val finalContent = timestampResult.content
+                
                 val references = extractReferences(finalContent)
                 
                 blocks.add(
                     ParsedBlock(
                         content = finalContent,
-                        properties = properties,
+                        properties = propertiesResult.properties,
                         level = level,
                         children = nestedBlocks,
-                        references = references
+                        references = references,
+                        scheduled = timestampResult.scheduled,
+                        deadline = timestampResult.deadline
                     )
                 )
             }
@@ -74,7 +108,7 @@ class MarkdownParser {
 
         for (child in node.children) {
             val type = child.type.toString()
-            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST")) {
+            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST") || type.contains("UNORDERED_LIST")) {
                 nestedBlocks.addAll(processList(child, content, level + 1))
             } else if (type.contains("PARAGRAPH") || type.contains("Paragraph")) {
                  contentBuilder.append(getTextInNode(child, content))
@@ -84,26 +118,6 @@ class MarkdownParser {
         }
         
         return Pair(contentBuilder.toString().trim(), nestedBlocks)
-    }
-
-    private fun parseProperties(content: String): Pair<String, Map<String, String>> {
-        val lines = content.lines()
-        val properties = mutableMapOf<String, String>()
-        val contentLines = mutableListOf<String>()
-        
-        val propertyRegex = Regex("""^\s*([\w-_]+)::\s*(.*)$""")
-        
-        for (line in lines) {
-            val match = propertyRegex.matchEntire(line)
-            if (match != null) {
-                val (key, value) = match.destructured
-                properties[key] = value
-            } else {
-                contentLines.add(line)
-            }
-        }
-        
-        return Pair(content, properties)
     }
 
     private fun extractReferences(content: String): List<String> {

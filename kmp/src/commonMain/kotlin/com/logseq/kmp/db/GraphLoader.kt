@@ -3,6 +3,7 @@ package com.logseq.kmp.db
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.model.ParsedBlock
+import com.logseq.kmp.outliner.JournalUtils
 import com.logseq.kmp.outliner.OutlinerPipeline
 import com.logseq.kmp.parser.MarkdownParser
 import com.logseq.kmp.platform.PlatformFileSystem
@@ -303,6 +304,7 @@ class GraphLoader(
             val fileName = filePath.replace("\\", "/").substringAfterLast("/")
             val name = fileName.removeSuffix(".md")
             val isJournal = filePath.contains("/journals/")
+            val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
             
             val now = Clock.System.now()
             val pageUuid = generateUuid()
@@ -323,7 +325,8 @@ class GraphLoader(
                 updatedAt = now,
                 properties = emptyMap(),
                 isFavorite = false,
-                isJournal = isJournal
+                isJournal = isJournal,
+                journalDate = journalDate
             )
             
             // Parse using MarkdownParser
@@ -387,6 +390,11 @@ class GraphLoader(
             val blockId = generateId()
             val blockUuid = parsedBlock.properties["id"] ?: generateUuid()
             
+            // Merge parsed metadata into properties
+            val mergedProperties = parsedBlock.properties.toMutableMap()
+            parsedBlock.scheduled?.let { mergedProperties["scheduled"] = it }
+            parsedBlock.deadline?.let { mergedProperties["deadline"] = it }
+            
             // Create Block entity
             val block = Block(
                 id = blockId,
@@ -399,7 +407,7 @@ class GraphLoader(
                 position = index,
                 createdAt = now,
                 updatedAt = now,
-                properties = parsedBlock.properties
+                properties = mergedProperties
             )
             
             destinationList.add(block)

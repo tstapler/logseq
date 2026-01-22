@@ -23,5 +23,8 @@ data class ParsedBlock(
     // Let's include it for flexibility.
     val children: List<ParsedBlock> = emptyList(),
     // Extracted references (WikiLinks [[...]] and Block Refs ((...)))
-    val references: List<String> = emptyList()
+    val references: List<String> = emptyList(),
+    // Metadata
+    val scheduled: String? = null,
+    val deadline: String? = null
 )

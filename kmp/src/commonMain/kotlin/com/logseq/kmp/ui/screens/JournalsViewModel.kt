@@ -23,7 +23,21 @@ class JournalsViewModel(
     private var hasMore = true
 
     init {
-        loadMore()
+        // Observe the first page of journals continuously to handle initial loading and updates
+        // This fixes the empty state on startup when GraphLoader hasn't finished yet
+        scope.launch {
+            pageRepository.getJournalPages(pageSize, 0).collect { result ->
+                val latestFirstPage = result.getOrNull() ?: emptyList()
+                
+                // If we are currently empty and we got some data, populate the list
+                // This happens when GraphLoader finishes loading Phase 1
+                if (_uiState.value.pages.isEmpty() && latestFirstPage.isNotEmpty()) {
+                    _uiState.update { it.copy(pages = latestFirstPage) }
+                    currentOffset = latestFirstPage.size
+                    hasMore = latestFirstPage.size >= pageSize
+                }
+            }
+        }
     }
 
     fun loadMore() {

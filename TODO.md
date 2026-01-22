@@ -187,4 +187,4 @@ Markdown Files → GraphLoader → Repositories (In-Memory) → UI Components
 *Last Updated: January 21, 2026*
 *Framework: Kotlin Multiplatform 2.0.21 with Compose Desktop 1.7.1*
 
-- [ ] [KMP Markdown Parser Parity Plan](docs/tasks/kmp-markdown-parity.md)
+- [x] [KMP Markdown Parser Parity Plan](docs/tasks/kmp-markdown-parity.md)

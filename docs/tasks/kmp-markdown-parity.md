@@ -49,7 +49,7 @@
 
 ## Atomic Task Decomposition
 
-### Task 1.1: Model Update & Timestamp Parsing [Micro - 2h]
+### Task 1.1: Model Update & Timestamp Parsing [Micro - 2h] ✅
 **Objective**: Update `ParsedBlock` to support timestamps and implement extraction logic.
 **Context Boundary**:
 - `kmp/src/commonMain/kotlin/com/logseq/kmp/model/ParsedModels.kt`
@@ -62,7 +62,7 @@
 3. Integrate into `MarkdownParser` loop.
 **Validation**: Unit tests for `TimestampParser` with various date formats.
 
-### Task 1.2: Properties Drawer Parsing [Small - 3h]
+### Task 1.2: Properties Drawer Parsing [Small - 3h] ✅
 **Objective**: Implement robust property parsing including `:PROPERTIES:` drawers.
 **Context Boundary**:
 - `kmp/src/commonMain/kotlin/com/logseq/kmp/parser/PropertiesParser.kt` (New)
@@ -74,7 +74,7 @@
 3. Strip drawer lines from final block content.
 **Validation**: Test cases with drawers, inline props, and mixed content.
 
-### Task 1.3: Indentation Preprocessor [Medium - 3h]
+### Task 1.3: Indentation Preprocessor [Medium - 3h] ✅
 **Objective**: Normalize markdown input to ensure strict CommonMark compliance for lists.
 **Context Boundary**:
 - `kmp/src/commonMain/kotlin/com/logseq/kmp/parser/MarkdownPreprocessor.kt` (New)
@@ -86,7 +86,7 @@
 3. Logic: Scan lines, detect list markers, enforce 2-space/4-space hierarchy.
 **Validation**: Test cases with "loose" markdown vs expected "strict" markdown.
 
-### Task 1.4: Integration & Parity Testing [Small - 2h]
+### Task 1.4: Integration & Parity Testing [Small - 2h] ✅
 **Objective**: Verify full parser pipeline against legacy scenarios.
 **Context Boundary**:
 - `kmp/src/commonTest/kotlin/com/logseq/kmp/parser/MarkdownParserTest.kt`
