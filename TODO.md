@@ -99,6 +99,12 @@ kmp/
 - [ ] Task 4.3: Search UI & Command Palette (3h)
 - [ ] Task 4.4: Query Result Rendering (2h)
 
+#### Story 5: Progressive Data Loading (Planned) - [View Plan](docs/tasks/progressive-loading.md)
+- [ ] Task 5.1: Paginated Repository Methods (2h)
+- [ ] Task 5.2: UI Infinite Scroll Integration (3h)
+- [ ] Task 5.3: Lazy Reference Loading (2h)
+- [ ] Task 5.4: Metadata-Only Initial Graph Load (3h)
+
 ### ⏸️ Platform Re-enablement (Blocked)
 *See [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)*
 - [ ] JS Target: Fix OutOfMemoryError and Node.js resolution
