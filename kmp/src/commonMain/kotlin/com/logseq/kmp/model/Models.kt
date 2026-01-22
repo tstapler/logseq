@@ -1,6 +1,7 @@
 package com.logseq.kmp.model
 
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 
 /**
@@ -11,25 +12,30 @@ object Validation {
     private const val MAX_NAME_LENGTH = 255
     private const val MAX_CONTENT_LENGTH = 100000
 
-    fun validateString(input: String?, maxLength: Int = MAX_STRING_LENGTH): String {
+    fun validateString(input: String?, maxLength: Int = MAX_STRING_LENGTH, allowWhitespace: Boolean = false): String {
         require(input != null) { "Input cannot be null" }
         require(input.length <= maxLength) { "Input exceeds maximum length of $maxLength" }
         require(!input.contains('\u0000')) { "Input contains null bytes" }
-        require(!input.any { it.code in 0x00..0x1F || it.code in 0x80..0x9F }) { "Input contains control characters" }
+        if (!allowWhitespace) {
+            require(!input.any { it.code in 0x00..0x1F || it.code in 0x80..0x9F }) { "Input contains control characters" }
+        } else {
+            require(!input.any { (it.code in 0x00..0x1F || it.code in 0x80..0x9F) && it != '\n' && it != '\r' && it != '\t' }) { "Input contains restricted control characters" }
+        }
         return input.trim()
     }
 
     fun validateName(name: String?): String {
-        val validated = validateString(name, MAX_NAME_LENGTH)
+        val validated = validateString(name, MAX_NAME_LENGTH, allowWhitespace = false)
         require(validated.isNotBlank()) { "Name cannot be blank" }
         require(!validated.contains("..")) { "Name contains directory traversal patterns" }
         require(!validated.contains("/")) { "Name contains path separators" }
-        require(!validated.contains("\\")) { "Name contains backslashes" }
+        // Use Char check for backslash to avoid string escaping issues in some compilers
+        require(!validated.contains('\\')) { "Name contains backslashes" }
         return validated
     }
 
     fun validateContent(content: String?): String {
-        return validateString(content, MAX_CONTENT_LENGTH)
+        return validateString(content, MAX_CONTENT_LENGTH, allowWhitespace = true)
     }
 
     fun validateId(id: Long): Long {
@@ -46,7 +52,6 @@ object Validation {
     }
 }
 
-@Serializable
 data class Page(
     val id: Long,
     val uuid: String,
@@ -55,7 +60,10 @@ data class Page(
     val filePath: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
-    val properties: Map<String, String> = emptyMap()
+    val properties: Map<String, String> = emptyMap(),
+    val isFavorite: Boolean = false,
+    val isJournal: Boolean = false,
+    val journalDate: LocalDate? = null
 ) {
     init {
         Validation.validateId(id)
@@ -70,7 +78,6 @@ data class Page(
     }
 }
 
-@Serializable
 data class Block(
     val id: Long,
     val uuid: String,
@@ -100,7 +107,6 @@ data class Block(
     }
 }
 
-@Serializable
 data class Property(
     val id: Long,
     val blockId: Long,
@@ -113,5 +119,22 @@ data class Property(
         Validation.validateId(blockId)
         Validation.validateName(key)
         Validation.validateContent(value)
+    }
+}
+
+enum class NotificationType {
+    INFO, WARNING, ERROR, SUCCESS
+}
+
+data class Notification(
+    val id: String,
+    val content: String,
+    val type: NotificationType = NotificationType.INFO,
+    val timestamp: Instant,
+    val timeout: Long? = 3000
+) {
+    init {
+        Validation.validateContent(content)
+        Validation.validateUuid(id)
     }
 }

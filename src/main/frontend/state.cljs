@@ -254,6 +254,7 @@
 
       ;; all notification contents as k-v pairs
       :notification/contents                 {}
+      :notification/history                  []
 
       :copy/export-block-text-indent-style   (or (storage/get :copy/export-block-text-indent-style)
                                                  "dashes")

@@ -6,11 +6,3 @@ plugins {
     // This root file mainly coordinates multi-module builds
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-

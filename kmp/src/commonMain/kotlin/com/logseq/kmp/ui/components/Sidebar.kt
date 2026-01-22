@@ -11,7 +11,9 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Style
@@ -61,6 +63,8 @@ fun LeftSidebar(
             NavigationItem("Flashcards", Icons.Default.Style, currentScreen is Screen.Flashcards) { onNavigate("flashcards") }
             NavigationItem("All Pages", Icons.AutoMirrored.Filled.List, currentScreen is Screen.AllPages) { onNavigate("all-pages") }
             NavigationItem("Notifications", Icons.Default.Notifications, currentScreen is Screen.Notifications) { onNavigate("notifications") }
+            NavigationItem("Logs", Icons.Default.Info, currentScreen is Screen.Logs) { onNavigate("logs") }
+            NavigationItem("Performance", Icons.Default.Settings, currentScreen is Screen.Performance) { onNavigate("performance") }
             
             Spacer(modifier = Modifier.height(16.dp))
             

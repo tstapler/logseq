@@ -3,6 +3,7 @@ package com.logseq.kmp.repository
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.model.Property
+import com.logseq.kmp.platform.EncryptionManager
 import kotlinx.coroutines.flow.Flow
 import kotlin.Result
 
@@ -50,9 +51,19 @@ interface BlockRepository {
     fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>>
 
     /**
+     * Get all blocks for a specific page
+     */
+    fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>>
+
+    /**
      * Save a new or updated block
      */
     suspend fun saveBlock(block: Block): Result<Unit>
+
+    /**
+     * Save multiple blocks in a batch operation
+     */
+    suspend fun saveBlocks(blocks: List<Block>): Result<Unit>
 
     /**
      * Delete a block and optionally its children
@@ -63,6 +74,43 @@ interface BlockRepository {
      * Move a block to a new parent and/or position
      */
     suspend fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int): Result<Unit>
+
+    /**
+     * Indent a block (move it to be a child of its preceding sibling)
+     */
+    suspend fun indentBlock(blockUuid: String): Result<Unit>
+
+    /**
+     * Outdent a block (move it to be a sibling of its parent)
+     */
+    suspend fun outdentBlock(blockUuid: String): Result<Unit>
+
+    /**
+     * Move a block up among its siblings
+     */
+    suspend fun moveBlockUp(blockUuid: String): Result<Unit>
+
+    /**
+     * Move a block down among its siblings
+     */
+    suspend fun moveBlockDown(blockUuid: String): Result<Unit>
+
+    /**
+     * Find all blocks that contain a wiki link to the given page name
+     * (i.e., blocks containing [[Page Name]])
+     */
+    fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>>
+
+    /**
+     * Find all blocks that mention the page name as plain text
+     * (not as a wiki link)
+     */
+    fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>>
+
+    /**
+     * Search blocks by content
+     */
+    fun searchBlocksByContent(query: String): Flow<Result<List<Block>>>
 }
 
 /**
@@ -99,6 +147,12 @@ interface PageRepository {
      * Save a new or updated page
      */
     suspend fun savePage(page: Page): Result<Unit>
+
+    /**
+     * Rename a page
+     * Updates the page name and associated indexes
+     */
+    suspend fun renamePage(pageUuid: String, newName: String): Result<Unit>
 
     /**
      * Delete a page
@@ -195,17 +249,17 @@ interface SearchRepository {
     /**
      * Search blocks by content (full-text search)
      */
-    fun searchBlocksByContent(query: String): Flow<Result<List<Block>>>
+    fun searchBlocksByContent(query: String, limit: Int = 50, offset: Int = 0): Flow<Result<List<Block>>>
 
     /**
      * Search pages by title/name
      */
-    fun searchPagesByTitle(query: String): Flow<Result<List<Page>>>
+    fun searchPagesByTitle(query: String, limit: Int = 20): Flow<Result<List<Page>>>
 
     /**
      * Find blocks that reference specific content
      */
-    fun findBlocksReferencing(query: String): Flow<Result<List<Block>>>
+    fun findBlocksReferencing(blockUuid: String): Flow<Result<List<Block>>>
 
     /**
      * Advanced graph search with filters
@@ -276,6 +330,7 @@ data class SearchResult(
  */
 enum class GraphBackend {
     SQLDELIGHT,
+    DATASCRIPT,
     KUZU,
     NEO4J,
     IN_MEMORY  // For testing and reference implementation
@@ -287,10 +342,9 @@ enum class GraphBackend {
  * Factory for creating repository instances based on backend type
  */
 interface RepositoryFactory {
-    fun createBlockRepository(backend: GraphBackend): BlockRepository
-    fun createPageRepository(backend: GraphBackend): PageRepository
-    fun createPropertyRepository(backend: GraphBackend): PropertyRepository
+    fun createBlockRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): BlockRepository
+    fun createPageRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): PageRepository
+    fun createPropertyRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): PropertyRepository
     fun createReferenceRepository(backend: GraphBackend): ReferenceRepository
     fun createSearchRepository(backend: GraphBackend): SearchRepository
-}</content>
-<parameter name="filePath">kmp/src/commonMain/kotlin/com/logseq/kmp/repository/GraphRepository.kt
+}

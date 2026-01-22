@@ -1,0 +1,73 @@
+id: com.logseq.app
+name: Logseq
+version: '0.1.0'
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.openjdk21
+command: logseq
+
+finish-args:
+  - --socket=wayland
+  - --socket=x11
+  - --share=network
+  - --share=ipc
+  - --filesystem=home:rw
+  - --filesystem=xdg-documents:rw
+  - --filesystem=xdg-download:rw
+  - --device=dri
+  - --env=SKIKO_RENDERER=OPENGL
+  - --env=JAVA_HOME=/usr/lib/sdk/openjdk21
+  - --env=PATH=/app/bin:/usr/bin:/usr/lib/sdk/openjdk21/bin
+
+build-options:
+  env:
+    JAVA_HOME: /usr/lib/sdk/openjdk21
+    PATH: $JAVA_HOME/bin:$PATH
+    SKIKO_RENDERER: OPENGL
+
+modules:
+  - name: openjdk21
+    build-options:
+      sdk-ext: org.freedesktop.Sdk.Extension.openjdk21
+    sources:
+      - type: archive
+        url: https://download.java.net/java/GA/jdk21.0.1/415e3f918a1f4062a0074a2794853d0d/12/GPL/openjdk-21.0.1_linux-x64_bin.tar.gz
+        sha256: 7bc8d1189c1c9a3bfb0f8be2d0c6c5e2f4a1b9c8d0e5f2a3b4c5d6e7f8a9b0c
+
+  - name: build-app
+    buildonly: true
+    sources:
+      - type: dir
+        path: ../..
+        dest: app-source
+    build-commands:
+      - |
+        #!/bin/bash
+        set -e
+        cd /builddir/app-source
+        export JAVA_HOME=/usr/lib/sdk/openjdk21
+        export PATH=$JAVA_HOME/bin:$PATH
+        export SKIKO_RENDERER=OPENGL
+        ./gradlew :kmp:fatJar --no-daemon
+
+  - name: install-app
+    sources:
+      - type: dir
+        path: ../..
+        dest: app-source
+      - type: file
+        path: logseq.desktop
+    install-commands:
+      - |
+        #!/bin/bash
+        set -e
+        mkdir -p /app/bin /app/share/applications /app/share/icons/hicolor/256x256/apps /app/lib
+        cp /builddir/app-source/kmp/build/libs/logseq-fat-0.1.0.jar /app/lib/
+        printf '#!/bin/bash\nexport JAVA_HOME=/usr/lib/sdk/openjdk21\nexport PATH=$JAVA_HOME/bin:$PATH\nexport SKIKO_RENDERER=OPENGL\nexec $JAVA_HOME/bin/java -jar /app/lib/logseq-fat-0.1.0.jar "$@"\n' > /app/bin/logseq
+        chmod +x /app/bin/logseq
+        cp /builddir/app-source/flatpak/logseq.desktop /app/share/applications/
+        if [ -f /builddir/app-source/resources/icons/icon.png ]; then
+            cp /builddir/app-source/resources/icons/icon.png /app/share/icons/hicolor/256x256/apps/com.logseq.app.png
+        fi

@@ -2,47 +2,72 @@ package com.logseq.kmp.platform
 
 import kotlinx.browser.window
 
-actual class PlatformFileSystem {
-    private val documentsDir: String by lazy {
-        FileSystemSecurity.sanitizePath("/logseq")
-    }
+actual class PlatformFileSystem actual constructor() {
+    private val maxPathLength = 4096
+    private val maxFileSize = 100 * 1024 * 1024
+    private val dangerousPatterns = listOf("..", "../", "..\\", "\u0000")
+    private val homeDir: String = "/logseq"
 
-    actual fun getDocumentsDirectory(): String {
-        return documentsDir
-    }
+    actual fun getDefaultGraphPath(): String = homeDir
 
-    actual fun createDirectory(path: String): Boolean {
-        val sanitizedPath = FileSystemSecurity.sanitizePath(path)
-        val fullPath = if (sanitizedPath.startsWith("/")) {
-            sanitizedPath
+    actual fun expandTilde(path: String): String {
+        return if (path.startsWith("~")) {
+            path.replaceFirst("~", homeDir)
         } else {
-            "$documentsDir/$sanitizedPath"
+            path
         }
+    }
 
-        // Path traversal check for browser environment
-        if (fullPath.contains("..") || !fullPath.startsWith(documentsDir)) {
-            throw SecurityException("Directory creation outside of allowed path: $path")
-        }
+    actual fun readFile(path: String): String? {
+        // Browser environment - simulated
+        console.log("Reading file: $path")
+        return null
+    }
 
-        // Browser FS simulation - would need actual implementation
-        console.log("Creating directory: $fullPath")
+    actual fun writeFile(path: String, content: String): Boolean {
+        // Browser environment - simulated
+        console.log("Writing file: $path")
         return true
     }
 
+    actual fun listFiles(path: String): List<String> {
+        // Browser environment - simulated
+        console.log("Listing files: $path")
+        return emptyList()
+    }
+
+    actual fun listDirectories(path: String): List<String> {
+        // Browser environment - simulated
+        console.log("Listing directories: $path")
+        return emptyList()
+    }
+
     actual fun fileExists(path: String): Boolean {
-        val sanitizedPath = FileSystemSecurity.sanitizePath(path)
-        val fullPath = if (sanitizedPath.startsWith("/")) {
-            sanitizedPath
-        } else {
-            "$documentsDir/$sanitizedPath"
-        }
-
-        // Path traversal check for browser environment
-        if (fullPath.contains("..") || !fullPath.startsWith(documentsDir)) {
-            return false
-        }
-
-        // Browser FS simulation - would need actual implementation
+        // Browser environment - simulated
+        console.log("Checking file exists: $path")
         return false
+    }
+
+    actual fun directoryExists(path: String): Boolean {
+        // Browser environment - simulated
+        console.log("Checking directory exists: $path")
+        return false
+    }
+
+    actual fun createDirectory(path: String): Boolean {
+        // Browser environment - simulated
+        console.log("Creating directory: $path")
+        return true
+    }
+
+    actual fun deleteFile(path: String): Boolean {
+        // Browser environment - simulated
+        console.log("Deleting file: $path")
+        return true
+    }
+
+    actual fun pickDirectory(): String? {
+        console.log("Picking directory not supported in JS yet")
+        return null
     }
 }

@@ -2,22 +2,7 @@ package logseq.repository
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.Instant
-
-/**
- * Represents a page entity in Logseq's data model
- */
-data class Page(
-    val id: String,
-    val uuid: String,
-    val name: String,
-    val originalName: String,
-    val namespace: List<String> = emptyList(),
-    val properties: Map<String, Any> = emptyMap(),
-    val createdAt: Instant,
-    val updatedAt: Instant,
-    val journalDay: Int? = null,
-    val filePath: String? = null
-)
+import logseq.model.Page
 
 /**
  * Search criteria for page queries
@@ -25,7 +10,7 @@ data class Page(
 data class PageSearchCriteria(
     val query: String? = null,
     val namespace: String? = null,
-    val properties: Map<String, Any> = emptyMap(),
+    val properties: Map<String, String> = emptyMap(),
     val createdAfter: Instant? = null,
     val createdBefore: Instant? = null,
     val updatedAfter: Instant? = null,
@@ -36,46 +21,47 @@ data class PageSearchCriteria(
 /**
  * Page repository interface for page management and name resolution
  */
-interface PageRepository : BaseRepository<Page, String> {
+interface PageRepository : BaseRepository<Page, Long> {
 
     // CRUD operations (inherited from BaseRepository)
 
+    // UUID-based operations (for external API compatibility)
+    suspend fun findByUuid(uuid: String): Page?
+    suspend fun existsByUuid(uuid: String): Boolean
+
     // Name resolution
     suspend fun findByName(name: String): Page?
-    suspend fun findByOriginalName(originalName: String): Page?
-    suspend fun findByNamespace(namespace: List<String>): Page?
     suspend fun existsByName(name: String): Boolean
 
     // Journal operations
     suspend fun findJournals(pagination: Pagination = Pagination()): Page<Page>
-    suspend fun findJournalByDay(day: Int): Page?
-    suspend fun findJournalsInRange(startDay: Int, endDay: Int): List<Page>
+    suspend fun findJournalByDay(day: Long): Page?
+    suspend fun findJournalsInRange(startDay: Long, endDay: Long): List<Page>
 
     // Namespace operations
     suspend fun findPagesInNamespace(namespace: String, pagination: Pagination = Pagination()): Page<Page>
-    suspend fun findChildPages(parentPageId: String, pagination: Pagination = Pagination()): Page<Page>
-    suspend fun findParentPages(childPageId: String): List<Page>
+    suspend fun findChildPages(parentPageId: Long, pagination: Pagination = Pagination()): Page<Page>
+    suspend fun findParentPages(childPageId: Long): List<Page>
 
     // Search operations
     suspend fun search(criteria: PageSearchCriteria, pagination: Pagination = Pagination()): Page<Page>
     suspend fun searchByName(query: String, pagination: Pagination = Pagination()): Page<Page>
-    suspend fun searchByProperties(properties: Map<String, Any>, pagination: Pagination = Pagination()): Page<Page>
+    suspend fun searchByProperties(properties: Map<String, String>, pagination: Pagination = Pagination()): Page<Page>
 
     // Content-related queries
-    suspend fun findPagesWithBlocks(blockIds: List<String>): List<Page>
+    suspend fun findPagesWithBlocks(blockIds: List<Long>): List<Page>
     suspend fun findRecentlyUpdated(pagination: Pagination = Pagination()): Page<Page>
     suspend fun findRecentlyCreated(pagination: Pagination = Pagination()): Page<Page>
 
     // Property operations
-    suspend fun updateProperties(pageId: String, properties: Map<String, Any>): Page?
-    suspend fun getProperties(pageId: String): Map<String, Any>
+    suspend fun updateProperties(pageId: Long, properties: Map<String, String>): Page?
+    suspend fun getProperties(pageId: Long): Map<String, String>
 
     // Bulk operations
-    suspend fun renamePage(pageId: String, newName: String): Page?
-    suspend fun updateNamespace(pageId: String, newNamespace: List<String>): Page?
+    suspend fun renamePage(pageId: Long, newName: String): Page?
 
     // Flow-based operations for reactive updates
-    fun observePage(pageId: String): Flow<Page?>
+    fun observePage(pageId: Long): Flow<Page?>
     fun observePagesByNamespace(namespace: String): Flow<List<Page>>
     fun observeRecentlyUpdated(): Flow<List<Page>>
 

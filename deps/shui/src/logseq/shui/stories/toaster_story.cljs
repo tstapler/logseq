@@ -35,7 +35,7 @@
                :variant     :default
                :duration    3000}})
 
-(defstory ImperativeAPI
+(defstory imperative-api
   {:render
    (rum/defc Toaster [props]
      [:<>

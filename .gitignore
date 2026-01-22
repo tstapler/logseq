@@ -76,3 +76,17 @@ clj-e2e/.wally
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
+
+# Kotlin / Gradle / KMP
+.gradle/
+.kotlin/
+build/
+*/build/
+local.properties
+*.hprof
+*.AppImage
+*.AppImage.AppImage
+logseq-linux/
+compilation_errors.txt
+*.backup
+bb

@@ -1,0 +1,53 @@
+id: com.logseq.app
+name: Logseq
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: logseq
+
+finish-args:
+  - --socket=wayland
+  - --socket=x11
+  - --share=network
+  - --share=ipc
+  - --filesystem=home:rw
+  - --filesystem=xdg-documents:rw
+  - --filesystem=xdg-download:rw
+  - --device=dri
+  - --env=SKIKO_RENDERER=OPENGL
+
+build-options:
+  env:
+    SKIKO_RENDERER: OPENGL
+
+modules:
+  - name: build-app
+    sources:
+      - type: dir
+        path: ../..
+        dest: app-source
+      - type: file
+        path: logseq.desktop
+    build-commands:
+      - |
+        #!/bin/bash
+        set -e
+        cd /builddir/app-source
+        export SKIKO_RENDERER=OPENGL
+        ./gradlew :kmp:classes --no-daemon
+        mkdir -p build/dist
+        cp -r build/classes/kotlin/main build/dist/
+    install-commands:
+      - |
+        #!/bin/bash
+        set -e
+        mkdir -p /app/bin /app/share/applications /app/share/icons/hicolor/256x256/apps /app/lib
+        cp -r /builddir/app-source/build/classes/kotlin/main/* /app/lib/
+        printf '#!/bin/bash\n' > /app/bin/logseq
+        printf 'export SKIKO_RENDERER=OPENGL\n' >> /app/bin/logseq
+        printf 'exec java -cp "/app/lib/*" com.logseq.kmp.MainKt "$@"\n' >> /app/bin/logseq
+        chmod +x /app/bin/logseq
+        cp /builddir/app-source/flatpak/logseq.desktop /app/share/applications/
+        if [ -f /builddir/app-source/resources/icons/icon.png ]; then
+            cp /builddir/app-source/resources/icons/icon.png /app/share/icons/hicolor/256x256/apps/com.logseq.app.png
+        fi

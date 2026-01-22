@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Logseq
+Comment=A privacy-first knowledge management platform
+Exec=logseq %f
+Terminal=false
+Type=Application
+Categories=Office;Productivity;
+Icon=com.logseq.app
+StartupNotify=true

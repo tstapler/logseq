@@ -10,6 +10,17 @@
   - `src/test/`: unit-tests
 - `deps/`: Internal dependencies/modules
 - `clj-e2e/`: End to end test code
+- `kmp/`: Kotlin Multiplatform code (New core logic)
+
+## Migration to Kotlin Multiplatform (KMP)
+We are migrating all of our logic to the Kotlin Multiplatform app. As functionality is transferred to the KMP implementation, the corresponding ClojureScript implementation should be deleted to avoid duplication and confusion.
+
+## Architecture Documentation
+
+- **Hybrid Database Architecture**: See [docs/ARCHITECTURE_DATASCRIPT_SQLITE.md](docs/ARCHITECTURE_DATASCRIPT_SQLITE.md)
+  - Explains Datascript (in-memory) + SQLite (persistence) dual-database design
+  - Documents the data flow from markdown files to Datascript to SQLite
+  - Provides context for KMP migration decisions
 
 ## Common used cljs keywords
 - All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
@@ -33,3 +44,5 @@
 - Linters and unit-tests must pass
 - Check the review notes listed in `prompts/review.md`.
 
+## Operational Limitations
+- **Background Processes**: The agent environment does not support running persistent background processes (like `runApp` or watchers). Always request the user to execute these commands manually if they need to run alongside other tasks.

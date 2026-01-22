@@ -1,0 +1,347 @@
+package com.logseq.kmp.ui.components
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.key.*
+import com.logseq.kmp.model.Block
+
+/**
+ * Renders a block with support for:
+ * - View mode (default) with clickable wiki links
+ * - Edit mode (when clicked)
+ * - Proper indentation based on block level
+ * - Collapse/expand indicator for blocks with children
+ */
+@Composable
+fun BlockRenderer(
+    block: Block,
+    isEditing: Boolean,
+    hasChildren: Boolean = false,
+    isCollapsed: Boolean = false,
+    onStartEditing: () -> Unit,
+    onStopEditing: () -> Unit,
+    onContentChange: (String) -> Unit,
+    onLinkClick: (String) -> Unit,
+    onToggleCollapse: () -> Unit = {},
+    onIndent: () -> Unit = {},
+    onOutdent: () -> Unit = {},
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    var textFieldValue by remember(block.uuid, block.content) {
+        mutableStateOf(TextFieldValue(text = block.content))
+    }
+
+    var hasFocused by remember { mutableStateOf(false) }
+
+    // Request focus when entering edit mode
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            focusRequester.requestFocus()
+        } else {
+            hasFocused = false
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = (block.level * 24).dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        // Collapse/expand indicator or bullet point
+        if (hasChildren) {
+            Icon(
+                imageVector = if (isCollapsed) Icons.Default.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable { onToggleCollapse() }
+                    .padding(end = 4.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            // Regular bullet point
+            Text(
+                text = "•",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 8.dp, top = 2.dp)
+            )
+        }
+
+        if (isEditing) {
+            // Edit mode
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    textFieldValue = newValue
+                    onContentChange(newValue.text)
+                },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onBackground
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.Tab -> {
+                                    if (event.isShiftPressed) {
+                                        onOutdent()
+                                    } else {
+                                        onIndent()
+                                    }
+                                    true
+                                }
+                                Key.DirectionUp -> {
+                                    if (event.isAltPressed) {
+                                        onMoveUp()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                Key.DirectionDown -> {
+                                    if (event.isAltPressed) {
+                                        onMoveDown()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                else -> false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            hasFocused = true
+                        }
+                        if (!focusState.isFocused && isEditing && hasFocused) {
+                            onStopEditing()
+                        }
+                    },
+                decorationBox = { innerTextField ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                MaterialTheme.shapes.small
+                            )
+                            .padding(8.dp)
+                    ) {
+                        innerTextField()
+                    }
+                }
+            )
+        } else {
+            // View mode with wiki links
+            // Wrap in a Box to ensure the entire area is clickable even if text is short
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onStartEditing() }
+            ) {
+                WikiLinkText(
+                    text = block.content,
+                    onLinkClick = onLinkClick,
+                    onClick = onStartEditing,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Renders text with clickable wiki links [[Page Name]]
+ */
+@Composable
+fun WikiLinkText(
+    text: String,
+    onLinkClick: (String) -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onBackground
+
+    val annotatedString = remember(text) {
+        parseWikiLinks(text, linkColor, textColor)
+    }
+
+    ClickableText(
+        text = annotatedString,
+        onClick = { offset ->
+            // Check if we clicked on a link
+            annotatedString.getStringAnnotations(
+                tag = "WIKI_LINK",
+                start = offset,
+                end = offset
+            ).firstOrNull()?.let { annotation ->
+                onLinkClick(annotation.item)
+            } ?: run {
+                // Clicked on regular text, enter edit mode
+                onClick()
+            }
+        },
+        style = MaterialTheme.typography.bodyMedium.copy(
+            color = textColor
+        ),
+        modifier = modifier.padding(vertical = 4.dp)
+    )
+}
+
+/**
+ * Parse text and create AnnotatedString with clickable wiki links
+ */
+private fun parseWikiLinks(
+    text: String,
+    linkColor: Color,
+    textColor: Color
+): AnnotatedString {
+    return buildAnnotatedString {
+        val wikiLinkPattern = """\[\[([^\]]+)\]\]""".toRegex()
+        var lastIndex = 0
+
+        wikiLinkPattern.findAll(text).forEach { matchResult ->
+            // Add text before the link
+            if (matchResult.range.first > lastIndex) {
+                append(text.substring(lastIndex, matchResult.range.first))
+            }
+
+            // Add the link
+            val linkText = matchResult.groupValues[1] // The text inside [[...]]
+            pushStringAnnotation(tag = "WIKI_LINK", annotation = linkText)
+            withStyle(
+                style = SpanStyle(
+                    color = linkColor,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = TextDecoration.None
+                )
+            ) {
+                append(linkText)
+            }
+            pop()
+
+            lastIndex = matchResult.range.last + 1
+        }
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+            append(text.substring(lastIndex))
+        }
+    }
+}
+
+/**
+ * Renders a list of blocks with proper hierarchy, supporting collapse/expand
+ */
+@Composable
+fun BlockList(
+    blocks: List<Block>,
+    editingBlockId: String?,
+    onStartEditing: (String) -> Unit,
+    onStopEditing: () -> Unit,
+    onContentChange: (String, String) -> Unit,
+    onLinkClick: (String) -> Unit,
+    onIndent: (String) -> Unit = {},
+    onOutdent: (String) -> Unit = {},
+    onMoveUp: (String) -> Unit = {},
+    onMoveDown: (String) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    // Track collapsed blocks by their ID
+    var collapsedBlocks by remember { mutableStateOf(setOf<Long>()) }
+
+    // Build a map of parent ID to children for quick lookup
+    val childrenByParent = remember(blocks) {
+        blocks.groupBy { it.parentId }
+    }
+
+    // Get IDs of blocks that have children
+    val blocksWithChildren = remember(blocks) {
+        blocks.mapNotNull { it.parentId }.toSet()
+    }
+
+    // Get all descendant IDs of a block (for hiding when collapsed)
+    fun getDescendantIds(blockId: Long): Set<Long> {
+        val descendants = mutableSetOf<Long>()
+        val queue = ArrayDeque<Long>()
+        queue.add(blockId)
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            childrenByParent[current]?.forEach { child ->
+                descendants.add(child.id)
+                queue.add(child.id)
+            }
+        }
+        return descendants
+    }
+
+    // Calculate which blocks should be hidden due to collapsed ancestors
+    val hiddenBlocks = remember(blocks, collapsedBlocks) {
+        collapsedBlocks.flatMap { getDescendantIds(it) }.toSet()
+    }
+
+    Column(modifier = modifier) {
+        blocks.forEach { block ->
+            // Only show if not hidden by a collapsed ancestor
+            if (block.id !in hiddenBlocks) {
+                val hasChildren = block.id in blocksWithChildren
+                val isCollapsed = block.id in collapsedBlocks
+
+                BlockRenderer(
+                    block = block,
+                    isEditing = editingBlockId == block.uuid,
+                    hasChildren = hasChildren,
+                    isCollapsed = isCollapsed,
+                    onStartEditing = { onStartEditing(block.uuid) },
+                    onStopEditing = onStopEditing,
+                    onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
+                    onLinkClick = onLinkClick,
+                    onToggleCollapse = {
+                        collapsedBlocks = if (isCollapsed) {
+                            collapsedBlocks - block.id
+                        } else {
+                            collapsedBlocks + block.id
+                        }
+                    },
+                    onIndent = { onIndent(block.uuid) },
+                    onOutdent = { onOutdent(block.uuid) },
+                    onMoveUp = { onMoveUp(block.uuid) },
+                    onMoveDown = { onMoveDown(block.uuid) }
+                )
+            }
+        }
+    }
+}

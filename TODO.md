@@ -78,10 +78,10 @@ kmp/
 
 #### Story 1: Block Editing (In Progress)
 - [x] Task 1.1: Persist block edits to disk (2h)
-- [ ] Task 1.2: Auto-save with debouncing (1h)
+- [x] Task 1.2: Auto-save with debouncing (1h)
 - [ ] Task 1.3: Undo/redo support (2h)
 
-#### Story 2: Block Hierarchy & Outliner (In Progress) - [View Plan](docs/tasks/block-reordering.md)
+#### Story 2: Block Hierarchy & Outliner (In Progress) - [View Plan](docs/tasks/block-hierarchy.md)
 - [ ] Task 2.1: Tree structure visualization (2h)
 - [ ] Task 2.2: Indent/outdent blocks (2h)
 - [x] Task 2.3: Collapse/expand blocks (1h)
