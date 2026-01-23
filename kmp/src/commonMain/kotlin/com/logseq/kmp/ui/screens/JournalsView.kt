@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.ui.components.BlockList
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 fun JournalsView(
     viewModel: JournalsViewModel,
     blockRepository: BlockRepository,
+    isDebugMode: Boolean,
     onLinkClick: (String) -> Unit,
     onContentChange: (String, String, Page) -> Unit,
     modifier: Modifier = Modifier
@@ -58,9 +60,12 @@ fun JournalsView(
             items = uiState.pages,
             key = { page -> page.id }
         ) { page ->
+            val blockList = uiState.blocks[page.id] ?: emptyList()
+            
             JournalEntry(
                 page = page,
-                blockRepository = blockRepository,
+                blocks = blockList,
+                isDebugMode = isDebugMode,
                 editingBlockId = editingBlockId,
                 onStartEditing = { blockId -> editingBlockId = blockId },
                 onStopEditing = { editingBlockId = null },
@@ -69,16 +74,16 @@ fun JournalsView(
                 },
                 onLinkClick = onLinkClick,
                 onIndent = { blockUuid ->
-                    scope.launch { blockRepository.indentBlock(blockUuid) }
+                    scope.launch { viewModel.indentBlock(blockUuid) }
                 },
                 onOutdent = { blockUuid ->
-                    scope.launch { blockRepository.outdentBlock(blockUuid) }
+                    scope.launch { viewModel.outdentBlock(blockUuid) }
                 },
                 onMoveUp = { blockUuid ->
-                    scope.launch { blockRepository.moveBlockUp(blockUuid) }
+                    scope.launch { viewModel.moveBlockUp(blockUuid) }
                 },
                 onMoveDown = { blockUuid ->
-                    scope.launch { blockRepository.moveBlockDown(blockUuid) }
+                    scope.launch { viewModel.moveBlockDown(blockUuid) }
                 }
             )
 
@@ -104,7 +109,8 @@ fun JournalsView(
 @Composable
 private fun JournalEntry(
     page: Page,
-    blockRepository: BlockRepository,
+    blocks: List<Block>, // Passed from ViewModel
+    isDebugMode: Boolean,
     editingBlockId: String?,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
@@ -116,10 +122,6 @@ private fun JournalEntry(
     onMoveDown: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Load blocks for this page
-    val blocks by blockRepository.getBlocksForPage(page.id).collectAsState(initial = Result.success(emptyList()))
-    val blockList = blocks.getOrNull() ?: emptyList()
-
     Column(modifier = modifier) {
         // Journal date header (formatted nicely)
         Text(
@@ -130,7 +132,7 @@ private fun JournalEntry(
         )
 
         // Blocks content
-        if (blockList.isEmpty()) {
+        if (blocks.isEmpty()) {
             // Empty journal placeholder
             Text(
                 text = "•",
@@ -139,9 +141,14 @@ private fun JournalEntry(
                 modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
             )
         } else {
+            // Sort blocks hierarchically for display
+            val sortedBlocks = remember(blocks) { 
+                com.logseq.kmp.outliner.BlockSorter.sort(blocks)
+            }
+            
             BlockList(
-                blocks = blockList.sortedBy { it.position },
-                isDebugMode = false, // TODO: Pass this down properly, for now disable
+                blocks = sortedBlocks,
+                isDebugMode = isDebugMode,
                 editingBlockId = editingBlockId,
                 onStartEditing = onStartEditing,
                 onStopEditing = onStopEditing,

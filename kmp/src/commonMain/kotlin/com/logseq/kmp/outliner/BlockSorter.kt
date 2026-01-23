@@ -38,6 +38,8 @@ object BlockSorter {
         if (result.size < blocks.size) {
             val processedIds = result.map { it.id }.toSet()
             val remaining = blocks.filter { !processedIds.contains(it.id) }
+            println("BlockSorter WARNING: ${remaining.size} orphaned blocks found (orphaned from hierarchy). Appending to end.")
+            remaining.forEach { println(" - Orphan: ${it.content} (Parent: ${it.parentId})") }
             result.addAll(remaining)
         }
 

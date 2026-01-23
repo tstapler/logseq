@@ -205,6 +205,7 @@ fun LogseqApp(
                                         JournalsView(
                                             viewModel = journalsViewModel,
                                             blockRepository = blockRepository,
+                                            isDebugMode = appState.isDebugMode,
                                             onLinkClick = { pageName ->
                                                 viewModel.navigateToPageByName(pageName)
                                             },
