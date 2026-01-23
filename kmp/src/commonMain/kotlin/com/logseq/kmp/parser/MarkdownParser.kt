@@ -2,141 +2,145 @@ package com.logseq.kmp.parser
 
 import com.logseq.kmp.model.ParsedBlock
 import com.logseq.kmp.model.ParsedPage
-import org.intellij.markdown.ast.ASTNode
-import org.intellij.markdown.flavours.commonmark.CommonMarkFlavourDescriptor
-import org.intellij.markdown.parser.MarkdownParser as JetbrainsMarkdownParser
+import com.logseq.kmp.parsing.LogseqParser
+import com.logseq.kmp.parsing.ast.*
 
 class MarkdownParser {
 
-    private val flavour = CommonMarkFlavourDescriptor()
-    private val parser = JetbrainsMarkdownParser(flavour)
+    private val parser = LogseqParser()
 
     fun parsePage(content: String): ParsedPage {
-        // Preprocess to ensure indentation compatibility
-        val normalizedContent = MarkdownPreprocessor.normalize(content)
+        val document = parser.parse(content)
         
-        val rootNode = parser.buildMarkdownTreeFromString(normalizedContent)
-        val blocks = convertToBlocks(rootNode, normalizedContent)
-        
-        // Logseq pages can have page-level properties in the first block if it's a property drawer
-        // But in our block-based model, we usually just treat the first block as the page properties block 
-        // if it contains ONLY properties.
-        // For ParsedPage, we might want to extract them if needed, but for now we keep them on the block.
+        // Convert AST to ParsedPage model
+        val parsedBlocks = document.children.map { convertBlock(it) }
         
         return ParsedPage(
             title = null,
-            properties = emptyMap(),
-            blocks = blocks
+            properties = emptyMap(), // Page props handled in GraphLoader via first block?
+            blocks = parsedBlocks
         )
     }
 
-    private fun convertToBlocks(node: ASTNode, content: String): List<ParsedBlock> {
-        val blocks = mutableListOf<ParsedBlock>()
+    private fun convertBlock(block: BlockNode): ParsedBlock {
+        val level = when(block) {
+            is BulletBlockNode -> block.level
+            is ParagraphBlockNode -> 0 // Treat paragraph as root? Or error?
+        }
         
-        for (child in node.children) {
-            val type = child.type.toString()
-            // Heuristic check for Unordered List
-            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST") || type.contains("UNORDERED_LIST")) {
-                blocks.addAll(processList(child, content, 0))
-            } else if (type.contains("PARAGRAPH") || type.contains("Paragraph")) {
-                // Treat top-level paragraph as a block
-                val text = getTextInNode(child, content).toString().trim()
-                
-                // 1. Parse Properties (Inline & Drawer)
-                val propertiesResult = PropertiesParser.parse(text)
-                
-                // 2. Parse Timestamps from remaining content
-                val timestampResult = TimestampParser.parse(propertiesResult.content)
-                val finalContent = timestampResult.content
-                
-                val references = extractReferences(finalContent)
-                
-                blocks.add(
-                    ParsedBlock(
-                        content = finalContent,
-                        properties = propertiesResult.properties,
-                        level = 0,
-                        children = emptyList(),
-                        references = references,
-                        scheduled = timestampResult.scheduled,
-                        deadline = timestampResult.deadline
-                    )
-                )
+        // Reconstruct content string from InlineNodes
+        // Note: The original ParsedBlock.content was a String.
+        // We need to serialize the InlineNodes back to text or (better) update ParsedBlock to hold InlineNodes.
+        // For now, to keep GraphLoader compatible, we serialize back to string but stripped of properties?
+        // Wait, GraphLoader expects the content to show in the UI.
+        // The UI (BlockRenderer) likely renders the raw string or parses it again.
+        // If we return the raw string, we are double parsing?
+        // Yes, current architecture: GraphLoader saves raw string -> Database -> UI -> BlockRenderer (parses again).
+        // 
+        // Ideally: GraphLoader saves the AST or a structured format.
+        // But for "Swap", let's reconstruct the "Content" string (without properties).
+        
+        val contentString = reconstructContent(block.content)
+        
+        // Extract references from InlineNodes
+        val references = extractReferences(block.content)
+        
+        val children = block.children.map { convertBlock(it) }
+        
+        // Extract Scheduled/Deadline from properties or content?
+        // Our new parser might put them in properties?
+        // Or we need to parse them from content if they weren't property keys.
+        // The legacy mldoc treated SCHEDULED as metadata.
+        // My `BlockParser` treats `key:: value` as properties.
+        // `SCHEDULED: <...>` is NOT a property syntax. It's content.
+        // So it stays in `content`.
+        // We need `TimestampParser` logic? 
+        // Wait, the previous `MarkdownParser` used `TimestampParser` to extract them and REMOVE from content.
+        // My new `LogseqParser`'s `InlineParser` treats them as text for now.
+        // I should probably enhance `LogseqParser` or `convertBlock` to handle timestamps.
+        
+        // Let's use the existing `TimestampParser` on the reconstructed content 
+        // to populate metadata and strip it for the final content field?
+        // OR better: Update `InlineParser` to recognize timestamps?
+        // For now, reuse `TimestampParser` here to match previous behavior.
+        
+        val timestampResult = TimestampParser.parse(contentString)
+        
+        return ParsedBlock(
+            content = timestampResult.content, // Strip timestamps
+            properties = block.properties,
+            level = level,
+            children = children,
+            references = references,
+            scheduled = timestampResult.scheduled,
+            deadline = timestampResult.deadline
+        )
+    }
+    
+    private fun reconstructContent(nodes: List<InlineNode>): String {
+        val sb = StringBuilder()
+        nodes.forEach { node ->
+            when(node) {
+                is TextNode -> sb.append(node.content)
+                is BoldNode -> {
+                    sb.append("**")
+                    sb.append(reconstructContent(node.children))
+                    sb.append("**")
+                }
+                is ItalicNode -> {
+                    sb.append("*")
+                    sb.append(reconstructContent(node.children))
+                    sb.append("*")
+                }
+                is StrikeNode -> {
+                    sb.append("~~")
+                    sb.append(reconstructContent(node.children))
+                    sb.append("~~")
+                }
+                is CodeNode -> {
+                    sb.append("`")
+                    sb.append(node.content)
+                    sb.append("`")
+                }
+                is WikiLinkNode -> {
+                    sb.append("[[")
+                    sb.append(node.target)
+                    sb.append("]]")
+                }
+                is BlockRefNode -> {
+                    sb.append("((")
+                    sb.append(node.blockUuid)
+                    sb.append("))")
+                }
+                is TagNode -> {
+                    sb.append("#")
+                    sb.append(node.tag)
+                }
+                is UrlLinkNode -> {
+                    sb.append("[")
+                    sb.append(reconstructContent(node.text))
+                    sb.append("](")
+                    sb.append(node.url)
+                    sb.append(")")
+                }
             }
         }
-        
-        return blocks
+        return sb.toString()
     }
-
-    private fun processList(listNode: ASTNode, content: String, level: Int): List<ParsedBlock> {
-        val blocks = mutableListOf<ParsedBlock>()
-        
-        for (child in listNode.children) {
-            val type = child.type.toString()
-            // Heuristic check for List Item
-            if (type.contains("LI") || type.contains("ListItem") || type.contains("LIST_ITEM")) {
-                val (rawContent, nestedBlocks) = processListItem(child, content, level)
-                
-                // 1. Parse Properties
-                val propertiesResult = PropertiesParser.parse(rawContent)
-                
-                // 2. Parse Timestamps
-                val timestampResult = TimestampParser.parse(propertiesResult.content)
-                val finalContent = timestampResult.content
-                
-                val references = extractReferences(finalContent)
-                
-                blocks.add(
-                    ParsedBlock(
-                        content = finalContent,
-                        properties = propertiesResult.properties,
-                        level = level,
-                        children = nestedBlocks,
-                        references = references,
-                        scheduled = timestampResult.scheduled,
-                        deadline = timestampResult.deadline
-                    )
-                )
+    
+    private fun extractReferences(nodes: List<InlineNode>): List<String> {
+        val refs = mutableListOf<String>()
+        nodes.forEach { node ->
+            when(node) {
+                is WikiLinkNode -> refs.add(node.target)
+                is BlockRefNode -> refs.add(node.blockUuid)
+                is TagNode -> refs.add(node.tag) // Tags are references? Yes usually.
+                is BoldNode -> refs.addAll(extractReferences(node.children))
+                is ItalicNode -> refs.addAll(extractReferences(node.children))
+                is StrikeNode -> refs.addAll(extractReferences(node.children))
+                else -> {}
             }
         }
-        return blocks
-    }
-
-    private fun processListItem(node: ASTNode, content: String, level: Int): Pair<String, List<ParsedBlock>> {
-        val nestedBlocks = mutableListOf<ParsedBlock>()
-        val contentBuilder = StringBuilder()
-
-        for (child in node.children) {
-            val type = child.type.toString()
-            if (type.contains("UL") || type.contains("UnorderedList") || type.contains("BULLET_LIST") || type.contains("UNORDERED_LIST")) {
-                nestedBlocks.addAll(processList(child, content, level + 1))
-            } else if (type.contains("PARAGRAPH") || type.contains("Paragraph")) {
-                 contentBuilder.append(getTextInNode(child, content))
-            } else {
-                // For other elements, we might want to append them too if they are content
-            }
-        }
-        
-        return Pair(contentBuilder.toString().trim(), nestedBlocks)
-    }
-
-    private fun extractReferences(content: String): List<String> {
-        val references = mutableListOf<String>()
-        
-        val wikiLinkRegex = Regex("""\[\[(.*?)\]\]""")
-        wikiLinkRegex.findAll(content).forEach { matchResult ->
-            references.add(matchResult.groupValues[1])
-        }
-        
-        val blockRefRegex = Regex("""\(\((.*?)\)\)""")
-        blockRefRegex.findAll(content).forEach { matchResult ->
-            references.add(matchResult.groupValues[1])
-        }
-        
-        return references
-    }
-
-    private fun getTextInNode(node: ASTNode, content: String): CharSequence {
-        return content.subSequence(node.startOffset, node.endOffset)
+        return refs
     }
 }

@@ -2,7 +2,7 @@ package com.logseq.kmp.db
 
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
-import com.logseq.kmp.platform.PlatformFileSystem
+import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
 import com.logseq.kmp.repository.InMemorySimplePageRepository
 import com.logseq.kmp.repository.SimplePageRepository

@@ -413,6 +413,11 @@ class GraphLoader(
             destinationList.add(block)
             previousSiblingId = blockId
             
+            // Debug log for specific files to trace level issue
+            if (baseLevel > 0) {
+                // logger.debug("Saving child block: '${block.content.take(20)}' at level $baseLevel, parent=$parentId")
+            }
+            
             // Process children
             if (parsedBlock.children.isNotEmpty()) {
                 processParsedBlocks(

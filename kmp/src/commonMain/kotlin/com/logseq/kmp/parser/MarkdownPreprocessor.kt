@@ -14,28 +14,35 @@ object MarkdownPreprocessor {
         val lines = content.lines()
         val normalizedLines = mutableListOf<String>()
         
-        // We need to infer the indentation "step" (e.g., is the user using 2 spaces or tab?)
-        // For now, we assume a standard Logseq convention: 2 spaces = 1 level.
-        // We will convert 2 spaces -> 4 spaces to satisfy strict CommonMark parsers if needed.
-        // Or actually, just ensure it's consistent.
+        var lastLevel = 0
         
         for (line in lines) {
+            if (line.isBlank()) {
+                normalizedLines.add(line)
+                continue
+            }
+
             val trimmedStart = line.trimStart()
             
             // If it's a list item
             if (isListItem(trimmedStart)) {
                 val level = calculateLevel(line)
+                lastLevel = level
                 
                 // CommonMark standard is often 4 spaces for a sub-block.
-                // Let's force 4 spaces per level to be safe for the parser.
                 val newIndentation = "    ".repeat(level)
                 normalizedLines.add(newIndentation + trimmedStart)
             } else {
-                // For non-list items (e.g. paragraphs inside blocks), 
-                // we should probably try to align them with the parent block.
-                // For simplicity in this first pass, we preserve them as is 
-                // OR we could try to indent them to match the previous block level.
-                normalizedLines.add(line)
+                // For non-list items (continuation text, properties, etc.)
+                // Indent them to match the current block level so they stay inside the block (or at least inside the list)
+                // We add a slight extra indent (2 spaces) to make them part of the previous item content in CommonMark
+                // or just align with the bullet.
+                // In CommonMark, continuation lines must be indented past the bullet.
+                // Bullet is at `level * 4`. Content starts at `level * 4 + 2` (approx).
+                // Let's indent them to `level * 4 + 4` to be safe?
+                
+                val newIndentation = "    ".repeat(lastLevel) + "    " 
+                normalizedLines.add(newIndentation + trimmedStart)
             }
         }
         
@@ -68,6 +75,32 @@ object MarkdownPreprocessor {
         // Let's assume tabs take precedence if present, or add to spaces.
         // A tab is usually 2 or 4 spaces visually.
         
-        return tabs + (spaces / 2)
+        // FIX: Round UP for odd spaces or treat 1 space as level 0 unless it's strictly > 0?
+        // Actually, if spaces=1, spaces/2 = 0.
+        // If the user indented 1 space, they probably meant level 1 if previous was level 0.
+        // But 2 spaces is standard.
+        // Let's change the rounding or threshold.
+        // If spaces % 2 != 0, it's ambiguous.
+        
+        // Attempt to support 1-space indentation:
+        // If we strictly follow 2-space rule:
+        // 0->0, 1->0, 2->1, 3->1, 4->2
+        
+        // If we want 1 space to count as a level?
+        // return tabs + spaces  <-- This would make 2 spaces = level 2 (8 spaces normalized). TOO MUCH.
+        
+        // What if we check if spaces is odd?
+        // If spaces is 1, maybe treat as 1?
+        // But 3 spaces? Is that level 1.5?
+        
+        // Let's try: (spaces + 1) / 2
+        // 0 -> 0
+        // 1 -> 1
+        // 2 -> 1
+        // 3 -> 2
+        // 4 -> 2
+        // 5 -> 3
+        
+        return tabs + ((spaces + 1) / 2)
     }
 }

@@ -482,6 +482,10 @@ class LogseqViewModel(
         _uiState.update { it.copy(onboardingCompleted = completed) }
     }
     
+    fun toggleDebugMode() {
+        _uiState.update { it.copy(isDebugMode = !it.isDebugMode) }
+    }
+    
     /**
      * Execute a command by ID
      */

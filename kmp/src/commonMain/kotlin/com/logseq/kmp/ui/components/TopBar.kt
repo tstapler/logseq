@@ -25,7 +25,8 @@ fun TopBar(
     onNavigate: (Screen) -> Unit,
     onThemeChange: (LogseqThemeMode) -> Unit,
     onLanguageChange: (Language) -> Unit,
-    onResetOnboarding: () -> Unit
+    onResetOnboarding: () -> Unit,
+    onToggleDebug: () -> Unit
 ) {
     var viewMenuExpanded by remember { mutableStateOf(false) }
     var fileMenuExpanded by remember { mutableStateOf(false) }
@@ -68,6 +69,13 @@ fun TopBar(
                     text = { Text("Performance Dashboard") },
                     onClick = {
                         onNavigate(Screen.Performance)
+                        viewMenuExpanded = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (appState.isDebugMode) "Hide Debug Info" else "Show Debug Info") },
+                    onClick = {
+                        onToggleDebug()
                         viewMenuExpanded = false
                     }
                 )

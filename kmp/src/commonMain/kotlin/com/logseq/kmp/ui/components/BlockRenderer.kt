@@ -36,6 +36,7 @@ import com.logseq.kmp.model.Block
 @Composable
 fun BlockRenderer(
     block: Block,
+    isDebugMode: Boolean = false,
     isEditing: Boolean,
     hasChildren: Boolean = false,
     isCollapsed: Boolean = false,
@@ -51,6 +52,12 @@ fun BlockRenderer(
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
+    
+    // Debug render level
+    // SideEffect { 
+    //    if (block.level > 0) println("Render Block: '${block.content.take(10)}' Level=${block.level}") 
+    // }
+
     var textFieldValue by remember(block.uuid, block.content) {
         mutableStateOf(TextFieldValue(text = block.content))
     }
@@ -84,21 +91,25 @@ fun BlockRenderer(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            // Spacer to align bullet if we want consistent indentation, 
-            // but usually the bullet is the "start" of the block visual.
-            // If we want [Caret] [Bullet] [Content], and Caret is optional:
-            // It looks better if the bullet aligns with parent's content? 
-            // Standard Logseq:
-            //   > • Parent
-            //     • Child
-            // So we need a placeholder for the caret if it's missing?
-            // Actually, usually bullets align.
-            // Let's add a spacer matching the Icon size if we want strict alignment,
-            // or just render the icon if present. 
-            // The user asked for "carats ... in addition to the bullet".
+            // Spacer for alignment - width must MATCH the Icon size (18.dp) + padding (4.dp)
+            // But we already have a spacer?
+            // "Spacer(modifier = Modifier.width(18.dp).padding(end = 4.dp))"
+            // Wait, padding(end=4.dp) adds space to the right of the 18.dp width? 
+            // Or does it effectively make the spacer 22dp wide?
+            // Icon has modifier .size(18.dp).padding(end = 4.dp)
+            // This means the Icon takes 18dp space, and has 4dp padding inside/outside depending on order?
+            // Compose modifiers are applied sequentially.
+            // .size(18.dp) -> sets size constraints.
+            // .padding(end=4.dp) -> adds padding.
+            // Total width occupied = 18 + 4 = 22dp (if padding is external).
             
-            // Let's add a placeholder spacer to keep bullets aligned
-            Spacer(modifier = Modifier.width(18.dp).padding(end = 4.dp))
+            // Spacer:
+            // .width(18.dp).padding(end=4.dp)
+            // Total width = 18 + 4 = 22dp.
+            
+            // So alignment should be correct.
+            Spacer(modifier = Modifier.width(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
         }
 
         // Bullet point (Always shown)
@@ -108,6 +119,15 @@ fun BlockRenderer(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 8.dp, top = 2.dp)
         )
+        
+        // DEBUG: Show level to diagnose indentation issues
+        if (isDebugMode) {
+            Text(
+               text = "L${block.level}",
+               style = MaterialTheme.typography.labelSmall,
+               color = Color.Red
+            )
+        }
 
         if (isEditing) {
             // Edit mode
@@ -285,6 +305,7 @@ private fun parseWikiLinks(
 @Composable
 fun BlockList(
     blocks: List<Block>,
+    isDebugMode: Boolean = false,
     editingBlockId: String?,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
@@ -335,9 +356,10 @@ fun BlockList(
             if (block.id !in hiddenBlocks) {
                 val hasChildren = block.id in blocksWithChildren
                 val isCollapsed = block.id in collapsedBlocks
-
+                
                 BlockRenderer(
                     block = block,
+                    isDebugMode = isDebugMode,
                     isEditing = editingBlockId == block.uuid,
                     hasChildren = hasChildren,
                     isCollapsed = isCollapsed,

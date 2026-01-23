@@ -37,7 +37,9 @@ data class AppState(
     val regularPages: List<Page> = emptyList(),
     val journalPages: List<Page> = emptyList(),
     val favoritePages: List<Page> = emptyList(),
-    val recentPages: List<Page> = emptyList()
+    val recentPages: List<Page> = emptyList(),
+    // Debug settings
+    val isDebugMode: Boolean = false
 ) {
     val canGoBack: Boolean get() = historyIndex > 0
     val canGoForward: Boolean get() = historyIndex < navigationHistory.size - 1

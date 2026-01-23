@@ -157,7 +157,8 @@ fun LogseqApp(
                                 onNavigate = { viewModel.navigateTo(it) },
                                 onThemeChange = { viewModel.setThemeMode(it) },
                                 onLanguageChange = { language -> viewModel.setLanguage(language) },
-                                onResetOnboarding = { viewModel.setOnboardingCompleted(false) }
+                                onResetOnboarding = { viewModel.setOnboardingCompleted(false) },
+                                onToggleDebug = { viewModel.toggleDebugMode() }
                             )
                         },
                         leftSidebar = {

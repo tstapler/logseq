@@ -141,6 +141,7 @@ private fun JournalEntry(
         } else {
             BlockList(
                 blocks = blockList.sortedBy { it.position },
+                isDebugMode = false, // TODO: Pass this down properly, for now disable
                 editingBlockId = editingBlockId,
                 onStartEditing = onStartEditing,
                 onStopEditing = onStopEditing,

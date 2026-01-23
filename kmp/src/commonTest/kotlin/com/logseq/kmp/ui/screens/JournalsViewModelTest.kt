@@ -1,7 +1,12 @@
 package com.logseq.kmp.ui.screens
 
+import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
+import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.BlockReferences
+import com.logseq.kmp.repository.BlockWithDepth
+import com.logseq.kmp.repository.BlockWithReferenceCount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +18,36 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class JournalsViewModelTest {
+
+    class FakeBlockRepository : BlockRepository {
+        override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockByUuid(uuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
+        override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockHierarchy(rootUuid: String): Flow<Result<List<BlockWithDepth>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockAncestors(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
+        override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun searchBlocksByContent(query: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        
+        // Remove methods not in BlockRepository interface (based on build failure)
+        // override fun getAllReferences(...)
+        // override fun getOrphanedBlocks(...) 
+        // override fun getMostConnectedBlocks(...)
+        // override fun addReference(...)
+        // override fun removeReference(...)
+        // override fun clear()
+
+        override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
+        override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = Result.success(Unit)
+        override suspend fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int): Result<Unit> = Result.success(Unit)
+        override suspend fun indentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun moveBlockUp(blockUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
+    }
 
     class FakePageRepository : SimplePageRepository {
         val pages = mutableListOf<Page>()
@@ -65,7 +100,7 @@ class JournalsViewModelTest {
             )
         }
 
-        val viewModel = JournalsViewModel(repo, CoroutineScope(Dispatchers.Unconfined))
+        val viewModel = JournalsViewModel(repo, FakeBlockRepository(), CoroutineScope(Dispatchers.Unconfined))
         
         // Initial load (10 pages)
         assertEquals(10, viewModel.uiState.value.pages.size)
