@@ -52,11 +52,6 @@ fun BlockRenderer(
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
-    
-    // Debug render level
-    // SideEffect { 
-    //    if (block.level > 0) println("Render Block: '${block.content.take(10)}' Level=${block.level}") 
-    // }
 
     var textFieldValue by remember(block.uuid, block.content) {
         mutableStateOf(TextFieldValue(text = block.content))
