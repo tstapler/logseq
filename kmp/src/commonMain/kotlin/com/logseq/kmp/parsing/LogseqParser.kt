@@ -2,16 +2,26 @@ package com.logseq.kmp.parsing
 
 import com.logseq.kmp.parsing.ast.*
 
+enum class ParseMode {
+    FULL,           // Parse structure and inline content
+    METADATA_ONLY   // Parse structure only, keep content as raw string
+}
+
 /**
  * Main facade for the Logseq Native KMP Parser.
  * Orchestrates Block Parsing and Inline Parsing.
  */
 class LogseqParser {
 
-    fun parse(source: CharSequence): DocumentNode {
+    fun parse(source: CharSequence, mode: ParseMode = ParseMode.FULL): DocumentNode {
         // 1. Parse Structure (Blocks, Indentation, Properties)
         val blockParser = BlockParser(source)
         val document = blockParser.parse()
+
+        // If metadata only, return early with raw content
+        if (mode == ParseMode.METADATA_ONLY) {
+            return document
+        }
 
         // 2. Parse Inline Content
         // We need to traverse the tree and parse the 'content' of each block

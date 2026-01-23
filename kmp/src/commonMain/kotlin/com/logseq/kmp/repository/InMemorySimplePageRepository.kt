@@ -43,6 +43,12 @@ class InMemorySimplePageRepository : SimplePageRepository {
         }
     }
 
+    override fun getPageById(id: Long): Flow<Result<Page?>> {
+        return pages.map { map ->
+            Result.success(map.values.find { it.id == id })
+        }
+    }
+
     override fun getPageByName(name: String): Flow<Result<Page?>> {
         return pages.map { map ->
             // Case-insensitive search by page name

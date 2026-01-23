@@ -10,6 +10,7 @@ interface SimplePageRepository {
     fun getFavoritePages(): Flow<Result<List<Page>>>
     fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>>
     fun getPageByUuid(uuid: String): Flow<Result<Page?>>
+    fun getPageById(id: Long): Flow<Result<Page?>>
     fun getPageByName(name: String): Flow<Result<Page?>>
     suspend fun savePage(page: Page): Result<Unit>
     suspend fun deletePage(pageUuid: String): Result<Unit>

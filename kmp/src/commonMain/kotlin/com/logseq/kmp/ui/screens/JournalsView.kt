@@ -84,7 +84,8 @@ fun JournalsView(
                 },
                 onMoveDown = { blockUuid ->
                     scope.launch { viewModel.moveBlockDown(blockUuid) }
-                }
+                },
+                onLoadContent = { pageId -> viewModel.loadPageContent(pageId) }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -120,6 +121,7 @@ private fun JournalEntry(
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
+    onLoadContent: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -157,7 +159,8 @@ private fun JournalEntry(
                 onIndent = onIndent,
                 onOutdent = onOutdent,
                 onMoveUp = onMoveUp,
-                onMoveDown = onMoveDown
+                onMoveDown = onMoveDown,
+                onLoadContent = onLoadContent
             )
         }
     }

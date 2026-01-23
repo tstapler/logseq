@@ -100,10 +100,29 @@ kmp/
 - [ ] Task 4.4: Query Result Rendering (2h)
 
 #### Story 5: Progressive Data Loading (Planned) - [View Plan](docs/tasks/progressive-loading.md)
-- [ ] Task 5.1: Paginated Repository Methods (2h)
-- [ ] Task 5.2: UI Infinite Scroll Integration (3h)
-- [ ] Task 5.3: Lazy Reference Loading (2h)
-- [ ] Task 5.4: Metadata-Only Initial Graph Load (3h)
+- [x] Task 5.1: Paginated Repository Methods (2h)
+- [x] Task 5.2: UI Infinite Scroll Integration (3h)
+- [x] Task 5.3: Lazy Reference Loading (2h)
+- [x] Task 5.4: Metadata-Only Initial Graph Load (3h)
+
+### 🎯 COMPLETED TASKS
+- [x] **Feat: Metadata-Only Initial Graph Load** (Jan 22, 2026)
+  - Implemented Two-Phase Loading Strategy (Skeleton -> Full Content)
+  - Added ParseMode to LogseqParser/MarkdownParser
+  - Refactored GraphLoader to support progressive background loading
+  - Updated UI to show "Loading..." placeholders for unloaded blocks
+  - Fixed race conditions with file-level mutex
+- [x] **Feat: Native KMP Graph Parser** (Jan 22, 2026)
+  - Implemented high-performance, zero-copy Lexer and Parser in Kotlin
+  - Replaced legacy `mldoc` (C++/WASM) dependency
+  - Achieved feature parity for Logseq syntax (Indentation, Properties, Timestamps, Links)
+  - Fixed block hierarchy and sorting issues
+- [x] **Feat: Deterministic UUID Generation** (Jan 22, 2026)
+  - Implemented stable UUIDs based on file path and content
+  - Fixed duplicate block issues on reload
+- [x] **Feat: Debug Mode** (Jan 22, 2026)
+  - Added "Show Debug Info" toggle in View menu
+  - Visualized block levels and structure for troubleshooting
 
 ### ⏸️ Platform Re-enablement (Blocked)
 *See [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)*

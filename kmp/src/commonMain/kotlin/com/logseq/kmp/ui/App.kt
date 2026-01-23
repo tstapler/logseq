@@ -44,6 +44,7 @@ fun LogseqApp(
     val blockRepository = remember { DatascriptBlockRepository() }
     val searchRepository = remember { InMemorySearchRepository(pageRepository, blockRepository) }
     val graphWriter = remember { GraphWriter(fileSystem) }
+    val graphLoader = remember { com.logseq.kmp.db.GraphLoader(fileSystem, pageRepository, blockRepository) }
     val scope = rememberCoroutineScope()
     val notificationManager = remember { NotificationManager(scope) }
     
@@ -73,6 +74,7 @@ fun LogseqApp(
         com.logseq.kmp.ui.screens.JournalsViewModel(
             pageRepository,
             blockRepository,
+            graphLoader,
             scope
         )
     }

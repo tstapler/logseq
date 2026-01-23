@@ -79,4 +79,66 @@ class GraphLoaderTest {
         }
         }
     }
+
+    @Test
+    fun testLoadGraphProgressive() {
+        runBlocking {
+            val fileSystem = PlatformFileSystem()
+            val pageRepository = InMemorySimplePageRepository()
+            val blockRepository = DatascriptBlockRepository()
+            val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
+
+            val userDir = System.getProperty("user.dir")
+            val projectRoot = if (userDir.endsWith("/kmp") || userDir.endsWith("\\kmp")) {
+                File(userDir).parentFile
+            } else {
+                File(userDir)
+            }
+            val graphPath = File(projectRoot, "deps/graph-parser/test/resources/exporter-test-graph").absolutePath
+
+            var phase1Complete = false
+            var fullyLoaded = false
+
+            graphLoader.loadGraphProgressive(
+                graphPath = graphPath,
+                immediateJournalCount = 5,
+                onProgress = { println("Progress: $it") },
+                onPhase1Complete = { phase1Complete = true },
+                onFullyLoaded = { fullyLoaded = true }
+            )
+
+            assertTrue(phase1Complete, "Phase 1 should be complete")
+            assertTrue(fullyLoaded, "Graph should be fully loaded")
+
+            // Verify pages loaded
+            val pagesResult = pageRepository.getAllPages().first()
+            val pages = pagesResult.getOrNull() ?: emptyList()
+            assertTrue(pages.isNotEmpty(), "Pages should be loaded")
+
+            // Verify a page is loaded in METADATA_ONLY mode (isLoaded = false)
+            // "contents" page is likely not a journal, so it should be loaded in background (METADATA_ONLY)
+            val contentsPage = pages.find { it.name == "contents" }
+            assertNotNull(contentsPage, "contents page should exist")
+            
+            val blocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()
+            val blocks = blocksResult.getOrNull() ?: emptyList()
+            assertTrue(blocks.isNotEmpty(), "Blocks should be loaded for contents page")
+            
+            // Check isLoaded flag
+            // Since loadGraphProgressive uses METADATA_ONLY for pages, blocks should have isLoaded = false
+            val firstBlock = blocks.firstOrNull()
+            assertNotNull(firstBlock, "First block should not be null")
+            assertEquals(false, firstBlock.isLoaded, "Block should not be fully loaded initially") 
+            
+            // Now load full page
+            graphLoader.loadFullPage(contentsPage.id)
+            
+            // Verify blocks are now loaded
+            val reloadedBlocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()
+            val reloadedBlocks = reloadedBlocksResult.getOrNull() ?: emptyList()
+            val reloadedFirstBlock = reloadedBlocks.firstOrNull()
+            assertNotNull(reloadedFirstBlock, "Reloaded first block should not be null")
+            assertEquals(true, reloadedFirstBlock.isLoaded, "Block should be fully loaded after loadFullPage")
+        }
+    }
 }

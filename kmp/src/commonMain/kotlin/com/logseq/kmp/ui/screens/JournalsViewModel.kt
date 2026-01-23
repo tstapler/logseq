@@ -1,5 +1,6 @@
 package com.logseq.kmp.ui.screens
 
+import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 class JournalsViewModel(
     private val pageRepository: SimplePageRepository,
     private val blockRepository: BlockRepository,
+    private val graphLoader: GraphLoader,
     private val scope: CoroutineScope
 ) {
     private val _uiState = MutableStateFlow(JournalsUiState())
@@ -56,22 +58,6 @@ class JournalsViewModel(
             val result = blockRepository.getBlocksForPage(page.id).first()
             val blocks = result.getOrNull() ?: emptyList()
             if (blocks.isNotEmpty()) {
-                // DEBUG: Check for orphaned blocks on specific page
-                if (page.name == "2026_01_21") {
-                    println("DEBUG: Loaded ${blocks.size} blocks for page 2026_01_21")
-                    val rediscovering = blocks.find { it.content.contains("Rediscovering Paper") }
-                    if (rediscovering != null) {
-                        println("DEBUG: Found 'Rediscovering Paper'. ID=${rediscovering.id}, ParentID=${rediscovering.parentId}")
-                        val parent = blocks.find { it.id == rediscovering.parentId }
-                        if (parent == null) {
-                            println("DEBUG: ERROR - Parent block (ID=${rediscovering.parentId}) NOT FOUND in loaded blocks!")
-                        } else {
-                            println("DEBUG: Parent found: '${parent.content.take(20)}...'")
-                        }
-                    } else {
-                        println("DEBUG: 'Rediscovering Paper' block NOT FOUND in loaded blocks.")
-                    }
-                }
                 newBlocks[page.id] = blocks
             }
         }
@@ -181,9 +167,33 @@ class JournalsViewModel(
             state.copy(blocks = newBlocks)
         }
     }
+
+    fun loadPageContent(pageId: Long) {
+        if (_uiState.value.loadingPageIds.contains(pageId)) return
+        
+        scope.launch {
+            _uiState.update { it.copy(loadingPageIds = it.loadingPageIds + pageId) }
+            try {
+                graphLoader.loadFullPage(pageId)
+                // Refresh blocks for the page
+                val result = blockRepository.getBlocksForPage(pageId).first()
+                val blocks = result.getOrNull() ?: emptyList()
+                
+                _uiState.update { state ->
+                    val newBlocks = state.blocks.toMutableMap()
+                    newBlocks[pageId] = blocks
+                    state.copy(blocks = newBlocks, loadingPageIds = state.loadingPageIds - pageId)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update { it.copy(loadingPageIds = it.loadingPageIds - pageId) }
+            }
+        }
+    }
 }
 
 data class JournalsUiState(
     val pages: List<Page> = emptyList(),
-    val blocks: Map<Long, List<Block>> = emptyMap()
+    val blocks: Map<Long, List<Block>> = emptyMap(),
+    val loadingPageIds: Set<Long> = emptySet()
 )

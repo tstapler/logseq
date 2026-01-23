@@ -4,6 +4,7 @@ import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.PlatformFileSystem
+import com.logseq.kmp.util.FileUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
@@ -81,14 +82,11 @@ class GraphWriter(
         val oldPath = page.filePath
         if (oldPath.isNullOrBlank()) {
             logger.error("Cannot rename page with no file path: ${page.name}")
-            return false
+            return@withLock false
         }
 
         // Calculate new path
-        val safeName = newName.replace("/", "%2F")
-        val basePath = if (graphPath.endsWith("/")) graphPath else "$graphPath/"
-        val folder = if (page.isJournal) "journals" else "pages"
-        val newPath = "${basePath}$folder/$safeName.md"
+        val newPath = getPageFilePath(page.copy(name = newName), graphPath)
 
         // If paths are same, nothing to do (except maybe case change on some FS)
         if (oldPath == newPath) return true
@@ -186,14 +184,7 @@ class GraphWriter(
         val filePath = if (!page.filePath.isNullOrBlank()) {
             page.filePath
         } else {
-            // Construct path from graph path and page name
-            // Sanitize name for filename (basic)
-            val safeName = page.name.replace("/", "%2F")
-            // Ensure we don't double slashes if graphPath ends with /
-            val basePath = if (graphPath.endsWith("/")) graphPath else "$graphPath/"
-            
-            val folder = if (page.isJournal) "journals" else "pages"
-            "${basePath}$folder/$safeName.md"
+            getPageFilePath(page, graphPath)
         }
 
         val success = fileSystem.writeFile(filePath, content)
@@ -202,5 +193,14 @@ class GraphWriter(
         } else {
             logger.error("Failed to write file: $filePath")
         }
+    }
+    
+    private fun getPageFilePath(page: Page, graphPath: String): String {
+        val safeName = FileUtils.sanitizeFileName(page.name)
+        // Ensure we don't double slashes if graphPath ends with /
+        val basePath = if (graphPath.endsWith("/")) graphPath else "$graphPath/"
+        
+        val folder = if (page.isJournal) "journals" else "pages"
+        return "${basePath}$folder/$safeName.md"
     }
 }

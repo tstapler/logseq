@@ -1,5 +1,7 @@
 package com.logseq.kmp.ui.screens
 
+import com.logseq.kmp.db.GraphLoader
+import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
@@ -18,6 +20,20 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class JournalsViewModelTest {
+
+    class FakeFileSystem : FileSystem {
+        override fun getDefaultGraphPath(): String = "/tmp/graph"
+        override fun expandTilde(path: String): String = path
+        override fun readFile(path: String): String? = ""
+        override fun writeFile(path: String, content: String): Boolean = true
+        override fun listFiles(path: String): List<String> = emptyList()
+        override fun listDirectories(path: String): List<String> = emptyList()
+        override fun fileExists(path: String): Boolean = true
+        override fun directoryExists(path: String): Boolean = true
+        override fun createDirectory(path: String): Boolean = true
+        override fun deleteFile(path: String): Boolean = true
+        override fun pickDirectory(): String? = null
+    }
 
     class FakeBlockRepository : BlockRepository {
         override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
@@ -42,11 +58,13 @@ class JournalsViewModelTest {
         override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
         override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
         override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int): Result<Unit> = Result.success(Unit)
         override suspend fun indentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockUp(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun clear() {}
     }
 
     class FakePageRepository : SimplePageRepository {
@@ -66,6 +84,7 @@ class JournalsViewModelTest {
         }
 
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(null))
+        override fun getPageById(id: Long): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.id == id }))
         override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(null))
         override suspend fun savePage(page: Page): Result<Unit> {
             pages.add(page)
@@ -100,7 +119,10 @@ class JournalsViewModelTest {
             )
         }
 
-        val viewModel = JournalsViewModel(repo, FakeBlockRepository(), CoroutineScope(Dispatchers.Unconfined))
+        val blockRepo = FakeBlockRepository()
+        val fileSystem = FakeFileSystem()
+        val graphLoader = GraphLoader(fileSystem, repo, blockRepo)
+        val viewModel = JournalsViewModel(repo, blockRepo, graphLoader, CoroutineScope(Dispatchers.Unconfined))
         
         // Initial load (10 pages)
         assertEquals(10, viewModel.uiState.value.pages.size)

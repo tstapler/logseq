@@ -9,14 +9,8 @@ class MarkdownParser {
 
     private val parser = LogseqParser()
 
-    fun parsePage(content: String): ParsedPage {
-        val document = parser.parse(content)
-        
-        // DEBUG: Dump AST structure for specific page
-        if (content.contains("Rediscovering Paper")) {
-            println("MarkdownParser DEBUG: AST for page with Rediscovering Paper:")
-            dumpAST(document.children, 0)
-        }
+    fun parsePage(content: String, mode: com.logseq.kmp.parsing.ParseMode = com.logseq.kmp.parsing.ParseMode.FULL): ParsedPage {
+        val document = parser.parse(content, mode)
         
         // Convert AST to ParsedPage model
         val parsedBlocks = document.children.map { convertBlock(it) }
@@ -26,15 +20,6 @@ class MarkdownParser {
             properties = emptyMap(), // Page props handled in GraphLoader via first block?
             blocks = parsedBlocks
         )
-    }
-    
-    private fun dumpAST(nodes: List<BlockNode>, indent: Int) {
-        nodes.forEach { node ->
-            val prefix = "  ".repeat(indent)
-            val content = reconstructContent(node.content).take(20)
-            println("$prefix- Block: '$content' (Children: ${node.children.size})")
-            dumpAST(node.children, indent + 1)
-        }
     }
 
     private fun convertBlock(block: BlockNode): ParsedBlock {

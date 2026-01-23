@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 object Validation {
     private const val MAX_STRING_LENGTH = 10000
     private const val MAX_NAME_LENGTH = 255
-    private const val MAX_CONTENT_LENGTH = 100000
+    private const val MAX_CONTENT_LENGTH = 10000000
 
     fun validateString(input: String?, maxLength: Int = MAX_STRING_LENGTH, allowWhitespace: Boolean = false): String {
         require(input != null) { "Input cannot be null" }
@@ -89,7 +89,8 @@ data class Block(
     val position: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
-    val properties: Map<String, String> = emptyMap()
+    val properties: Map<String, String> = emptyMap(),
+    val isLoaded: Boolean = true // Indicates if the content is fully loaded
 ) {
     init {
         Validation.validateId(id)

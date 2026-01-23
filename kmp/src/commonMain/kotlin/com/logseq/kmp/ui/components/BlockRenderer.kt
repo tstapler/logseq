@@ -44,6 +44,7 @@ fun BlockRenderer(
     onStopEditing: () -> Unit,
     onContentChange: (String) -> Unit,
     onLinkClick: (String) -> Unit,
+    onLoadContent: () -> Unit = {},
     onToggleCollapse: () -> Unit = {},
     onIndent: () -> Unit = {},
     onOutdent: () -> Unit = {},
@@ -65,6 +66,13 @@ fun BlockRenderer(
             focusRequester.requestFocus()
         } else {
             hasFocused = false
+        }
+    }
+
+    // Trigger load if not loaded
+    LaunchedEffect(block.isLoaded) {
+        if (!block.isLoaded) {
+            onLoadContent()
         }
     }
 
@@ -124,7 +132,14 @@ fun BlockRenderer(
             )
         }
 
-        if (isEditing) {
+        if (!block.isLoaded) {
+            Text(
+                text = "Loading...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        } else if (isEditing) {
             // Edit mode
             BasicTextField(
                 value = textFieldValue,
@@ -306,6 +321,7 @@ fun BlockList(
     onStopEditing: () -> Unit,
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
+    onLoadContent: (Long) -> Unit = {},
     onIndent: (String) -> Unit = {},
     onOutdent: (String) -> Unit = {},
     onMoveUp: (String) -> Unit = {},
@@ -362,6 +378,7 @@ fun BlockList(
                     onStopEditing = onStopEditing,
                     onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
                     onLinkClick = onLinkClick,
+                    onLoadContent = { onLoadContent(block.pageId) },
                     onToggleCollapse = {
                         collapsedBlocks = if (isCollapsed) {
                             collapsedBlocks - block.id
