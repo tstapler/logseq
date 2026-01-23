@@ -11,6 +11,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SimplePageRepository
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.performance.PerformanceMonitor
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -36,11 +37,21 @@ class GraphLoader(
         idCounter++
     }
 
-    // Basic UUID generator until we have a shared common lib
-    private fun generateUuid(): String {
-        val chars = "0123456789abcdef"
-        fun randomHex(length: Int) = (1..length).map { chars.random() }.joinToString("")
-        return "${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}"
+    private fun generateUuid(
+        parsedBlock: ParsedBlock, 
+        pagePath: String, 
+        blockIndex: Int
+    ): String {
+        // If block has an ID property, use it
+        val existingId = parsedBlock.properties["id"]
+        if (existingId != null && existingId.isNotBlank()) {
+            return existingId
+        }
+        
+        // Otherwise generate a deterministic UUID based on file location + content
+        // Seed: "filePath:blockIndex:content"
+        val seed = "$pagePath:$blockIndex:${parsedBlock.content}"
+        return UuidGenerator.generateDeterministic(seed)
     }
 
     suspend fun loadGraph(graphPath: String, onProgress: (String) -> Unit) {
@@ -307,7 +318,10 @@ class GraphLoader(
             val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
             
             val now = Clock.System.now()
-            val pageUuid = generateUuid()
+            
+            // We use a random UUID for the page itself if not persistent? 
+            // Or deterministic based on name?
+            val pageUuid = UuidGenerator.generateV7()
             
             // Generate a unique ID safely
             val pageId = generateId()
@@ -333,10 +347,6 @@ class GraphLoader(
             val parsedPage = markdownParser.parsePage(content)
             
             // Extract page properties if any (often in the first block or pre-block)
-            // For Logseq, the first block CAN be page properties.
-            // But MarkdownParser splits strictly by blocks.
-            // We check the first block for properties.
-            
             val blocksToSave = mutableListOf<Block>()
             var firstBlockSkipped = false
             
@@ -361,6 +371,7 @@ class GraphLoader(
             
             processParsedBlocks(
                 parsedBlocks = rootBlocks,
+                pagePath = filePath, // Pass file path for deterministic UUIDs
                 pageId = pageId,
                 parentId = null,
                 baseLevel = 0,
@@ -380,6 +391,7 @@ class GraphLoader(
 
     private suspend fun processParsedBlocks(
         parsedBlocks: List<ParsedBlock>,
+        pagePath: String,
         pageId: Long,
         parentId: Long?,
         baseLevel: Int,
@@ -390,7 +402,7 @@ class GraphLoader(
         
         parsedBlocks.forEachIndexed { index, parsedBlock ->
             val blockId = generateId()
-            val blockUuid = parsedBlock.properties["id"] ?: generateUuid()
+            val blockUuid = generateUuid(parsedBlock, pagePath, index)
             
             // Merge parsed metadata into properties
             val mergedProperties = parsedBlock.properties.toMutableMap()
@@ -419,15 +431,11 @@ class GraphLoader(
             destinationList.add(block)
             previousSiblingId = blockId
             
-            // Debug log for specific files to trace level issue
-            if (baseLevel > 0) {
-                // logger.debug("Saving child block: '${block.content.take(20)}' at level $baseLevel, parent=$parentId")
-            }
-            
             // Process children
             if (parsedBlock.children.isNotEmpty()) {
                 processParsedBlocks(
                     parsedBlocks = parsedBlock.children,
+                    pagePath = pagePath,
                     pageId = pageId,
                     parentId = blockId,
                     baseLevel = baseLevel + 1,
