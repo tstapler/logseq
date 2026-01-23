@@ -199,16 +199,16 @@ class SqlDelightBlockRepository(
             queries.transaction {
                 blocks.forEach { block ->
                     queries.insertBlock(
-                        uuid = block.uuid,
-                        page_id = block.pageId,
-                        parent_id = block.parentId,
-                        left_id = block.leftId,
-                        content = block.content,
-                        level = block.level.toLong(),
-                        position = block.position.toLong(),
-                        created_at = block.createdAt.toEpochMilliseconds(),
-                        updated_at = block.updatedAt.toEpochMilliseconds(),
-                        properties = block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
+                        block.uuid,
+                        block.pageId,
+                        block.parentId,
+                        block.leftId,
+                        block.content,
+                        block.level.toLong(),
+                        block.position.toLong(),
+                        block.createdAt.toEpochMilliseconds(),
+                        block.updatedAt.toEpochMilliseconds(),
+                        block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
                     )
                 }
             }
@@ -221,16 +221,16 @@ class SqlDelightBlockRepository(
     override suspend fun saveBlock(block: Block): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             queries.insertBlock(
-                uuid = block.uuid,
-                page_id = block.pageId,
-                parent_id = block.parentId,
-                left_id = block.leftId,
-                content = block.content,
-                level = block.level.toLong(),
-                position = block.position.toLong(),
-                created_at = block.createdAt.toEpochMilliseconds(),
-                updated_at = block.updatedAt.toEpochMilliseconds(),
-                properties = block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
+                block.uuid,
+                block.pageId,
+                block.parentId,
+                block.leftId,
+                block.content,
+                block.level.toLong(),
+                block.position.toLong(),
+                block.createdAt.toEpochMilliseconds(),
+                block.updatedAt.toEpochMilliseconds(),
+                block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
             )
             success(Unit)
         } catch (e: Exception) {
@@ -380,5 +380,19 @@ class SqlDelightBlockRepository(
     private fun isHierarchyCacheExpired(rootUuid: String): Boolean {
         val timestamp = hierarchyCacheTimestamps[rootUuid] ?: return true
         return System.currentTimeMillis() - timestamp > hierarchyTtlMs
+    }
+
+    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            queries.deleteBlocksByPageId(pageId)
+            success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun clear() {
+        // No-op for now or delete all?
+        // queries.deleteAllBlocks()
     }
 }

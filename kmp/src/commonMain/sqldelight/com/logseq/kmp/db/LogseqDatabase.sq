@@ -172,6 +172,9 @@ SELECT COUNT(*) FROM blocks;
 deleteBlockById:
 DELETE FROM blocks WHERE id = ?;
 
+deleteBlocksByPageId:
+DELETE FROM blocks WHERE page_id = ?;
+
 insertBlock:
 INSERT INTO blocks (uuid, page_id, parent_id, left_id, content, level, position, created_at, updated_at, properties)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

@@ -56,6 +56,16 @@ interface BlockRepository {
     fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>>
 
     /**
+     * Delete all blocks associated with a specific page
+     */
+    suspend fun deleteBlocksForPage(pageId: Long): Result<Unit>
+
+    /**
+     * Clear all blocks from the repository
+     */
+    suspend fun clear()
+
+    /**
      * Save a new or updated block
      */
     suspend fun saveBlock(block: Block): Result<Unit>

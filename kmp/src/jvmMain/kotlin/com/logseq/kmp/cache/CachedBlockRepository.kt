@@ -131,10 +131,14 @@ class CachedBlockRepository(
         cache.start()
     }
 
-    /**
-     * Stop cache background processes.
-     */
-    fun stop() {
-        cache.stop()
+    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
+        return delegate.deleteBlocksForPage(pageId).also {
+            // cache.invalidatePage(pageId)
+        }
+    }
+
+    override suspend fun clear() {
+        delegate.clear()
+        cache.clear()
     }
 }

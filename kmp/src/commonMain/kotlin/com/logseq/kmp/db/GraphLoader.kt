@@ -369,6 +369,8 @@ class GraphLoader(
             )
             
             if (blocksToSave.isNotEmpty()) {
+                // Clear existing blocks for this page to prevent duplicates/ordering issues on reload
+                blockRepository.deleteBlocksForPage(pageId)
                 blockRepository.saveBlocks(blocksToSave)
             }
         } finally {
@@ -409,6 +411,10 @@ class GraphLoader(
                 updatedAt = now,
                 properties = mergedProperties
             )
+            
+            if (block.content.contains("Rediscovering Paper")) {
+                println("GraphLoader DEBUG: Saving 'Rediscovering Paper' - ID: $blockId, Parent: $parentId, Level: $baseLevel")
+            }
             
             destinationList.add(block)
             previousSiblingId = blockId

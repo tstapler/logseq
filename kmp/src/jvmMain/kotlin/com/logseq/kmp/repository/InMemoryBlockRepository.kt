@@ -1,7 +1,6 @@
 package com.logseq.kmp.repository
 
 import com.logseq.kmp.model.Block
-import com.logseq.kmp.model.Property
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -161,22 +160,18 @@ class InMemoryBlockRepository : BlockRepository {
     }
 
     override suspend fun indentBlock(blockUuid: String): Result<Unit> {
-        // Simple implementation for testing
         return success(Unit)
     }
 
     override suspend fun outdentBlock(blockUuid: String): Result<Unit> {
-        // Simple implementation for testing
         return success(Unit)
     }
 
     override suspend fun moveBlockUp(blockUuid: String): Result<Unit> {
-        // Simple implementation for testing
         return success(Unit)
     }
 
     override suspend fun moveBlockDown(blockUuid: String): Result<Unit> {
-        // Simple implementation for testing
         return success(Unit)
     }
 
@@ -209,5 +204,17 @@ class InMemoryBlockRepository : BlockRepository {
             }
             success(matchingBlocks.sortedBy { it.pageId })
         }
+    }
+
+    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
+        val current = blocks.value.toMutableMap()
+        val toRemove = current.values.filter { it.pageId == pageId }.map { it.uuid }
+        toRemove.forEach { current.remove(it) }
+        blocks.value = current
+        return success(Unit)
+    }
+
+    override suspend fun clear() {
+        blocks.value = emptyMap()
     }
 }

@@ -1,12 +1,14 @@
 package com.logseq.kmp.repository
 
 import com.logseq.kmp.model.Block
-import com.logseq.kmp.model.Page
-import com.logseq.kmp.outliner.TreeOperations
 import com.logseq.kmp.logging.Logger
+import com.logseq.kmp.outliner.TreeOperations
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.Result.Companion.success
 
 /**
@@ -15,6 +17,7 @@ import kotlin.Result.Companion.success
  */
 class DatascriptBlockRepository : BlockRepository {
     private val logger = Logger("BlockRepo")
+    private val writeMutex = Mutex()
 
     private val blocks = MutableStateFlow<Map<String, Block>>(emptyMap())
 
@@ -115,343 +118,6 @@ class DatascriptBlockRepository : BlockRepository {
         }
     }
 
-    override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> {
-        return try {
-            val updateMap = blocks.associateBy { it.uuid }
-            batchUpdateBlocks(updateMap)
-            success(Unit)
-        } catch (e: Exception) {
-            logger.error("Failed to save batch blocks", e)
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun saveBlock(block: Block): Result<Unit> {
-        return try {
-            val current = blocks.value.toMutableMap()
-            current[block.uuid] = block
-            blocks.value = current
-
-            // Update indexes
-            val uuidIndex = byUuid.value.toMutableMap()
-            uuidIndex[block.uuid] = block
-            byUuid.value = uuidIndex
-
-            val pageIndex = byPageId.value.toMutableMap()
-            val existingForPage = pageIndex[block.pageId]?.toMutableList() ?: mutableListOf()
-            existingForPage.removeAll { it.uuid == block.uuid }
-            existingForPage.add(block)
-            pageIndex[block.pageId] = existingForPage
-            byPageId.value = pageIndex
-
-            val parentIndex = byParentId.value.toMutableMap()
-            val existingForParent = parentIndex[block.parentId]?.toMutableList() ?: mutableListOf()
-            existingForParent.removeAll { it.uuid == block.uuid }
-            existingForParent.add(block)
-            parentIndex[block.parentId] = existingForParent
-            byParentId.value = parentIndex
-
-            // logger.debug("Saved block ${block.uuid} to page ${block.pageId}")
-            success(Unit)
-        } catch (e: Exception) {
-            logger.error("Failed to save block ${block.uuid}", e)
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> {
-        logger.info("Deleting block $blockUuid (children=$deleteChildren)")
-        return try {
-            val current = blocks.value.toMutableMap()
-            if (!current.containsKey(blockUuid)) return success(Unit)
-
-            if (deleteChildren) {
-                val uuidsToDelete = mutableListOf(blockUuid)
-                var index = 0
-                while (index < uuidsToDelete.size) {
-                    val currentUuid = uuidsToDelete[index]
-                    val blockData = current[currentUuid] ?: continue
-                    val children = current.values.filter { it.parentId == blockData.id }
-                    children.forEach { child ->
-                        uuidsToDelete.add(child.uuid)
-                    }
-                    index++
-                }
-                uuidsToDelete.forEach { deleteFromIndexes(it, current) }
-            } else {
-                deleteFromIndexes(blockUuid, current)
-            }
-            blocks.value = current
-            success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    private fun deleteFromIndexes(uuid: String, blocksMap: Map<String, Block>) {
-        val block = blocksMap[uuid] ?: return
-
-        val uuidIndex = byUuid.value.toMutableMap()
-        uuidIndex.remove(uuid)
-        byUuid.value = uuidIndex
-
-        val pageIndex = byPageId.value.toMutableMap()
-        pageIndex[block.pageId]?.let { list ->
-            pageIndex[block.pageId] = list.filter { it.uuid != uuid }
-        }
-        byPageId.value = pageIndex
-
-        val parentIndex = byParentId.value.toMutableMap()
-        parentIndex[block.parentId]?.let { list ->
-            parentIndex[block.parentId] = list.filter { it.uuid != uuid }
-        }
-        byParentId.value = parentIndex
-    }
-
-    override suspend fun moveBlock(
-        blockUuid: String,
-        newParentUuid: String?,
-        newPosition: Int
-    ): Result<Unit> {
-        return try {
-            val currentBlocks = blocks.value
-            val block = currentBlocks[blockUuid] ?: return success(Unit)
-            val newParentId = newParentUuid?.let { currentBlocks[it]?.id }
-
-            if (block.parentId == newParentId && block.position == newPosition) {
-                return success(Unit)
-            }
-
-            val oldParentId = block.parentId
-            val oldSiblings = currentBlocks.values
-                .filter { it.parentId == oldParentId && it.uuid != blockUuid }
-                .sortedBy { it.position }
-
-            val newSiblings = if (oldParentId == newParentId) {
-                oldSiblings.toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
-            } else {
-                currentBlocks.values
-                    .filter { it.parentId == newParentId }
-                    .sortedBy { it.position }
-                    .toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
-            }
-
-            val updatedBlocks = mutableMapOf<String, Block>()
-
-            // Update moved block and its descendants
-            val newLevel = if (newParentId == null) 0 else (currentBlocks.values.find { it.id == newParentId }?.level ?: -1) + 1
-            val levelOffset = newLevel - block.level
-            val hierarchy = mutableListOf<BlockWithDepth>()
-            collectHierarchy(currentBlocks, block.uuid, block.level, hierarchy)
-
-            hierarchy.forEach { (b, _) ->
-                updatedBlocks[b.uuid] = b.copy(
-                    parentId = if (b.uuid == blockUuid) newParentId else b.parentId,
-                    level = b.level + levelOffset
-                )
-            }
-
-            // Update siblings in old parent
-            if (oldParentId != newParentId) {
-                TreeOperations.reorderSiblings(oldSiblings).forEach { updatedBlocks[it.uuid] = it }
-            }
-
-            // Update siblings in new parent
-            TreeOperations.reorderSiblings(newSiblings).forEach {
-                // Sibling reordering might include the moved block, so we merge carefully
-                val existing = updatedBlocks[it.uuid]
-                updatedBlocks[it.uuid] = existing?.copy(position = it.position, leftId = it.leftId) ?: it
-            }
-
-            batchUpdateBlocks(updatedBlocks)
-            success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun indentBlock(blockUuid: String): Result<Unit> {
-        return try {
-            val currentBlocks = blocks.value
-            val block = currentBlocks[blockUuid] ?: return success(Unit)
-            val siblings = currentBlocks.values
-                .filter { it.parentId == block.parentId }
-                .sortedBy { it.position }
-
-            val index = siblings.indexOfFirst { it.id == block.id }
-            if (index <= 0) return success(Unit)
-            
-            val newParent = siblings[index - 1]
-            val newParentChildren = currentBlocks.values
-                .filter { it.parentId == newParent.id }
-                .sortedBy { it.position }
-
-            val result = TreeOperations.indent(block, siblings, newParentChildren.lastOrNull())
-            
-            if (result != null) {
-                val updates = result.associateBy { it.uuid }.toMutableMap()
-                
-                // We need to fix positions (integer indexes) for two groups:
-                // 1. The remaining siblings in the old parent
-                val remainingSiblings = siblings.filter { it.id != block.id }.toMutableList()
-                // Update the neighbor if it was changed in 'result'
-                result.forEach { updated -> 
-                    val idx = remainingSiblings.indexOfFirst { it.id == updated.id }
-                    if (idx != -1) remainingSiblings[idx] = updated
-                }
-                
-                // 2. The new siblings in the new parent (block + existing children)
-                // The moved block is now the last child
-                val movedBlock = result.find { it.id == block.id }!!
-                val newSiblings = newParentChildren + movedBlock
-                
-                // Reorder and collect updates
-                TreeOperations.reorderSiblings(remainingSiblings).forEach { updates[it.uuid] = it }
-                TreeOperations.reorderSiblings(newSiblings).forEach { updates[it.uuid] = it }
-
-                batchUpdateBlocks(updates)
-                success(Unit)
-            } else {
-                success(Unit)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun outdentBlock(blockUuid: String): Result<Unit> {
-        return try {
-            val currentBlocks = blocks.value
-            val block = currentBlocks[blockUuid] ?: return success(Unit)
-            if (block.parentId == null) return success(Unit)
-
-            val parent = currentBlocks.values.find { it.id == block.parentId }
-            
-            // Siblings of the block (children of the parent)
-            val siblings = currentBlocks.values
-                .filter { it.parentId == block.parentId }
-                .sortedBy { it.position }
-
-            // Siblings of the parent (where the block will move to)
-            val parentSiblings = currentBlocks.values
-                .filter { it.parentId == parent?.parentId }
-                .sortedBy { it.position }
-
-            val result = TreeOperations.outdent(block, parent, siblings, parentSiblings)
-            if (result != null) {
-                // In this simplified repository, we just save the blocks.
-                // Since this is an in-memory mock, we batch update.
-                // Note: The logic for calculating the new 'position' is slightly off in the moveBlock call below
-                // because TreeOperations now returns a list of blocks with UPDATED relations (leftId/parentId).
-                // It does NOT update 'position' (an integer index).
-                // Ideally, we should just save the updated blocks directly.
-                
-                val updateMap = result.associateBy { it.uuid }
-                batchUpdateBlocks(updateMap)
-                success(Unit)
-            } else {
-                success(Unit)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun moveBlockUp(blockUuid: String): Result<Unit> {
-        return try {
-            val currentBlocks = blocks.value
-            val block = currentBlocks[blockUuid] ?: return success(Unit)
-            val siblings = currentBlocks.values
-                .filter { it.parentId == block.parentId }
-                .sortedBy { it.position }
-
-            val result = TreeOperations.moveUp(block, siblings)
-            if (result != null) {
-                val updates = result.associateBy { it.uuid }.toMutableMap()
-                
-                // Apply the swap to our local list of siblings to reorder positions
-                val updatedSiblings = siblings.map { existing ->
-                    updates[existing.uuid] ?: existing
-                }.sortedBy { it.position }.toMutableList()
-                
-                // Find indexes
-                val idx1 = updatedSiblings.indexOfFirst { it.id == result[0].id }
-                val idx2 = updatedSiblings.indexOfFirst { it.id == result[1].id }
-                
-                // Swap in list
-                if (idx1 != -1 && idx2 != -1) {
-                     val tmp = updatedSiblings[idx1]
-                     updatedSiblings[idx1] = updatedSiblings[idx2]
-                     updatedSiblings[idx2] = tmp
-                }
-                
-                // Re-assign positions
-                TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
-                
-                batchUpdateBlocks(updates)
-                success(Unit)
-            } else {
-                success(Unit)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun moveBlockDown(blockUuid: String): Result<Unit> {
-        return try {
-            val currentBlocks = blocks.value
-            val block = currentBlocks[blockUuid] ?: return success(Unit)
-            val siblings = currentBlocks.values
-                .filter { it.parentId == block.parentId }
-                .sortedBy { it.position }
-
-            val result = TreeOperations.moveDown(block, siblings)
-            if (result != null) {
-                val updates = result.associateBy { it.uuid }.toMutableMap()
-                
-                val updatedSiblings = siblings.map { existing ->
-                    updates[existing.uuid] ?: existing
-                }.toMutableList()
-
-                // Swap in list (naive approach: find by ID and swap)
-                val b1 = result[0]
-                val b2 = result[1]
-                
-                val idx1 = updatedSiblings.indexOfFirst { it.id == b1.id }
-                val idx2 = updatedSiblings.indexOfFirst { it.id == b2.id }
-                
-                 if (idx1 != -1 && idx2 != -1) {
-                     // Swap
-                     val temp = updatedSiblings[idx1]
-                     updatedSiblings[idx1] = updatedSiblings[idx2]
-                     updatedSiblings[idx2] = temp
-                }
-
-                TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
-                
-                batchUpdateBlocks(updates)
-                success(Unit)
-            } else {
-                success(Unit)
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    private fun batchUpdateBlocks(updatedBlocks: Map<String, Block>) {
-        val current = blocks.value.toMutableMap()
-        updatedBlocks.forEach { (uuid, block) -> current[uuid] = block }
-        blocks.value = current
-
-        // Refresh all indexes
-        val allBlocks = current.values
-        byUuid.value = current
-        byPageId.value = allBlocks.groupBy { it.pageId }
-        byParentId.value = allBlocks.groupBy { it.parentId }
-    }
-
     override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
         return blocks.map { map ->
@@ -482,5 +148,321 @@ class DatascriptBlockRepository : BlockRepository {
             }
             success(matchingBlocks.sortedBy { it.pageId })
         }
+    }
+
+    override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val updateMap = blocks.associateBy { it.uuid }
+                batchUpdateBlocks(updateMap)
+                success(Unit)
+            } catch (e: Exception) {
+                logger.error("Failed to save batch blocks", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun saveBlock(block: Block): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val updateMap = mapOf(block.uuid to block)
+                batchUpdateBlocks(updateMap)
+                success(Unit)
+            } catch (e: Exception) {
+                logger.error("Failed to save block ${block.uuid}", e)
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val current = blocks.value.toMutableMap()
+                if (!current.containsKey(blockUuid)) return@withLock success(Unit)
+
+                if (deleteChildren) {
+                    val uuidsToDelete = mutableListOf(blockUuid)
+                    var index = 0
+                    while (index < uuidsToDelete.size) {
+                        val currentUuid = uuidsToDelete[index]
+                        val blockData = current[currentUuid] ?: continue
+                        val children = current.values.filter { it.parentId == blockData.id }
+                        children.forEach { child ->
+                            uuidsToDelete.add(child.uuid)
+                        }
+                        index++
+                    }
+                    uuidsToDelete.forEach { current.remove(it) }
+                } else {
+                    current.remove(blockUuid)
+                }
+                
+                blocks.value = current
+                refreshIndexes(current)
+                success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+    
+    override suspend fun moveBlock(
+        blockUuid: String,
+        newParentUuid: String?,
+        newPosition: Int
+    ): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val currentBlocks = blocks.value
+                val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
+                val newParentId = newParentUuid?.let { currentBlocks[it]?.id }
+
+                if (block.parentId == newParentId && block.position == newPosition) {
+                    return@withLock success(Unit)
+                }
+
+                val oldParentId = block.parentId
+                val oldSiblings = currentBlocks.values
+                    .filter { it.parentId == oldParentId && it.uuid != blockUuid }
+                    .sortedBy { it.position }
+
+                val newSiblings = if (oldParentId == newParentId) {
+                    oldSiblings.toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
+                } else {
+                    currentBlocks.values
+                        .filter { it.parentId == newParentId }
+                        .sortedBy { it.position }
+                        .toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
+                }
+
+                val updatedBlocks = mutableMapOf<String, Block>()
+
+                // Update moved block and its descendants
+                val newLevel = if (newParentId == null) 0 else (currentBlocks.values.find { it.id == newParentId }?.level ?: -1) + 1
+                val levelOffset = newLevel - block.level
+                val hierarchy = mutableListOf<BlockWithDepth>()
+                collectHierarchy(currentBlocks, block.uuid, block.level, hierarchy)
+
+                hierarchy.forEach { (b, _) ->
+                    updatedBlocks[b.uuid] = b.copy(
+                        parentId = if (b.uuid == blockUuid) newParentId else b.parentId,
+                        level = b.level + levelOffset
+                    )
+                }
+
+                // Update siblings in old parent
+                if (oldParentId != newParentId) {
+                    TreeOperations.reorderSiblings(oldSiblings).forEach { updatedBlocks[it.uuid] = it }
+                }
+
+                // Update siblings in new parent
+                TreeOperations.reorderSiblings(newSiblings).forEach {
+                    val existing = updatedBlocks[it.uuid]
+                    updatedBlocks[it.uuid] = existing?.copy(position = it.position, leftId = it.leftId) ?: it
+                }
+
+                batchUpdateBlocks(updatedBlocks)
+                success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun indentBlock(blockUuid: String): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val currentBlocks = blocks.value
+                val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
+                val siblings = currentBlocks.values
+                    .filter { it.parentId == block.parentId }
+                    .sortedBy { it.position }
+
+                val index = siblings.indexOfFirst { it.id == block.id }
+                if (index <= 0) return@withLock success(Unit)
+                
+                val newParent = siblings[index - 1]
+                val newParentChildren = currentBlocks.values
+                    .filter { it.parentId == newParent.id }
+                    .sortedBy { it.position }
+
+                val result = TreeOperations.indent(block, siblings, newParentChildren.lastOrNull())
+                
+                if (result != null) {
+                    val updates = result.associateBy { it.uuid }.toMutableMap()
+                    
+                    val remainingSiblings = siblings.filter { it.id != block.id }.toMutableList()
+                    result.forEach { updated -> 
+                        val idx = remainingSiblings.indexOfFirst { it.id == updated.id }
+                        if (idx != -1) remainingSiblings[idx] = updated
+                    }
+                    
+                    val movedBlock = result.find { it.id == block.id }!!
+                    val newSiblings = newParentChildren + movedBlock
+                    
+                    TreeOperations.reorderSiblings(remainingSiblings).forEach { updates[it.uuid] = it }
+                    TreeOperations.reorderSiblings(newSiblings).forEach { updates[it.uuid] = it }
+
+                    batchUpdateBlocks(updates)
+                    success(Unit)
+                } else {
+                    success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun outdentBlock(blockUuid: String): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val currentBlocks = blocks.value
+                val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
+                if (block.parentId == null) return@withLock success(Unit)
+
+                val parent = currentBlocks.values.find { it.id == block.parentId }
+                
+                val siblings = currentBlocks.values
+                    .filter { it.parentId == block.parentId }
+                    .sortedBy { it.position }
+
+                val parentSiblings = currentBlocks.values
+                    .filter { it.parentId == parent?.parentId }
+                    .sortedBy { it.position }
+
+                val result = TreeOperations.outdent(block, parent, siblings, parentSiblings)
+                if (result != null) {
+                    val updateMap = result.associateBy { it.uuid }
+                    batchUpdateBlocks(updateMap)
+                    success(Unit)
+                } else {
+                    success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun moveBlockUp(blockUuid: String): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val currentBlocks = blocks.value
+                val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
+                val siblings = currentBlocks.values
+                    .filter { it.parentId == block.parentId }
+                    .sortedBy { it.position }
+
+                val result = TreeOperations.moveUp(block, siblings)
+                if (result != null) {
+                    val updates = result.associateBy { it.uuid }.toMutableMap()
+                    
+                    val updatedSiblings = siblings.map { existing ->
+                        updates[existing.uuid] ?: existing
+                    }.sortedBy { it.position }.toMutableList()
+                    
+                    val idx1 = updatedSiblings.indexOfFirst { it.id == result[0].id }
+                    val idx2 = updatedSiblings.indexOfFirst { it.id == result[1].id }
+                    
+                    if (idx1 != -1 && idx2 != -1) {
+                         val tmp = updatedSiblings[idx1]
+                         updatedSiblings[idx1] = updatedSiblings[idx2]
+                         updatedSiblings[idx2] = tmp
+                    }
+                    
+                    TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
+                    
+                    batchUpdateBlocks(updates)
+                    success(Unit)
+                } else {
+                    success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun moveBlockDown(blockUuid: String): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val currentBlocks = blocks.value
+                val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
+                val siblings = currentBlocks.values
+                    .filter { it.parentId == block.parentId }
+                    .sortedBy { it.position }
+
+                val result = TreeOperations.moveDown(block, siblings)
+                if (result != null) {
+                    val updates = result.associateBy { it.uuid }.toMutableMap()
+                    
+                    val updatedSiblings = siblings.map { existing ->
+                        updates[existing.uuid] ?: existing
+                    }.toMutableList()
+
+                    val b1 = result[0]
+                    val b2 = result[1]
+                    
+                    val idx1 = updatedSiblings.indexOfFirst { it.id == b1.id }
+                    val idx2 = updatedSiblings.indexOfFirst { it.id == b2.id }
+                    
+                     if (idx1 != -1 && idx2 != -1) {
+                         val temp = updatedSiblings[idx1]
+                         updatedSiblings[idx1] = updatedSiblings[idx2]
+                         updatedSiblings[idx2] = temp
+                    }
+
+                    TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
+                    
+                    batchUpdateBlocks(updates)
+                    success(Unit)
+                } else {
+                    success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
+        return writeMutex.withLock {
+            try {
+                val current = blocks.value.toMutableMap()
+                val toRemove = current.values.filter { it.pageId == pageId }.map { it.uuid }
+                toRemove.forEach { current.remove(it) }
+                blocks.value = current
+                refreshIndexes(current)
+                success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    override suspend fun clear() {
+        writeMutex.withLock {
+            blocks.value = emptyMap()
+            byUuid.value = emptyMap()
+            byPageId.value = emptyMap()
+            byParentId.value = emptyMap()
+        }
+    }
+
+    private fun batchUpdateBlocks(updatedBlocks: Map<String, Block>) {
+        val current = blocks.value.toMutableMap()
+        updatedBlocks.forEach { (uuid, block) -> current[uuid] = block }
+        blocks.value = current
+        refreshIndexes(current)
+    }
+    
+    private fun refreshIndexes(currentBlocks: Map<String, Block>) {
+        val allBlocks = currentBlocks.values
+        byUuid.value = currentBlocks
+        byPageId.value = allBlocks.groupBy { it.pageId }
+        byParentId.value = allBlocks.groupBy { it.parentId }
     }
 }

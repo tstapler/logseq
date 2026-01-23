@@ -56,6 +56,22 @@ class JournalsViewModel(
             val result = blockRepository.getBlocksForPage(page.id).first()
             val blocks = result.getOrNull() ?: emptyList()
             if (blocks.isNotEmpty()) {
+                // DEBUG: Check for orphaned blocks on specific page
+                if (page.name == "2026_01_21") {
+                    println("DEBUG: Loaded ${blocks.size} blocks for page 2026_01_21")
+                    val rediscovering = blocks.find { it.content.contains("Rediscovering Paper") }
+                    if (rediscovering != null) {
+                        println("DEBUG: Found 'Rediscovering Paper'. ID=${rediscovering.id}, ParentID=${rediscovering.parentId}")
+                        val parent = blocks.find { it.id == rediscovering.parentId }
+                        if (parent == null) {
+                            println("DEBUG: ERROR - Parent block (ID=${rediscovering.parentId}) NOT FOUND in loaded blocks!")
+                        } else {
+                            println("DEBUG: Parent found: '${parent.content.take(20)}...'")
+                        }
+                    } else {
+                        println("DEBUG: 'Rediscovering Paper' block NOT FOUND in loaded blocks.")
+                    }
+                }
                 newBlocks[page.id] = blocks
             }
         }
