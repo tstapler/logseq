@@ -38,6 +38,7 @@ data class AppState(
     val journalPages: List<Page> = emptyList(),
     val favoritePages: List<Page> = emptyList(),
     val recentPages: List<Page> = emptyList(),
+    val editingBlockId: String? = null,
     // Debug settings
     val isDebugMode: Boolean = false
 ) {

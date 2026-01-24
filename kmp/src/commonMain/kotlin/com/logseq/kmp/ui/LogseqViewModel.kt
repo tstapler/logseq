@@ -3,6 +3,7 @@ package com.logseq.kmp.ui
 import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.logging.Logger
+import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.platform.PlatformSettings
@@ -211,6 +212,47 @@ class LogseqViewModel(
         }
     }
 
+    fun requestEditBlock(blockUuid: String?) {
+        _uiState.update { it.copy(editingBlockId = blockUuid) }
+    }
+
+    fun addNewBlock(currentBlockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(currentBlockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val siblingsResult = blockRepository.getBlockSiblings(currentBlockUuid).first()
+            val siblings = siblingsResult.getOrNull() ?: emptyList()
+
+            val newPosition = currentBlock.position + 1
+            
+            // Shift siblings
+            val siblingsToShift = siblings.filter { it.position >= newPosition }
+            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
+
+            val now = kotlinx.datetime.Clock.System.now()
+            val newBlock = Block(
+                id = generateBlockId(),
+                uuid = generateUuid(),
+                pageId = currentBlock.pageId,
+                parentId = currentBlock.parentId,
+                leftId = currentBlock.id,
+                content = "",
+                level = currentBlock.level,
+                position = newPosition,
+                createdAt = now,
+                updatedAt = now,
+                properties = emptyMap(),
+                isLoaded = true
+            )
+
+            val blocksToSave = updatedSiblings + newBlock
+            blockRepository.saveBlocks(blocksToSave)
+            
+            requestEditBlock(newBlock.uuid)
+        }
+    }
+
     fun navigateTo(screen: Screen, addToHistory: Boolean = true) {
         _uiState.update { state ->
             val newHistory = if (addToHistory) {
@@ -395,6 +437,11 @@ class LogseqViewModel(
     private var pageIdCounter = System.currentTimeMillis()
     private fun generatePageId(): Long = pageIdCounter++
 
+    private var blockIdCounter = System.currentTimeMillis()
+    private fun generateBlockId(): Long = blockIdCounter++
+
+    // requestEditBlock and addNewBlock were duplicated here - removing the second definitions
+    
     /**
      * Save a block's content change and persist to disk via GraphWriter
      */

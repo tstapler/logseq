@@ -190,10 +190,61 @@ class JournalsViewModel(
             }
         }
     }
+
+    fun requestEditBlock(blockUuid: String?) {
+        _uiState.update { it.copy(editingBlockId = blockUuid) }
+    }
+
+    private var blockIdCounter = System.currentTimeMillis()
+    private fun generateBlockId(): Long = blockIdCounter++
+    
+    private fun generateUuid(): String {
+        val chars = "0123456789abcdef"
+        fun randomHex(length: Int) = (1..length).map { chars.random() }.joinToString("")
+        return "${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}"
+    }
+
+    fun addNewBlock(currentBlockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(currentBlockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val siblingsResult = blockRepository.getBlockSiblings(currentBlockUuid).first()
+            val siblings = siblingsResult.getOrNull() ?: emptyList()
+
+            val newPosition = currentBlock.position + 1
+            
+            // Shift siblings
+            val siblingsToShift = siblings.filter { it.position >= newPosition }
+            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
+
+            val now = kotlinx.datetime.Clock.System.now()
+            val newBlock = Block(
+                id = generateBlockId(),
+                uuid = generateUuid(),
+                pageId = currentBlock.pageId,
+                parentId = currentBlock.parentId,
+                leftId = currentBlock.id,
+                content = "",
+                level = currentBlock.level,
+                position = newPosition,
+                createdAt = now,
+                updatedAt = now,
+                properties = emptyMap(),
+                isLoaded = true
+            )
+
+            val blocksToSave = updatedSiblings + newBlock
+            blockRepository.saveBlocks(blocksToSave)
+            
+            requestEditBlock(newBlock.uuid)
+        }
+    }
 }
 
 data class JournalsUiState(
     val pages: List<Page> = emptyList(),
     val blocks: Map<Long, List<Block>> = emptyMap(),
-    val loadingPageIds: Set<Long> = emptySet()
+    val loadingPageIds: Set<Long> = emptySet(),
+    val editingBlockId: String? = null
 )

@@ -30,9 +30,11 @@ fun JournalsView(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var editingBlockId by remember { mutableStateOf<String?>(null) }
+    val editingBlockId = uiState.editingBlockId
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope() // For repository calls
+
+    // Infinite scroll detection
 
     // Infinite scroll detection
     val shouldLoadMore = remember {
@@ -72,23 +74,24 @@ fun JournalsView(
                     blocks = blockList,
                     isDebugMode = isDebugMode,
                     editingBlockId = editingBlockId,
-                    onStartEditing = { blockId -> editingBlockId = blockId },
-                    onStopEditing = { editingBlockId = null },
+                    onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
+                    onStopEditing = { viewModel.requestEditBlock(null) },
                     onContentChange = { blockId, newContent ->
                         onContentChange(blockId, newContent, page)
                     },
                     onLinkClick = onLinkClick,
+                    onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
                     onIndent = { blockUuid ->
-                        scope.launch { viewModel.indentBlock(blockUuid) }
+                        viewModel.indentBlock(blockUuid)
                     },
                     onOutdent = { blockUuid ->
-                        scope.launch { viewModel.outdentBlock(blockUuid) }
+                        viewModel.outdentBlock(blockUuid)
                     },
                     onMoveUp = { blockUuid ->
-                        scope.launch { viewModel.moveBlockUp(blockUuid) }
+                        viewModel.moveBlockUp(blockUuid)
                     },
                     onMoveDown = { blockUuid ->
-                        scope.launch { viewModel.moveBlockDown(blockUuid) }
+                        viewModel.moveBlockDown(blockUuid)
                     },
                     onLoadContent = { pageId -> viewModel.loadPageContent(pageId) }
                 )
@@ -134,6 +137,7 @@ private fun JournalEntry(
     onStopEditing: () -> Unit,
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
+    onNewBlock: (String) -> Unit,
     onIndent: (String) -> Unit,
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
@@ -173,6 +177,7 @@ private fun JournalEntry(
                 onStopEditing = onStopEditing,
                 onContentChange = onContentChange,
                 onLinkClick = onLinkClick,
+                onNewBlock = onNewBlock,
                 onIndent = onIndent,
                 onOutdent = onOutdent,
                 onMoveUp = onMoveUp,

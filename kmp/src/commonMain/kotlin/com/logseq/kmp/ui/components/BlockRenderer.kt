@@ -44,6 +44,7 @@ fun BlockRenderer(
     onStopEditing: () -> Unit,
     onContentChange: (String) -> Unit,
     onLinkClick: (String) -> Unit,
+    onNewBlock: (String) -> Unit,
     onLoadContent: () -> Unit = {},
     onToggleCollapse: () -> Unit = {},
     onIndent: () -> Unit = {},
@@ -157,6 +158,14 @@ fun BlockRenderer(
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             when (event.key) {
+                                Key.Enter -> {
+                                    if (event.isShiftPressed) {
+                                        false
+                                    } else {
+                                        onNewBlock(block.uuid)
+                                        true
+                                    }
+                                }
                                 Key.Tab -> {
                                     if (event.isShiftPressed) {
                                         onOutdent()
@@ -321,6 +330,7 @@ fun BlockList(
     onStopEditing: () -> Unit,
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
+    onNewBlock: (String) -> Unit,
     onLoadContent: (Long) -> Unit = {},
     onIndent: (String) -> Unit = {},
     onOutdent: (String) -> Unit = {},
@@ -378,6 +388,7 @@ fun BlockList(
                     onStopEditing = onStopEditing,
                     onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
                     onLinkClick = onLinkClick,
+                    onNewBlock = onNewBlock,
                     onLoadContent = { onLoadContent(block.pageId) },
                     onToggleCollapse = {
                         collapsedBlocks = if (isCollapsed) {
