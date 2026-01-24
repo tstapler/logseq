@@ -45,6 +45,7 @@ fun BlockRenderer(
     onContentChange: (String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
+    onBackspace: () -> Unit = {},
     onLoadContent: () -> Unit = {},
     onToggleCollapse: () -> Unit = {},
     onIndent: () -> Unit = {},
@@ -164,6 +165,14 @@ fun BlockRenderer(
                                     } else {
                                         onNewBlock(block.uuid)
                                         true
+                                    }
+                                }
+                                Key.Backspace -> {
+                                    if (textFieldValue.text.isEmpty()) {
+                                        onBackspace()
+                                        true
+                                    } else {
+                                        false
                                     }
                                 }
                                 Key.Tab -> {
@@ -331,6 +340,7 @@ fun BlockList(
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
+    onBackspace: (String) -> Unit = {}, // uuid
     onLoadContent: (Long) -> Unit = {},
     onIndent: (String) -> Unit = {},
     onOutdent: (String) -> Unit = {},
@@ -389,6 +399,7 @@ fun BlockList(
                     onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
                     onLinkClick = onLinkClick,
                     onNewBlock = onNewBlock,
+                    onBackspace = { onBackspace(block.uuid) },
                     onLoadContent = { onLoadContent(block.pageId) },
                     onToggleCollapse = {
                         collapsedBlocks = if (isCollapsed) {

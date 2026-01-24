@@ -253,6 +253,44 @@ class LogseqViewModel(
         }
     }
 
+    /**
+     * Add a new block to the end of a page
+     */
+    fun addBlockToPage(pageUuid: String) {
+        scope.launch {
+            val pageResult = pageRepository.getPageByUuid(pageUuid).first()
+            val page = pageResult.getOrNull() ?: return@launch
+
+            val blocksResult = blockRepository.getBlocksForPage(page.id).first()
+            val blocks = blocksResult.getOrNull() ?: emptyList()
+            
+            // Filter only top-level blocks (no parent)
+            val topLevelBlocks = blocks.filter { it.parentId == null }.sortedBy { it.position }
+            val lastBlock = topLevelBlocks.lastOrNull()
+            
+            val newPosition = (lastBlock?.position ?: 0) + 1
+            val now = kotlinx.datetime.Clock.System.now()
+            
+            val newBlock = Block(
+                id = generateBlockId(),
+                uuid = generateUuid(),
+                pageId = page.id,
+                parentId = null,
+                leftId = lastBlock?.id,
+                content = "",
+                level = 0,
+                position = newPosition,
+                createdAt = now,
+                updatedAt = now,
+                properties = emptyMap(),
+                isLoaded = true
+            )
+
+            blockRepository.saveBlock(newBlock)
+            requestEditBlock(newBlock.uuid)
+        }
+    }
+
     fun navigateTo(screen: Screen, addToHistory: Boolean = true) {
         _uiState.update { state ->
             val newHistory = if (addToHistory) {

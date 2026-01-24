@@ -156,6 +156,7 @@ fun LogseqApp(
                                 appState = appState,
                                 platformSettings = platformSettings,
                                 onSettingsClick = { viewModel.setSettingsVisible(true) },
+                                onNewPageClick = { viewModel.setSearchDialogVisible(true) },
                                 onNavigate = { viewModel.navigateTo(it) },
                                 onThemeChange = { viewModel.setThemeMode(it) },
                                 onLanguageChange = { language -> viewModel.setLanguage(language) },
@@ -328,6 +329,9 @@ fun LogseqApp(
                         },
                         onNavigateToBlock = { uuid ->
                             viewModel.navigateToBlock(uuid)
+                        },
+                        onCreatePage = { name ->
+                            viewModel.navigateToPageByName(name)
                         }
                     )
 

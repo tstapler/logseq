@@ -3,6 +3,8 @@ package com.logseq.kmp.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -22,6 +24,7 @@ fun TopBar(
     appState: AppState,
     platformSettings: PlatformSettings,
     onSettingsClick: () -> Unit,
+    onNewPageClick: () -> Unit,
     onNavigate: (Screen) -> Unit,
     onThemeChange: (LogseqThemeMode) -> Unit,
     onLanguageChange: (Language) -> Unit,
@@ -120,6 +123,10 @@ fun TopBar(
 
         Text(t("menu.help"), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelMedium)
         Spacer(modifier = Modifier.weight(1f))
+
+        IconButton(onClick = onNewPageClick) {
+            Icon(Icons.Default.Add, contentDescription = "New Page", modifier = Modifier.size(18.dp))
+        }
         
         IconButton(onClick = onSettingsClick) {
             Icon(Icons.Default.Settings, contentDescription = t("common.settings"), modifier = Modifier.size(18.dp))

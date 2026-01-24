@@ -55,8 +55,15 @@ class SearchViewModel(
                         }
                         
                         _uiState.update { 
+                            val exactPageMatch = items.any { it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true) }
+                            val resultsWithCreate = if (!exactPageMatch && query.isNotBlank()) {
+                                items + SearchResultItem.CreatePageItem(query)
+                            } else {
+                                items
+                            }
+                            
                             it.copy(
-                                results = items,
+                                results = resultsWithCreate,
                                 isLoading = false
                             ) 
                         }
@@ -82,4 +89,5 @@ sealed class SearchResultItem {
     data class Header(val title: String) : SearchResultItem()
     data class PageItem(val page: Page) : SearchResultItem()
     data class BlockItem(val block: Block) : SearchResultItem()
+    data class CreatePageItem(val query: String) : SearchResultItem()
 }

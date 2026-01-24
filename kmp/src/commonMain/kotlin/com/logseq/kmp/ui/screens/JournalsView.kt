@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.clickable
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
@@ -93,7 +94,9 @@ fun JournalsView(
                     onMoveDown = { blockUuid ->
                         viewModel.moveBlockDown(blockUuid)
                     },
-                    onLoadContent = { pageId -> viewModel.loadPageContent(pageId) }
+                    onLoadContent = { pageId -> viewModel.loadPageContent(pageId) },
+                    onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
+                    onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -143,6 +146,8 @@ private fun JournalEntry(
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
     onLoadContent: (Long) -> Unit,
+    onBackspace: (String) -> Unit,
+    onAddBlockToPage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -156,13 +161,20 @@ private fun JournalEntry(
 
         // Blocks content
         if (blocks.isEmpty()) {
-            // Empty journal placeholder
-            Text(
-                text = "•",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
-            )
+            // Empty journal placeholder - Click to add first block
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onAddBlockToPage(page.uuid) }
+                    .padding(vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Click to write...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
+                )
+            }
         } else {
             // Sort blocks hierarchically for display
             val sortedBlocks = remember(blocks) { 
@@ -182,7 +194,16 @@ private fun JournalEntry(
                 onOutdent = onOutdent,
                 onMoveUp = onMoveUp,
                 onMoveDown = onMoveDown,
-                onLoadContent = onLoadContent
+                onLoadContent = onLoadContent,
+                onBackspace = onBackspace
+            )
+            
+            // Clickable area below blocks to append new block
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp) // Generous touch target
+                    .clickable { onAddBlockToPage(page.uuid) }
             )
         }
     }

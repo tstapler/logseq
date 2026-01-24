@@ -27,10 +27,11 @@ import com.logseq.kmp.ui.screens.SearchViewModel
 @Composable
 fun SearchDialog(
     visible: Boolean,
-    viewModel: SearchViewModel,
     onDismiss: () -> Unit,
     onNavigateToPage: (String) -> Unit,
-    onNavigateToBlock: (String) -> Unit
+    onNavigateToBlock: (String) -> Unit,
+    onCreatePage: (String) -> Unit,
+    viewModel: SearchViewModel
 ) {
     if (!visible) return
 
@@ -102,6 +103,10 @@ fun SearchDialog(
                                             }
                                             is SearchResultItem.BlockItem -> {
                                                 onNavigateToBlock(item.block.uuid)
+                                                onDismiss()
+                                            }
+                                            is SearchResultItem.CreatePageItem -> {
+                                                onCreatePage(item.query)
                                                 onDismiss()
                                             }
                                             else -> {}
@@ -184,6 +189,17 @@ fun SearchDialog(
                                         isSelected = index == selectedIndex,
                                         onClick = {
                                             onNavigateToBlock(item.block.uuid)
+                                            onDismiss()
+                                        }
+                                    )
+                                }
+                                is SearchResultItem.CreatePageItem -> {
+                                    SearchResultRow(
+                                        title = "Create page \"${item.query}\"",
+                                        subtitle = "New Page",
+                                        isSelected = index == selectedIndex,
+                                        onClick = {
+                                            onCreatePage(item.query)
                                             onDismiss()
                                         }
                                     )
