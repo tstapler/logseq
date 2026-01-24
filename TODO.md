@@ -4,7 +4,7 @@
 - **Migration State**: Feature Implementation Phase - Building Logseq feature parity
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
 - **Recent Activity**: Implemented journals view, wiki links, edit/view mode, content display
-- **Last Updated**: January 21, 2026
+- **Last Updated**: January 23, 2026
 - **Current Focus**: Feature Parity with Logseq
 
 ## Build Status
@@ -86,12 +86,14 @@ kmp/
 - [ ] Task 2.2: Indent/outdent blocks (2h)
 - [x] Task 2.3: Collapse/expand blocks (1h)
 - [ ] Task 2.4: Drag-and-drop reordering (3h)
+- [ ] Task 2.5: Mobile Block Toolbar (2h)
 
 #### Story 3: Page Management (Planned) - [View Plan](docs/tasks/page-management.md)
 - [x] Task 3.1: Create new page from wiki link (1h)
 - [ ] Task 3.2: Delete page with confirmation (1h)
 - [ ] Task 3.3: Rename page with reference updates (2h)
 - [ ] Task 3.4: Page properties panel (2h)
+- [ ] Task 3.5: Explicit Page Creation UI (2h)
 
 #### Story 4: Search & Query System (Planned) - [View Plan](docs/tasks/search-system.md)
 - [ ] Task 4.1: SQLite FTS5 Implementation (2h)
@@ -104,6 +106,11 @@ kmp/
 - [x] Task 5.2: UI Infinite Scroll Integration (3h)
 - [x] Task 5.3: Lazy Reference Loading (2h)
 - [x] Task 5.4: Metadata-Only Initial Graph Load (3h)
+
+#### Story 6: Android Readiness (Planned) - [View Plan](docs/tasks/android-readiness.md)
+- [ ] Task 6.1: Mobile Block Toolbar (2h)
+- [ ] Task 6.2: Touch-Friendly Drag & Drop (2h)
+- [ ] Task 6.3: Quick Capture / New Page UI (2h)
 
 ### 🎯 COMPLETED TASKS
 - [x] **Feat: Metadata-Only Initial Graph Load** (Jan 22, 2026)
@@ -203,7 +210,7 @@ Markdown Files → GraphLoader → Repositories (In-Memory) → UI Components
 
 ---
 
-*Last Updated: January 21, 2026*
+*Last Updated: January 23, 2026*
 *Framework: Kotlin Multiplatform 2.0.21 with Compose Desktop 1.7.1*
 
 - [x] [KMP Markdown Parser Parity Plan](docs/tasks/kmp-markdown-parity.md)

@@ -73,6 +73,17 @@ The core of Logseq is its outliner capability. Users need to structure their tho
     - Use `Modifier.onPreviewKeyEvent` to detect keys.
     - Return `true` to consume the event.
 
+#### Task 1.3: Mobile Block Toolbar [2h]
+- **Objective**: Provide on-screen controls for indentation and reordering (Essential for Android).
+- **Context Boundary**:
+    - `kmp/src/commonMain/kotlin/com/logseq/kmp/ui/components/MobileToolbar.kt` (New)
+    - `kmp/src/commonMain/kotlin/com/logseq/kmp/ui/screens/JournalsView.kt`
+- **Implementation**:
+    - Create a row of icon buttons: [Indent] [Outdent] [Move Up] [Move Down].
+    - Show this toolbar above the soft keyboard when a block is focused.
+    - Connect to `LogseqViewModel` block operations.
+    - *See [docs/tasks/android-readiness.md](docs/tasks/android-readiness.md) for more details.*
+
 ### Story 2: Visual Feedback
 
 #### Task 2.1: Tree Visualization [2h]

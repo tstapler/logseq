@@ -141,6 +141,20 @@ Users need to organize their knowledge graph by renaming pages as concepts evolv
         -   `blockRepository.saveBlocks(updatedBlocks)`.
 - **Validation**: Unit tests covering collision scenarios and reference updates.
 
+### Story 3: Quick Capture & Creation
+
+#### Task 3.1: Explicit Page Creation UI [2h]
+- **Objective**: Allow creating a new page immediately (Quick Capture).
+- **Context Boundary**:
+    - `kmp/src/commonMain/kotlin/com/logseq/kmp/ui/components/TopBar.kt`
+    - `kmp/src/commonMain/kotlin/com/logseq/kmp/ui/components/CommandPalette.kt`
+- **Implementation**:
+    - Add "New Page" button to TopBar.
+    - Show input dialog for page name.
+    - Call `PageService.createPage(name)` (needs implementation).
+    - Navigate to new page.
+    - *See [docs/tasks/android-readiness.md](docs/tasks/android-readiness.md) for more details.*
+
 ## 5. Known Issues & Risks
 
 ### 🐛 Concurrency Risk: User Editing During Rename [SEVERITY: Medium]
