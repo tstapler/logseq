@@ -8,10 +8,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.ui.components.BlockList
+import com.logseq.kmp.ui.components.MobileBlockToolbar
 import kotlinx.coroutines.launch
 
 /**
@@ -49,58 +51,73 @@ fun JournalsView(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        contentPadding = PaddingValues(vertical = 16.dp)
+    Box(
+        modifier = modifier.fillMaxSize()
     ) {
-        items(
-            items = uiState.pages,
-            key = { page -> page.id }
-        ) { page ->
-            val blockList = uiState.blocks[page.id] ?: emptyList()
-            
-            JournalEntry(
-                page = page,
-                blocks = blockList,
-                isDebugMode = isDebugMode,
-                editingBlockId = editingBlockId,
-                onStartEditing = { blockId -> editingBlockId = blockId },
-                onStopEditing = { editingBlockId = null },
-                onContentChange = { blockId, newContent ->
-                    onContentChange(blockId, newContent, page)
-                },
-                onLinkClick = onLinkClick,
-                onIndent = { blockUuid ->
-                    scope.launch { viewModel.indentBlock(blockUuid) }
-                },
-                onOutdent = { blockUuid ->
-                    scope.launch { viewModel.outdentBlock(blockUuid) }
-                },
-                onMoveUp = { blockUuid ->
-                    scope.launch { viewModel.moveBlockUp(blockUuid) }
-                },
-                onMoveDown = { blockUuid ->
-                    scope.launch { viewModel.moveBlockDown(blockUuid) }
-                },
-                onLoadContent = { pageId -> viewModel.loadPageContent(pageId) }
-            )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
+        ) {
+            items(
+                items = uiState.pages,
+                key = { page -> page.id }
+            ) { page ->
+                val blockList = uiState.blocks[page.id] ?: emptyList()
+                
+                JournalEntry(
+                    page = page,
+                    blocks = blockList,
+                    isDebugMode = isDebugMode,
+                    editingBlockId = editingBlockId,
+                    onStartEditing = { blockId -> editingBlockId = blockId },
+                    onStopEditing = { editingBlockId = null },
+                    onContentChange = { blockId, newContent ->
+                        onContentChange(blockId, newContent, page)
+                    },
+                    onLinkClick = onLinkClick,
+                    onIndent = { blockUuid ->
+                        scope.launch { viewModel.indentBlock(blockUuid) }
+                    },
+                    onOutdent = { blockUuid ->
+                        scope.launch { viewModel.outdentBlock(blockUuid) }
+                    },
+                    onMoveUp = { blockUuid ->
+                        scope.launch { viewModel.moveBlockUp(blockUuid) }
+                    },
+                    onMoveDown = { blockUuid ->
+                        scope.launch { viewModel.moveBlockDown(blockUuid) }
+                    },
+                    onLoadContent = { pageId -> viewModel.loadPageContent(pageId) }
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            )
-        }
-        
-        // Loading indicator at the bottom
-        item {
-            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                // We could show a spinner here if we exposed isLoading from ViewModel
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+            }
+            
+            // Loading indicator at the bottom
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    // We could show a spinner here if we exposed isLoading from ViewModel
+                }
             }
         }
+
+        MobileBlockToolbar(
+            editingBlockId = editingBlockId,
+            onIndent = { blockId -> scope.launch { viewModel.indentBlock(blockId) } },
+            onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
+            onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
+            onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .imePadding()
+        )
     }
 }
 

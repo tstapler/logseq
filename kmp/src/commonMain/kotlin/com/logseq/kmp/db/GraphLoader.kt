@@ -12,6 +12,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SimplePageRepository
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.performance.PerformanceMonitor
+import com.logseq.kmp.util.FileUtils
 import com.logseq.kmp.util.UuidGenerator
 import kotlinx.datetime.Clock
 import kotlinx.coroutines.*
@@ -70,6 +71,10 @@ class GraphLoader(
             val pagesDir = "$graphPath/pages"
             val journalsDir = "$graphPath/journals"
 
+            // Pre-scan cleanup: Sanitize filenames to ensure cross-platform compatibility
+            sanitizeDirectory(pagesDir)
+            sanitizeDirectory(journalsDir)
+
             loadDirectory(pagesDir, onProgress, ParseMode.FULL)
             loadDirectory(journalsDir, onProgress, ParseMode.FULL)
 
@@ -113,6 +118,11 @@ class GraphLoader(
 
             val pagesDir = "$graphPath/pages"
             val journalsDir = "$graphPath/journals"
+
+            // Pre-scan cleanup: Sanitize filenames
+            // We do this synchronously/sequentially before loading to avoid race conditions
+            sanitizeDirectory(pagesDir)
+            sanitizeDirectory(journalsDir)
 
             // Phase 1: Load immediate journals for fast startup
             val phase1Start = Clock.System.now()
@@ -274,6 +284,52 @@ class GraphLoader(
             logger.debug("Background loaded $loadedCount remaining journals")
         } finally {
             PerformanceMonitor.endTrace("loadRemainingJournals")
+        }
+    }
+
+    private suspend fun sanitizeDirectory(path: String) {
+        if (!fileSystem.directoryExists(path)) return
+        
+        val files = fileSystem.listFiles(path).filter { it.endsWith(".md") }
+        for (fileName in files) {
+            val nameWithoutExt = fileName.removeSuffix(".md")
+            
+            // Roundtrip check: Decode -> Sanitize
+            // If the current filename matches the sanitized version of its decoded self, it is stable/safe.
+            // If not, it means the filename contains unsafe characters (like :) that need migration.
+            
+            val decodedName = FileUtils.decodeFileName(nameWithoutExt)
+            val expectedName = FileUtils.sanitizeFileName(decodedName)
+            
+            // Note: On case-insensitive file systems (Windows/Mac), case differences might strictly match or not.
+            // FileUtils handles content chars.
+            
+            if (nameWithoutExt != expectedName) {
+                // Filename needs sanitization
+                val oldPath = "$path/$fileName"
+                val newPath = "$path/$expectedName.md"
+                
+                if (fileSystem.fileExists(newPath)) {
+                    logger.warn("Skipping sanitization for '$fileName' -> '$expectedName.md' because target already exists.")
+                } else {
+                    try {
+                        val content = fileSystem.readFile(oldPath)
+                        if (content != null) {
+                            if (fileSystem.writeFile(newPath, content)) {
+                                if (fileSystem.deleteFile(oldPath)) {
+                                    logger.info("Sanitized filename: '$fileName' -> '$expectedName.md'")
+                                } else {
+                                    logger.error("Failed to delete old file: $oldPath")
+                                }
+                            } else {
+                                logger.error("Failed to write new file: $newPath")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.error("Error sanitizing file: $oldPath", e)
+                    }
+                }
+            }
         }
     }
 

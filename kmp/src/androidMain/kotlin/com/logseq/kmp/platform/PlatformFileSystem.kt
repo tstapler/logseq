@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.Environment
 import java.io.File
 
-actual class PlatformFileSystem actual constructor() {
+actual class PlatformFileSystem actual constructor() : FileSystem {
     private var context: Context? = null
     private val maxPathLength = 4096
     private val maxFileSize = 100 * 1024 * 1024
@@ -15,11 +15,11 @@ actual class PlatformFileSystem actual constructor() {
         this.context = context
     }
 
-    actual fun getDefaultGraphPath(): String {
+    actual override fun getDefaultGraphPath(): String {
         return "${homeDir}/logseq"
     }
 
-    actual fun expandTilde(path: String): String {
+    actual override fun expandTilde(path: String): String {
         return if (path.startsWith("~")) {
             path.replaceFirst("~", homeDir)
         } else {
@@ -27,7 +27,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun readFile(path: String): String? {
+    actual override fun readFile(path: String): String? {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -40,7 +40,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun writeFile(path: String, content: String): Boolean {
+    actual override fun writeFile(path: String, content: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -57,7 +57,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun listFiles(path: String): List<String> {
+    actual override fun listFiles(path: String): List<String> {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -73,7 +73,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun listDirectories(path: String): List<String> {
+    actual override fun listDirectories(path: String): List<String> {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -89,7 +89,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun fileExists(path: String): Boolean {
+    actual override fun fileExists(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -100,7 +100,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun directoryExists(path: String): Boolean {
+    actual override fun directoryExists(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -111,7 +111,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun createDirectory(path: String): Boolean {
+    actual override fun createDirectory(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -125,7 +125,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun deleteFile(path: String): Boolean {
+    actual override fun deleteFile(path: String): Boolean {
         return try {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
@@ -137,7 +137,7 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
     
-    actual fun pickDirectory(): String? = null
+    actual override fun pickDirectory(): String? = null
 
     private fun validatePath(path: String): String {
         require(path.length <= maxPathLength) { "Path exceeds maximum length" }

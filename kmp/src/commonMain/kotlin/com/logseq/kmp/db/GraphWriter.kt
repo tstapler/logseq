@@ -158,26 +158,38 @@ class GraphWriter(
             }
 
             // 2. Blocks
-            // Sort blocks by position to ensure correct order
-            val sortedBlocks = blocks.sortedBy { it.position }
-            
-            sortedBlocks.forEach { block ->
-                // Indentation: 2 spaces per level
-                val indent = "  ".repeat(block.level)
-                append(indent)
-                append("- ")
-                appendLine(block.content)
-                
-                // Block Properties
-                // Write them as indented lines under the block
-                if (block.properties.isNotEmpty()) {
-                    val propIndent = indent + "  "
-                    block.properties.forEach { (key, value) ->
-                        append(propIndent)
-                        appendLine("$key:: $value")
+            // Group blocks by parentId for tree reconstruction
+            val blocksByParent = blocks.groupBy { it.parentId }
+
+            // Recursive function to write blocks
+            fun writeBlocks(parentId: Long?) {
+                val siblings = blocksByParent[parentId] ?: return
+                val sortedSiblings = siblings.sortedBy { it.position }
+
+                sortedSiblings.forEach { block ->
+                    // Indentation: 2 spaces per level
+                    val indent = "  ".repeat(block.level)
+                    append(indent)
+                    append("- ")
+                    appendLine(block.content)
+
+                    // Block Properties
+                    // Write them as indented lines under the block
+                    if (block.properties.isNotEmpty()) {
+                        val propIndent = indent + "  "
+                        block.properties.forEach { (key, value) ->
+                            append(propIndent)
+                            appendLine("$key:: $value")
+                        }
                     }
+
+                    // Recursively write children
+                    writeBlocks(block.id)
                 }
             }
+
+            // Start with root blocks (parentId = null)
+            writeBlocks(null)
         }
 
         // 3. Path Resolution

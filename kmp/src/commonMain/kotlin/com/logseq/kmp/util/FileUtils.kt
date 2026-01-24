@@ -50,4 +50,58 @@ object FileUtils {
 
         return sanitized.ifEmpty { "Untitled" }
     }
+
+    /**
+     * Decodes a sanitized filename back to the original page title.
+     * Reverses the percent-encoding applied by sanitizeFileName.
+     * 
+     * Handles standard percent-encoding (%XX).
+     * Note: This implementation focuses on the specific characters encoded by sanitizeFileName
+     * and assumes UTF-8 compatibility for standard URL encoding if present.
+     */
+    fun decodeFileName(name: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        val len = name.length
+        while (i < len) {
+            val c = name[i]
+            if (c == '%' && i + 2 < len) {
+                val hex = name.substring(i + 1, i + 3)
+                try {
+                    // Parse hex to int
+                    val code = hex.toInt(16)
+                    // Check if it's a valid ASCII char we likely encoded
+                    // Simple cast to Char works for ASCII (0-127) and extended Latin-1 (0-255)
+                    sb.append(code.toChar())
+                    i += 3
+                    continue
+                } catch (e: NumberFormatException) {
+                    // Not valid hex, treat as literal %
+                }
+            }
+            sb.append(c)
+            i++
+        }
+        
+        // Remove Windows trailing underscore if it looks like a reserved name was sanitized
+        var decoded = sb.toString()
+        // If we appended '_', removing it is ambiguous unless we know it was reserved.
+        // e.g. "CON_" -> "CON". "CON_TEXT" -> "CON_TEXT".
+        // sanitizeFileName adds "_" only if name IS reserved.
+        // So if decoded name is "CON_", we should revert to "CON"? 
+        // But user might have named page "CON_".
+        // Ideally, we shouldn't strip it blindly. 
+        // However, Logseq usually treats filename as source of truth.
+        // If "CON_" exists, page name is "CON_".
+        // If we map "CON" -> "CON_", then reading "CON_" -> "CON_" is safe/stable.
+        // It just means you can't have a page named "CON" exactly in the UI, it becomes "CON_".
+        // This is a common trade-off. I will NOT attempt to strip the underscore to avoid ambiguity.
+        
+        // Handle trailing encoded dots/spaces?
+        // My decoder handles %20 -> ' ' and %2E -> '.'.
+        // So "Page%20" decodes to "Page ".
+        // This restores the original trailing space.
+        
+        return decoded
+    }
 }
