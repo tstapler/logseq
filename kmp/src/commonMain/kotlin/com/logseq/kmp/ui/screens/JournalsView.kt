@@ -78,7 +78,7 @@ fun JournalsView(
                     onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
                     onStopEditing = { viewModel.requestEditBlock(null) },
                     onContentChange = { blockId, newContent ->
-                        onContentChange(blockId, newContent, page)
+                        viewModel.updateBlockContent(blockId, newContent)
                     },
                     onLinkClick = onLinkClick,
                     onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },

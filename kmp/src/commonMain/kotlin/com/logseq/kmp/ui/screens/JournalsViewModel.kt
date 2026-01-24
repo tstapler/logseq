@@ -306,7 +306,6 @@ class JournalsViewModel(
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
             
             // Only handle if block is empty
-            if (currentBlock.content.isNotEmpty()) return@launch
             
             val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
             val siblings = siblingsResult.getOrNull()?.sortedBy { it.position } ?: return@launch

@@ -212,6 +212,12 @@ class LogseqViewModel(
         }
     }
 
+    fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int) {
+        scope.launch {
+            blockRepository.moveBlock(blockUuid, newParentUuid, newPosition)
+        }
+    }
+
     fun requestEditBlock(blockUuid: String?) {
         _uiState.update { it.copy(editingBlockId = blockUuid) }
     }
