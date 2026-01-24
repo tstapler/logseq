@@ -32,6 +32,8 @@ fun JournalsView(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val editingBlockId = uiState.editingBlockId
+    val editingCursorIndex = uiState.editingCursorIndex
+    val collapsedBlockIds = uiState.collapsedBlockIds
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope() // For repository calls
 
@@ -75,6 +77,8 @@ fun JournalsView(
                     blocks = blockList,
                     isDebugMode = isDebugMode,
                     editingBlockId = editingBlockId,
+                    editingCursorIndex = editingCursorIndex,
+                    collapsedBlocks = collapsedBlockIds,
                     onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
                     onStopEditing = { viewModel.requestEditBlock(null) },
                     onContentChange = { blockId, newContent ->
@@ -83,6 +87,7 @@ fun JournalsView(
                     onLinkClick = onLinkClick,
                     onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
                     onSplitBlock = { uuid, pos -> viewModel.splitBlock(uuid, pos) },
+                    onMergeBlock = { uuid -> viewModel.mergeBlock(uuid) },
                     onIndent = { blockUuid ->
                         viewModel.indentBlock(blockUuid)
                     },
@@ -97,7 +102,10 @@ fun JournalsView(
                     },
                     onLoadContent = { pageId -> viewModel.loadPageContent(pageId) },
                     onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
-                    onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) }
+                    onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) },
+                    onToggleCollapse = { blockId -> viewModel.toggleBlockCollapse(blockId) },
+                    onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
+                    onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) }
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -137,12 +145,15 @@ private fun JournalEntry(
     blocks: List<Block>, // Passed from ViewModel
     isDebugMode: Boolean,
     editingBlockId: String?,
+    editingCursorIndex: Int?,
+    collapsedBlocks: Set<Long>,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
+    onMergeBlock: (String) -> Unit,
     onIndent: (String) -> Unit,
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
@@ -150,6 +161,9 @@ private fun JournalEntry(
     onLoadContent: (Long) -> Unit,
     onBackspace: (String) -> Unit,
     onAddBlockToPage: (String) -> Unit,
+    onToggleCollapse: (Long) -> Unit,
+    onFocusUp: (String) -> Unit,
+    onFocusDown: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -187,18 +201,24 @@ private fun JournalEntry(
                 blocks = sortedBlocks,
                 isDebugMode = isDebugMode,
                 editingBlockId = editingBlockId,
+                editingCursorIndex = editingCursorIndex,
+                collapsedBlocks = collapsedBlocks,
                 onStartEditing = onStartEditing,
                 onStopEditing = onStopEditing,
                 onContentChange = onContentChange,
                 onLinkClick = onLinkClick,
                 onNewBlock = onNewBlock,
                 onSplitBlock = onSplitBlock,
+                onMergeBlock = onMergeBlock,
                 onIndent = onIndent,
                 onOutdent = onOutdent,
                 onMoveUp = onMoveUp,
                 onMoveDown = onMoveDown,
                 onLoadContent = onLoadContent,
-                onBackspace = onBackspace
+                onBackspace = onBackspace,
+                onToggleCollapse = onToggleCollapse,
+                onFocusUp = onFocusUp,
+                onFocusDown = onFocusDown
             )
             
             // Clickable area below blocks to append new block

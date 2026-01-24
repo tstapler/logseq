@@ -53,6 +53,8 @@ fun BlockRenderer(
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
+    onMergeBlock: (String) -> Unit = {},
+    initialCursorPosition: Int? = null,
     onBackspace: () -> Unit = {},
     onLoadContent: () -> Unit = {},
     onToggleCollapse: () -> Unit = {},
@@ -60,6 +62,8 @@ fun BlockRenderer(
     onOutdent: () -> Unit = {},
     onMoveUp: () -> Unit = {},
     onMoveDown: () -> Unit = {},
+    onFocusUp: () -> Unit = {},
+    onFocusDown: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -67,6 +71,8 @@ fun BlockRenderer(
     var textFieldValue by remember(block.uuid, block.content) {
         mutableStateOf(TextFieldValue(text = block.content))
     }
+    
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     var hasFocused by remember { mutableStateOf(false) }
 
@@ -79,6 +85,9 @@ fun BlockRenderer(
     // Request focus when entering edit mode
     LaunchedEffect(isEditing) {
         if (isEditing) {
+            if (initialCursorPosition != null) {
+                textFieldValue = textFieldValue.copy(selection = TextRange(initialCursorPosition))
+            }
             focusRequester.requestFocus()
         } else {
             hasFocused = false
@@ -198,6 +207,7 @@ fun BlockRenderer(
                     textFieldValue = newValue
                     onContentChange(newValue.text)
                 },
+                onTextLayout = { textLayoutResult = it },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     color = MaterialTheme.colorScheme.onBackground
                 ),
@@ -222,15 +232,12 @@ fun BlockRenderer(
                                     }
                                 }
                                 Key.Backspace -> {
-                                    // Use 'text' instead of 'textFieldValue.text' because textFieldValue might be stale?
-                                    // Or simply debug print to see what's happening.
-                                    // The basic TextField value should be up to date.
-                                    
-                                    // Debug
-                                    // println("Backspace: isEmpty=${textFieldValue.text.isEmpty()} text='${textFieldValue.text}'")
-                                    
-                                    if (textFieldValue.text.isEmpty()) {
-                                        onBackspace()
+                                    if (textFieldValue.selection.collapsed && textFieldValue.selection.start == 0) {
+                                        if (textFieldValue.text.isEmpty()) {
+                                            onBackspace()
+                                        } else {
+                                            onMergeBlock(block.uuid)
+                                        }
                                         true
                                     } else {
                                         false
@@ -249,7 +256,19 @@ fun BlockRenderer(
                                         onMoveUp()
                                         true
                                     } else {
-                                        false
+                                        val selection = textFieldValue.selection
+                                        val layout = textLayoutResult
+                                        if (selection.collapsed && layout != null) {
+                                            val line = layout.getLineForOffset(selection.start)
+                                            if (line == 0) {
+                                                onFocusUp()
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        } else {
+                                            false
+                                        }
                                     }
                                 }
                                 Key.DirectionDown -> {
@@ -257,7 +276,19 @@ fun BlockRenderer(
                                         onMoveDown()
                                         true
                                     } else {
-                                        false
+                                        val selection = textFieldValue.selection
+                                        val layout = textLayoutResult
+                                        if (selection.collapsed && layout != null) {
+                                            val line = layout.getLineForOffset(selection.end)
+                                            if (line == layout.lineCount - 1) {
+                                                onFocusDown()
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        } else {
+                                            false
+                                        }
                                     }
                                 }
                                 else -> false
@@ -396,23 +427,26 @@ fun BlockList(
     blocks: List<Block>,
     isDebugMode: Boolean = false,
     editingBlockId: String?,
+    collapsedBlocks: Set<Long> = emptySet(),
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
+    onMergeBlock: (String) -> Unit = {},
+    editingCursorIndex: Int? = null,
     onBackspace: (String) -> Unit = {}, // uuid
     onLoadContent: (Long) -> Unit = {},
+    onToggleCollapse: (Long) -> Unit = {},
     onIndent: (String) -> Unit = {},
     onOutdent: (String) -> Unit = {},
     onMoveUp: (String) -> Unit = {},
     onMoveDown: (String) -> Unit = {},
+    onFocusUp: (String) -> Unit = {},
+    onFocusDown: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Track collapsed blocks by their ID
-    var collapsedBlocks by remember { mutableStateOf(setOf<Long>()) }
-
     // Build a map of parent ID to children for quick lookup
     val childrenByParent = remember(blocks) {
         blocks.groupBy { it.parentId }
@@ -462,19 +496,17 @@ fun BlockList(
                     onLinkClick = onLinkClick,
                     onNewBlock = onNewBlock,
                     onSplitBlock = onSplitBlock,
+                    onMergeBlock = onMergeBlock,
+                    initialCursorPosition = if (editingBlockId == block.uuid) editingCursorIndex else null,
                     onBackspace = { onBackspace(block.uuid) },
                     onLoadContent = { onLoadContent(block.pageId) },
-                    onToggleCollapse = {
-                        collapsedBlocks = if (isCollapsed) {
-                            collapsedBlocks - block.id
-                        } else {
-                            collapsedBlocks + block.id
-                        }
-                    },
+                    onToggleCollapse = { onToggleCollapse(block.id) },
                     onIndent = { onIndent(block.uuid) },
                     onOutdent = { onOutdent(block.uuid) },
                     onMoveUp = { onMoveUp(block.uuid) },
-                    onMoveDown = { onMoveDown(block.uuid) }
+                    onMoveDown = { onMoveDown(block.uuid) },
+                    onFocusUp = { onFocusUp(block.uuid) },
+                    onFocusDown = { onFocusDown(block.uuid) }
                 )
             }
         }

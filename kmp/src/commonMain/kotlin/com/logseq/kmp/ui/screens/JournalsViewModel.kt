@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import com.logseq.kmp.outliner.BlockSorter
+
 class JournalsViewModel(
     private val pageRepository: SimplePageRepository,
     private val blockRepository: BlockRepository,
@@ -191,11 +193,11 @@ class JournalsViewModel(
         }
     }
 
-    fun requestEditBlock(blockUuid: String?) {
-        _uiState.update { it.copy(editingBlockId = blockUuid) }
+    fun requestEditBlock(blockUuid: String?, cursorIndex: Int? = null) {
+        _uiState.update { it.copy(editingBlockId = blockUuid, editingCursorIndex = cursorIndex) }
     }
 
-    private var blockIdCounter = System.currentTimeMillis()
+    private var blockIdCounter = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     private fun generateBlockId(): Long = blockIdCounter++
     
     private fun generateUuid(): String {
@@ -358,6 +360,46 @@ class JournalsViewModel(
         }
     }
 
+    fun mergeBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
+            val siblings = siblingsResult.getOrNull()?.sortedBy { it.position } ?: return@launch
+
+            val currentIndex = siblings.indexOfFirst { it.id == currentBlock.id }
+
+            if (currentIndex > 0) {
+                val prevBlock = siblings[currentIndex - 1]
+                val newContent = prevBlock.content + currentBlock.content
+                val mergePoint = prevBlock.content.length
+
+                val updatedPrevBlock = prevBlock.copy(content = newContent)
+                blockRepository.saveBlock(updatedPrevBlock)
+
+                blockRepository.deleteBlock(blockUuid)
+
+                val subsequentSiblings = siblings.drop(currentIndex + 1)
+                if (subsequentSiblings.isNotEmpty()) {
+                    val updatedSubsequent = subsequentSiblings.map { it.copy(position = it.position - 1) }
+                    blockRepository.saveBlocks(updatedSubsequent)
+                }
+
+                val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+                val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
+                
+                _uiState.update { state ->
+                    val newBlocks = state.blocks.toMutableMap()
+                    newBlocks[currentBlock.pageId] = pageBlocks
+                    state.copy(blocks = newBlocks)
+                }
+
+                requestEditBlock(prevBlock.uuid, mergePoint)
+            }
+        }
+    }
+
     fun handleBackspace(blockUuid: String) {
         scope.launch {
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
@@ -409,11 +451,82 @@ class JournalsViewModel(
             }
         }
     }
+
+    fun toggleBlockCollapse(blockId: Long) {
+        _uiState.update { state ->
+            val newCollapsed = if (blockId in state.collapsedBlockIds) {
+                state.collapsedBlockIds - blockId
+            } else {
+                state.collapsedBlockIds + blockId
+            }
+            state.copy(collapsedBlockIds = newCollapsed)
+        }
+    }
+
+    fun focusPreviousBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+            
+            val visibleBlocks = getVisibleBlocksForPage(currentBlock.pageId)
+            val currentIndex = visibleBlocks.indexOfFirst { it.uuid == blockUuid }
+            
+            if (currentIndex > 0) {
+                val prevBlock = visibleBlocks[currentIndex - 1]
+                requestEditBlock(prevBlock.uuid, prevBlock.content.length) // Focus end
+            }
+        }
+    }
+
+    fun focusNextBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+            
+            val visibleBlocks = getVisibleBlocksForPage(currentBlock.pageId)
+            val currentIndex = visibleBlocks.indexOfFirst { it.uuid == blockUuid }
+            
+            if (currentIndex != -1 && currentIndex < visibleBlocks.size - 1) {
+                val nextBlock = visibleBlocks[currentIndex + 1]
+                requestEditBlock(nextBlock.uuid, 0) // Focus start
+            }
+        }
+    }
+
+    private fun getVisibleBlocksForPage(pageId: Long): List<Block> {
+        val blocks = _uiState.value.blocks[pageId] ?: return emptyList()
+        val sortedBlocks = BlockSorter.sort(blocks)
+        
+        val collapsedIds = _uiState.value.collapsedBlockIds
+        if (collapsedIds.isEmpty()) return sortedBlocks
+        
+        val childrenByParent = blocks.groupBy { it.parentId }
+        
+        fun getDescendantIds(blockId: Long): Set<Long> {
+            val descendants = mutableSetOf<Long>()
+            val queue = ArrayDeque<Long>()
+            queue.add(blockId)
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                childrenByParent[current]?.forEach { child ->
+                    descendants.add(child.id)
+                    queue.add(child.id)
+                }
+            }
+            return descendants
+        }
+        
+        val hiddenIds = collapsedIds.flatMap { getDescendantIds(it) }.toSet()
+        
+        return sortedBlocks.filter { it.id !in hiddenIds }
+    }
 }
 
 data class JournalsUiState(
     val pages: List<Page> = emptyList(),
     val blocks: Map<Long, List<Block>> = emptyMap(),
     val loadingPageIds: Set<Long> = emptySet(),
-    val editingBlockId: String? = null
+    val editingBlockId: String? = null,
+    val editingCursorIndex: Int? = null,
+    val collapsedBlockIds: Set<Long> = emptySet()
 )
