@@ -82,6 +82,7 @@ fun JournalsView(
                     },
                     onLinkClick = onLinkClick,
                     onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
+                    onSplitBlock = { uuid, pos -> viewModel.splitBlock(uuid, pos) },
                     onIndent = { blockUuid ->
                         viewModel.indentBlock(blockUuid)
                     },
@@ -141,6 +142,7 @@ private fun JournalEntry(
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
+    onSplitBlock: (String, Int) -> Unit,
     onIndent: (String) -> Unit,
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
@@ -190,6 +192,7 @@ private fun JournalEntry(
                 onContentChange = onContentChange,
                 onLinkClick = onLinkClick,
                 onNewBlock = onNewBlock,
+                onSplitBlock = onSplitBlock,
                 onIndent = onIndent,
                 onOutdent = onOutdent,
                 onMoveUp = onMoveUp,

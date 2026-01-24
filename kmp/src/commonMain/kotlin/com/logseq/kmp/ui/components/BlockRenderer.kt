@@ -52,6 +52,7 @@ fun BlockRenderer(
     onContentChange: (String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
+    onSplitBlock: (String, Int) -> Unit,
     onBackspace: () -> Unit = {},
     onLoadContent: () -> Unit = {},
     onToggleCollapse: () -> Unit = {},
@@ -211,7 +212,12 @@ fun BlockRenderer(
                                     if (event.isShiftPressed) {
                                         false
                                     } else {
-                                        onNewBlock(block.uuid)
+                                        val selection = textFieldValue.selection
+                                        if (selection.collapsed && selection.start < textFieldValue.text.length) {
+                                            onSplitBlock(block.uuid, selection.start)
+                                        } else {
+                                            onNewBlock(block.uuid)
+                                        }
                                         true
                                     }
                                 }
@@ -395,6 +401,7 @@ fun BlockList(
     onContentChange: (String, String) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
+    onSplitBlock: (String, Int) -> Unit,
     onBackspace: (String) -> Unit = {}, // uuid
     onLoadContent: (Long) -> Unit = {},
     onIndent: (String) -> Unit = {},
@@ -454,6 +461,7 @@ fun BlockList(
                     onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
                     onLinkClick = onLinkClick,
                     onNewBlock = onNewBlock,
+                    onSplitBlock = onSplitBlock,
                     onBackspace = { onBackspace(block.uuid) },
                     onLoadContent = { onLoadContent(block.pageId) },
                     onToggleCollapse = {

@@ -251,6 +251,64 @@ class JournalsViewModel(
         }
     }
 
+    fun splitBlock(blockUuid: String, cursorPosition: Int) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val fullContent = currentBlock.content
+            // Safety check
+            val safeSplitIndex = cursorPosition.coerceIn(0, fullContent.length)
+            
+            val contentForCurrentBlock = fullContent.substring(0, safeSplitIndex)
+            val contentForNewBlock = fullContent.substring(safeSplitIndex)
+            
+            // Update current block
+            val updatedCurrentBlock = currentBlock.copy(content = contentForCurrentBlock)
+            blockRepository.saveBlock(updatedCurrentBlock)
+            
+            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
+            val siblings = siblingsResult.getOrNull() ?: emptyList()
+
+            val newPosition = currentBlock.position + 1
+            
+            // Shift siblings
+            val siblingsToShift = siblings.filter { it.position >= newPosition }
+            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
+
+            val now = kotlinx.datetime.Clock.System.now()
+            val newBlock = Block(
+                id = generateBlockId(),
+                uuid = generateUuid(),
+                pageId = currentBlock.pageId,
+                parentId = currentBlock.parentId,
+                leftId = currentBlock.id,
+                content = contentForNewBlock,
+                level = currentBlock.level,
+                position = newPosition,
+                createdAt = now,
+                updatedAt = now,
+                properties = emptyMap(),
+                isLoaded = true
+            )
+
+            val blocksToSave = updatedSiblings + newBlock
+            blockRepository.saveBlocks(blocksToSave)
+            
+            // Refresh blocks for the page
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            
+            _uiState.update { state ->
+                val newBlocks = state.blocks.toMutableMap()
+                newBlocks[currentBlock.pageId] = pageBlocks
+                state.copy(blocks = newBlocks)
+            }
+            
+            requestEditBlock(newBlock.uuid)
+        }
+    }
+
     /**
      * Add a new block to the end of a page
      */
