@@ -3,9 +3,9 @@
 ## Current Status
 - **Migration State**: Feature Implementation Phase - Core features complete!
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
-- **Recent Activity**: Completed Stories 1-7: Block References implemented!
+- **Recent Activity**: Completed Stories 1-8: Tags and Block References implemented!
 - **Last Updated**: February 1, 2026
-- **Current Focus**: Polish and Advanced Features (Graph View, Tags)
+- **Current Focus**: Polish and Advanced Features (Graph View)
 
 ## Build Status
 
@@ -119,7 +119,15 @@ kmp/
 - [x] Task 7.2: Repository Lookup by UUID (1h)
 - [x] Task 7.3: UI Rendering of References (2h)
 
+#### Story 8: Tags Support ✅ Complete - [View Plan](docs/tasks/tags-support.md)
+- [x] Task 8.1: Parser Hardening for #tag (1h)
+- [x] Task 8.2: UI Rendering and Interaction (1h)
+
 ### 🎯 COMPLETED TASKS
+- [x] **Feat: Tags Support (#tag)** (Feb 1, 2026)
+  - Parser: Hardened `InlineParser` to strict #tag validation
+  - UI: Added regex rendering for tags in `BlockRenderer`
+  - Interaction: Tags are clickable and navigate to the page
 - [x] **Feat: Block References** (Feb 1, 2026)
   - Parser: Added `((uuid))` syntax support (Token, Lexer, InlineParser)
   - Data: Verified `getBlockByUuid` repository support

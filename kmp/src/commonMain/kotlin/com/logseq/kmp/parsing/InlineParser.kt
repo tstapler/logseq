@@ -175,10 +175,14 @@ class InlineParser(private val source: CharSequence) {
     }
 
     private fun parseTag(token: Token): InlineNode {
-        // #tag
-        val tag = currentToken.text(source).toString()
-        advance()
-        return TagNode(tag)
+        // #tag - only valid if immediately followed by text
+        if (currentToken.type == TokenType.TEXT) {
+            val tag = currentToken.text(source).toString()
+            advance()
+            return TagNode(tag)
+        }
+        // Fallback: just a hash
+        return TextNode("#")
     }
 
     private fun advance() {
