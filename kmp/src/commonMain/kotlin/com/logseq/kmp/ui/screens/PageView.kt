@@ -10,6 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.unit.dp
 import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.db.GraphWriter
@@ -40,6 +43,7 @@ fun PageView(
     isDebugMode: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     // Local state for editing
     var editingBlockId by remember { mutableStateOf<String?>(null) }
@@ -69,7 +73,12 @@ fun PageView(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                },
             contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
         ) {
             // Page header

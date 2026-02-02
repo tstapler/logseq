@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
@@ -36,6 +39,7 @@ fun JournalsView(
     val collapsedBlockIds = uiState.collapsedBlockIds
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope() // For repository calls
+    val focusManager = LocalFocusManager.current
 
     // Infinite scroll detection
 
@@ -63,7 +67,12 @@ fun JournalsView(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                },
             contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
         ) {
             items(
