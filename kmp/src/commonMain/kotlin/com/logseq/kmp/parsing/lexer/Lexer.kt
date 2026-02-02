@@ -60,8 +60,22 @@ class Lexer(private val input: CharSequence) {
         return when (char) {
             '[' -> Token(TokenType.L_BRACKET, start, cursor)
             ']' -> Token(TokenType.R_BRACKET, start, cursor)
-            '(' -> Token(TokenType.L_PAREN, start, cursor)
-            ')' -> Token(TokenType.R_PAREN, start, cursor)
+            '(' -> {
+                if (cursor < length && input[cursor] == '(') {
+                    cursor++
+                    Token(TokenType.BLOCK_REF_OPEN, start, cursor)
+                } else {
+                    Token(TokenType.L_PAREN, start, cursor)
+                }
+            }
+            ')' -> {
+                if (cursor < length && input[cursor] == ')') {
+                    cursor++
+                    Token(TokenType.BLOCK_REF_CLOSE, start, cursor)
+                } else {
+                    Token(TokenType.R_PAREN, start, cursor)
+                }
+            }
             ':' -> Token(TokenType.COLON, start, cursor)
             ' ', '\t', '\r' -> Token(TokenType.WS, start, cursor) // WS not at start of line
             else -> {

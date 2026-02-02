@@ -18,6 +18,8 @@ enum class TokenType {
     R_BRACKET,      // ]
     L_PAREN,        // (
     R_PAREN,        // )
+    BLOCK_REF_OPEN, // ((
+    BLOCK_REF_CLOSE, // ))
     HASH,           // #
     
     // Properties
@@ -38,6 +40,9 @@ data class Token(
     val end: Int
 ) {
     fun text(source: CharSequence): CharSequence {
-        return source.subSequence(start, end)
+        // Bounds check to prevent crashes and provide better error messages
+        val safeStart = start.coerceIn(0, source.length)
+        val safeEnd = end.coerceIn(safeStart, source.length)
+        return source.subSequence(safeStart, safeEnd)
     }
 }

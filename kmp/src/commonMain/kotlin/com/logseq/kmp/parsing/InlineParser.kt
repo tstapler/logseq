@@ -33,7 +33,8 @@ class InlineParser(private val source: CharSequence) {
         return when (token.type) {
             TokenType.TEXT, TokenType.WS, TokenType.COLON, TokenType.NEWLINE -> TextNode(token.text(source).toString())
             TokenType.L_BRACKET -> parseLink(token)
-            TokenType.L_PAREN -> parseBlockRef(token) // Assuming ((...)) starts with (
+            TokenType.L_PAREN -> TextNode("(") // Was parseBlockRef, now handled by BLOCK_REF_OPEN
+            TokenType.BLOCK_REF_OPEN -> parseBlockRef(token)
             TokenType.STAR -> parseEmphasis(token, TokenType.STAR)
             TokenType.UNDERSCORE -> parseEmphasis(token, TokenType.UNDERSCORE)
             TokenType.TILDE -> parseEmphasis(token, TokenType.TILDE)
@@ -83,21 +84,16 @@ class InlineParser(private val source: CharSequence) {
     }
 
     private fun parseBlockRef(token: Token): InlineNode {
-        if (currentToken.type == TokenType.L_PAREN) {
-            // (( detected
+        // Token is BLOCK_REF_OPEN ((
+        val sb = StringBuilder()
+        while (currentToken.type != TokenType.BLOCK_REF_CLOSE && currentToken.type != TokenType.EOF) {
+            sb.append(currentToken.text(source))
             advance()
-            val sb = StringBuilder()
-            while (currentToken.type != TokenType.R_PAREN && currentToken.type != TokenType.EOF) {
-                sb.append(currentToken.text(source))
-                advance()
-            }
-            // Consume ))
-            if (currentToken.type == TokenType.R_PAREN) advance()
-            if (currentToken.type == TokenType.R_PAREN) advance()
-            
-            return BlockRefNode(sb.toString())
         }
-        return TextNode("(")
+        // Consume BLOCK_REF_CLOSE ))
+        if (currentToken.type == TokenType.BLOCK_REF_CLOSE) advance()
+        
+        return BlockRefNode(sb.toString())
     }
 
     private fun parseEmphasis(token: Token, type: TokenType): InlineNode {

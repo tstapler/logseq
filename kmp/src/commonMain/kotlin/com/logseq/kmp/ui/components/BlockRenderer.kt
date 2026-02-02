@@ -4,6 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
@@ -20,10 +24,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
@@ -32,6 +38,25 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.key.*
 import com.logseq.kmp.model.Block
 import kotlin.math.abs
+
+/**
+ * Markdown patterns for parsing various markdown syntax elements
+ */
+object MarkdownPatterns {
+    val boldPattern = Regex("""(\*\*|__)(.+?)\1""")
+    val italicPattern = Regex("""(?<!\*)(\*|_)(?!\1)(.+?)\1""")
+    val codePattern = Regex("""`([^`]+)`""")
+    val strikethroughPattern = Regex("""~~(.+?)~~""")
+    val linkPattern = Regex("""\[([^\]]+)\]\(([^)]+)\)""")
+    val imagePattern = Regex("""!\[([^\]]*)\]\(([^)]+)\)""")
+    val wikiLinkPattern = Regex("""\[\[([^\]]+)\]\]""")
+    val blockRefPattern = Regex("""\(\(([^)]+)\)\)""")
+    // Auto-detect plain URLs - matches http:// or https:// followed by non-whitespace
+    val urlPattern = Regex("""https?://[^\s<>"]+""")
+}
+
+const val WIKI_LINK_TAG = "WIKI_LINK"
+const val BLOCK_REF_TAG = "BLOCK_REF"
 
 /**
  * Renders a block with support for:
@@ -47,6 +72,8 @@ fun BlockRenderer(
     isEditing: Boolean,
     hasChildren: Boolean = false,
     isCollapsed: Boolean = false,
+    textColor: Color = Color.Unspecified,
+    linkColor: Color = MaterialTheme.colorScheme.primary,
     onStartEditing: () -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String) -> Unit,
@@ -64,6 +91,7 @@ fun BlockRenderer(
     onMoveDown: () -> Unit = {},
     onFocusUp: () -> Unit = {},
     onFocusDown: () -> Unit = {},
+    onResolveContent: suspend (String) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -78,6 +106,22 @@ fun BlockRenderer(
 
     var offsetY by remember { mutableStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
+
+    // Resolved block references content
+    val resolvedRefs = remember { mutableStateMapOf<String, String>() }
+
+    // Scan for block refs and fetch content
+    LaunchedEffect(block.content) {
+        MarkdownPatterns.blockRefPattern.findAll(block.content).forEach { match ->
+            val refUuid = match.groupValues[1]
+            if (!resolvedRefs.containsKey(refUuid)) {
+                val content = onResolveContent(refUuid)
+                if (content != null) {
+                    resolvedRefs[refUuid] = content
+                }
+            }
+        }
+    }
 
     val density = LocalDensity.current
     val dragThreshold = remember(density) { with(density) { 48.dp.toPx() } }
@@ -321,21 +365,300 @@ fun BlockRenderer(
             )
         } else {
             // View mode with wiki links
-            // Wrap in a Box to ensure the entire area is clickable even if text is short
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onStartEditing() }
-            ) {
-                WikiLinkText(
-                    text = block.content,
-                    onLinkClick = onLinkClick,
-                    onClick = onStartEditing,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            // WikiLinkText handles both link clicks and regular text clicks internally
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            WikiLinkText(
+                text = block.content,
+                textColor = if (textColor != Color.Unspecified) textColor else MaterialTheme.colorScheme.onBackground,
+                linkColor = linkColor,
+                resolvedRefs = resolvedRefs,
+                onLinkClick = onLinkClick,
+                onUrlClick = { url ->
+                    try {
+                        uriHandler.openUri(url)
+                    } catch (e: Exception) {
+                        // Ignore if can't open URL
+                    }
+                },
+                onClick = onStartEditing,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
         }
     }
+}
+
+/**
+ * Parses the text and extracts markdown elements (images, links, formatting, wiki links)
+ */
+private fun parseMarkdown(
+    text: String,
+    linkColor: Color,
+    textColor: Color,
+): AnnotatedString {
+    val builder = AnnotatedString.Builder()
+    var currentIndex = 0
+    
+    // Process markdown in order of precedence
+    val result = processMarkdownText(text)
+    
+    // Apply wiki link parsing on the processed result
+    return parseWikiLinks(result, linkColor, textColor)
+}
+
+/**
+ * Parses markdown and applies proper styling and annotations
+ */
+private fun parseMarkdownWithStyling(
+    text: String,
+    linkColor: Color,
+    textColor: Color,
+    resolvedRefs: Map<String, String> = emptyMap()
+): AnnotatedString {
+    // 1. Pre-process text to resolve block refs (expand them)
+    val sb = StringBuilder()
+    var lastIndex = 0
+    val refMap = mutableMapOf<IntRange, String>() // Map range in SB to UUID (for styling)
+    
+    MarkdownPatterns.blockRefPattern.findAll(text).forEach { match ->
+        // Append text before match
+        sb.append(text.substring(lastIndex, match.range.first))
+        
+        val refUuid = match.groupValues[1]
+        val content = resolvedRefs[refUuid] ?: "((...))" // Show placeholder if not resolved
+        val start = sb.length
+        sb.append(content)
+        val end = sb.length
+        
+        refMap[start until end] = refUuid
+        lastIndex = match.range.last + 1
+    }
+    sb.append(text.substring(lastIndex))
+    val newText = sb.toString()
+
+    // 2. Build AnnotatedString from newText
+    val builder = AnnotatedString.Builder(newText)
+    val textLength = newText.length
+
+    // Apply base text color
+    if (textColor != Color.Unspecified) {
+        builder.addStyle(SpanStyle(color = textColor), 0, textLength)
+    }
+    
+    // Apply styling for Block Refs
+    refMap.forEach { (range, uuid) ->
+        builder.addStringAnnotation(BLOCK_REF_TAG, uuid, range.first, range.last + 1)
+        builder.addStyle(
+            SpanStyle(
+                color = linkColor,
+                textDecoration = TextDecoration.Underline,
+                fontStyle = FontStyle.Italic,
+                background = Color.Gray.copy(alpha = 0.05f)
+            ),
+            range.first, 
+            range.last + 1
+        )
+    }
+
+    // Helper for safe bounds
+    fun safeRange(start: Int, end: Int): Pair<Int, Int> {
+        val safeStart = start.coerceIn(0, textLength)
+        val safeEnd = end.coerceIn(safeStart, textLength)
+        return safeStart to safeEnd
+    }
+
+    // Apply styling for images
+    MarkdownPatterns.imagePattern.findAll(newText).forEach { match ->
+        val imageUrl = match.groupValues[2]
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStringAnnotation("image", imageUrl, safeStart, safeEnd)
+            builder.addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                safeStart, safeEnd
+            )
+        }
+    }
+
+    // Apply styling for links
+    val markdownLinkRanges = mutableListOf<IntRange>()
+    MarkdownPatterns.linkPattern.findAll(newText).forEach { match ->
+        val linkUrl = match.groupValues[2]
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            markdownLinkRanges.add(match.range)
+            builder.addStringAnnotation("link", linkUrl, safeStart, safeEnd)
+            builder.addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                safeStart, safeEnd
+            )
+        }
+    }
+
+    // Apply styling for plain URLs
+    MarkdownPatterns.urlPattern.findAll(newText).forEach { match ->
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        val isInside = markdownLinkRanges.any { it.contains(safeStart) }
+        if (!isInside && safeStart < safeEnd) {
+            builder.addStringAnnotation("url", match.value, safeStart, safeEnd)
+            builder.addStyle(
+                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+                safeStart, safeEnd
+            )
+        }
+    }
+    
+    // Apply styling for code
+    MarkdownPatterns.codePattern.findAll(newText).forEach { match ->
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStyle(
+                SpanStyle(fontFamily = FontFamily.Monospace, background = Color.Gray.copy(alpha = 0.1f)),
+                safeStart, safeEnd
+            )
+        }
+    }
+    
+    // Apply styling for strikethrough
+    MarkdownPatterns.strikethroughPattern.findAll(newText).forEach { match ->
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStyle(
+                SpanStyle(textDecoration = TextDecoration.LineThrough),
+                safeStart, safeEnd
+            )
+        }
+    }
+    
+    // Apply styling for bold
+    MarkdownPatterns.boldPattern.findAll(newText).forEach { match ->
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStyle(
+                SpanStyle(fontWeight = FontWeight.Bold),
+                safeStart, safeEnd
+            )
+        }
+    }
+    
+    // Apply styling for italic
+    MarkdownPatterns.italicPattern.findAll(newText).forEach { match ->
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStyle(
+                SpanStyle(fontStyle = FontStyle.Italic),
+                safeStart, safeEnd
+            )
+        }
+    }
+    
+    // Apply styling for wiki links
+    MarkdownPatterns.wikiLinkPattern.findAll(newText).forEach { match ->
+        val linkText = match.groupValues[1]
+        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
+        if (safeStart < safeEnd) {
+            builder.addStringAnnotation(WIKI_LINK_TAG, linkText, safeStart, safeEnd)
+            builder.addStyle(
+                SpanStyle(color = linkColor, fontWeight = FontWeight.Medium),
+                safeStart, safeEnd
+            )
+        }
+    }
+
+    return builder.toAnnotatedString()
+}
+
+/**
+ * Applies wiki link styling to an already styled AnnotatedString
+ */
+private fun parseWikiLinksWithStyling(
+    annotatedString: AnnotatedString,
+    linkColor: Color,
+    textColor: Color,
+): AnnotatedString {
+    // Get the plain text to find wiki links
+    val text = annotatedString.text
+    val linkPattern = MarkdownPatterns.wikiLinkPattern
+    val matches = linkPattern.findAll(text)
+
+    val builder = AnnotatedString.Builder(annotatedString)
+    val textLength = text.length
+
+    // Add wiki link styling
+    for (match in matches) {
+        val linkText = match.groupValues[1]
+
+        // Bounds check to prevent out-of-bounds errors
+        val safeStart = match.range.first.coerceIn(0, textLength)
+        val safeEnd = (match.range.last + 1).coerceIn(safeStart, textLength)
+
+        if (safeStart < safeEnd) {
+            // Use addStringAnnotation for existing text ranges (not pushStringAnnotation which only works for appended text)
+            builder.addStringAnnotation(
+                tag = WIKI_LINK_TAG,
+                annotation = linkText,
+                start = safeStart,
+                end = safeEnd
+            )
+            builder.addStyle(
+                style = SpanStyle(
+                    color = linkColor,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = TextDecoration.None,
+                ),
+                start = safeStart,
+                end = safeEnd,
+            )
+        }
+    }
+
+    return builder.toAnnotatedString()
+}
+
+/**
+ * Processes markdown patterns in text and returns final text with annotations
+ */
+private fun processMarkdownText(text: String): String {
+    var processedText = text
+    
+    // Process images first
+    MarkdownPatterns.imagePattern.findAll(processedText).forEach { match ->
+        val imageUrl = match.groupValues[2]
+        val replacement = match.value // Keep original for now, will be styled later
+        processedText = processedText.replace(match.value, replacement)
+    }
+    
+    // Process links
+    MarkdownPatterns.linkPattern.findAll(processedText).forEach { match ->
+        val linkText = match.groupValues[1]
+        val linkUrl = match.groupValues[2]
+        processedText = processedText.replace(match.value, linkText) // Keep only link text
+    }
+    
+    // Process code
+    MarkdownPatterns.codePattern.findAll(processedText).forEach { match ->
+        val codeText = match.groupValues[1]
+        processedText = processedText.replace(match.value, codeText)
+    }
+    
+    // Process strikethrough
+    MarkdownPatterns.strikethroughPattern.findAll(processedText).forEach { match ->
+        val strikethroughText = match.groupValues[1]
+        processedText = processedText.replace(match.value, strikethroughText)
+    }
+    
+    // Process bold
+    MarkdownPatterns.boldPattern.findAll(processedText).forEach { match ->
+        val boldText = match.groupValues[2]
+        processedText = processedText.replace(match.value, boldText)
+    }
+    
+    // Process italic last (to avoid conflicts with bold)
+    MarkdownPatterns.italicPattern.findAll(processedText).forEach { match ->
+        val italicText = match.groupValues[2]
+        processedText = processedText.replace(match.value, italicText)
+    }
+    
+    return processedText
 }
 
 /**
@@ -344,30 +667,58 @@ fun BlockRenderer(
 @Composable
 fun WikiLinkText(
     text: String,
-    onLinkClick: (String) -> Unit,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    textColor: Color,
+    linkColor: Color,
+    modifier: Modifier = Modifier,
+    resolvedRefs: Map<String, String> = emptyMap(),
+    onLinkClick: (String) -> Unit = {},
+    onUrlClick: (String) -> Unit = {},
+    onClick: () -> Unit = {},
 ) {
-    val linkColor = MaterialTheme.colorScheme.primary
-    val textColor = MaterialTheme.colorScheme.onBackground
-
-    val annotatedString = remember(text) {
-        parseWikiLinks(text, linkColor, textColor)
+    val annotatedString = remember(text, linkColor, textColor, resolvedRefs) {
+        parseMarkdownWithStyling(text, linkColor, textColor, resolvedRefs)
     }
 
     ClickableText(
         text = annotatedString,
         onClick = { offset ->
-            // Check if we clicked on a link
+            // Check if we clicked on a wiki link first (highest priority for internal navigation)
             annotatedString.getStringAnnotations(
-                tag = "WIKI_LINK",
+                tag = WIKI_LINK_TAG,
                 start = offset,
                 end = offset
             ).firstOrNull()?.let { annotation ->
                 onLinkClick(annotation.item)
             } ?: run {
-                // Clicked on regular text, enter edit mode
-                onClick()
+                // Check if we clicked on a markdown link [text](url)
+                annotatedString.getStringAnnotations(
+                    tag = "link",
+                    start = offset,
+                    end = offset
+                ).firstOrNull()?.let { annotation ->
+                    onUrlClick(annotation.item)
+                } ?: run {
+                    // Check if we clicked on an auto-linked URL
+                    annotatedString.getStringAnnotations(
+                        tag = "url",
+                        start = offset,
+                        end = offset
+                    ).firstOrNull()?.let { annotation ->
+                        onUrlClick(annotation.item)
+                    } ?: run {
+                        // Check if we clicked on an image
+                        annotatedString.getStringAnnotations(
+                            tag = "image",
+                            start = offset,
+                            end = offset
+                        ).firstOrNull()?.let { annotation ->
+                            onUrlClick(annotation.item)
+                        } ?: run {
+                            // Clicked on regular text, enter edit mode
+                            onClick()
+                        }
+                    }
+                }
             }
         },
         style = MaterialTheme.typography.bodyMedium.copy(
@@ -389,10 +740,22 @@ private fun parseWikiLinks(
         val wikiLinkPattern = """\[\[([^\]]+)\]\]""".toRegex()
         var lastIndex = 0
 
+        // Style for regular text
+        val regularTextStyle = if (textColor != Color.Unspecified) {
+            SpanStyle(color = textColor)
+        } else null
+
         wikiLinkPattern.findAll(text).forEach { matchResult ->
-            // Add text before the link
+            // Add text before the link with proper color
             if (matchResult.range.first > lastIndex) {
-                append(text.substring(lastIndex, matchResult.range.first))
+                val beforeText = text.substring(lastIndex, matchResult.range.first)
+                if (regularTextStyle != null) {
+                    withStyle(regularTextStyle) {
+                        append(beforeText)
+                    }
+                } else {
+                    append(beforeText)
+                }
             }
 
             // Add the link
@@ -412,9 +775,16 @@ private fun parseWikiLinks(
             lastIndex = matchResult.range.last + 1
         }
 
-        // Add remaining text
+        // Add remaining text with proper color
         if (lastIndex < text.length) {
-            append(text.substring(lastIndex))
+            val remainingText = text.substring(lastIndex)
+            if (regularTextStyle != null) {
+                withStyle(regularTextStyle) {
+                    append(remainingText)
+                }
+            } else {
+                append(remainingText)
+            }
         }
     }
 }
@@ -445,6 +815,7 @@ fun BlockList(
     onMoveDown: (String) -> Unit = {},
     onFocusUp: (String) -> Unit = {},
     onFocusDown: (String) -> Unit = {},
+    onResolveContent: suspend (String) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     // Build a map of parent ID to children for quick lookup
@@ -506,7 +877,8 @@ fun BlockList(
                     onMoveUp = { onMoveUp(block.uuid) },
                     onMoveDown = { onMoveDown(block.uuid) },
                     onFocusUp = { onFocusUp(block.uuid) },
-                    onFocusDown = { onFocusDown(block.uuid) }
+                    onFocusDown = { onFocusDown(block.uuid) },
+                    onResolveContent = onResolveContent
                 )
             }
         }

@@ -3,9 +3,9 @@
 ## Current Status
 - **Migration State**: Feature Implementation Phase - Core features complete!
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
-- **Recent Activity**: Completed Stories 1-4, 6: Block editing, Hierarchy, Page management, Search, Android readiness
+- **Recent Activity**: Completed Stories 1-7: Block References implemented!
 - **Last Updated**: February 1, 2026
-- **Current Focus**: Block References and Feature Parity
+- **Current Focus**: Polish and Advanced Features (Graph View, Tags)
 
 ## Build Status
 
@@ -114,12 +114,17 @@ kmp/
 - [x] Task 6.2: Touch-Friendly Drag & Drop (2h) - Drag handle with gesture
 - [x] Task 6.3: Quick Capture / New Page UI (2h) - Floating action button
 
-#### Story 7: Block References (Next Up) - [View Plan](docs/tasks/block-references.md)
-- [ ] Task 7.1: Parser Support for ((uuid)) (1h)
-- [ ] Task 7.2: Repository Lookup by UUID (1h)
-- [ ] Task 7.3: UI Rendering of References (2h)
+#### Story 7: Block References ✅ Complete - [View Plan](docs/tasks/block-references.md)
+- [x] Task 7.1: Parser Support for ((uuid)) (1h)
+- [x] Task 7.2: Repository Lookup by UUID (1h)
+- [x] Task 7.3: UI Rendering of References (2h)
 
 ### 🎯 COMPLETED TASKS
+- [x] **Feat: Block References** (Feb 1, 2026)
+  - Parser: Added `((uuid))` syntax support (Token, Lexer, InlineParser)
+  - Data: Verified `getBlockByUuid` repository support
+  - UI: Added `((uuid))` regex rendering with transclusion (fetches and displays referenced content)
+  - Styling: Distinct italic/underline style for references
 - [x] **Feat: Quick Capture FAB** (Jan 25, 2026)
   - Floating action button in bottom-right corner
   - Quick add to today's journal
@@ -205,7 +210,7 @@ kmp/
 
 ### Medium Priority (User Experience)
 - [x] Keyboard shortcuts (Ctrl+Z, Tab, Enter, Backspace, Ctrl+K, etc.) ✅
-- [ ] Block references `((block-id))`
+- [x] Block references `((block-id))` ✅
 - [ ] Tags `#tag` support
 - [ ] Page aliases
 - [ ] Graph view

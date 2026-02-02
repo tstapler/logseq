@@ -17,6 +17,7 @@ import com.logseq.kmp.editor.commands.EditorCommand
 import com.logseq.kmp.editor.commands.CommandResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +30,7 @@ class LogseqViewModel(
     private val fileSystem: PlatformFileSystem,
     private val pageRepository: SimplePageRepository,
     private val blockRepository: BlockRepository,
+    private val graphLoader: GraphLoader,
     private val graphWriter: GraphWriter,
     private val platformSettings: PlatformSettings,
     private val scope: CoroutineScope,
@@ -135,9 +137,8 @@ class LogseqViewModel(
                     logger.info("Loading graph progressively from: $path")
                     pageRepository.clear()
 
-                    val loader = GraphLoader(fileSystem, pageRepository, blockRepository)
                     withContext(Dispatchers.Default) {
-                        loader.loadGraphProgressive(
+                        graphLoader.loadGraphProgressive(
                             graphPath = path,
                             immediateJournalCount = 10,
                             onProgress = { status ->
@@ -218,8 +219,8 @@ class LogseqViewModel(
         }
     }
 
-    fun requestEditBlock(blockUuid: String?) {
-        _uiState.update { it.copy(editingBlockId = blockUuid) }
+    fun requestEditBlock(blockUuid: String?, cursorIndex: Int? = null) {
+        _uiState.update { it.copy(editingBlockId = blockUuid, editingCursorIndex = cursorIndex) }
     }
 
     fun addNewBlock(currentBlockUuid: String) {
@@ -294,6 +295,196 @@ class LogseqViewModel(
 
             blockRepository.saveBlock(newBlock)
             requestEditBlock(newBlock.uuid)
+        }
+    }
+
+    fun splitBlock(blockUuid: String, cursorPosition: Int) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val fullContent = currentBlock.content
+            val safeSplitIndex = cursorPosition.coerceIn(0, fullContent.length)
+
+            val contentForCurrentBlock = fullContent.substring(0, safeSplitIndex)
+            val contentForNewBlock = fullContent.substring(safeSplitIndex)
+
+            // Update current block
+            val updatedCurrentBlock = currentBlock.copy(content = contentForCurrentBlock)
+            blockRepository.saveBlock(updatedCurrentBlock)
+
+            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
+            val siblings = siblingsResult.getOrNull() ?: emptyList()
+
+            val newPosition = currentBlock.position + 1
+
+            // Shift siblings
+            val siblingsToShift = siblings.filter { it.position >= newPosition }
+            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
+
+            val now = kotlinx.datetime.Clock.System.now()
+            val newBlock = Block(
+                id = generateBlockId(),
+                uuid = generateUuid(),
+                pageId = currentBlock.pageId,
+                parentId = currentBlock.parentId,
+                leftId = currentBlock.id,
+                content = contentForNewBlock,
+                level = currentBlock.level,
+                position = newPosition,
+                createdAt = now,
+                updatedAt = now,
+                properties = emptyMap(),
+                isLoaded = true
+            )
+
+            val blocksToSave = updatedSiblings + newBlock
+            blockRepository.saveBlocks(blocksToSave)
+
+            requestEditBlock(newBlock.uuid)
+        }
+    }
+
+    fun mergeBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            // Get ALL siblings including current block
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val siblings = allBlocks
+                .filter { it.parentId == currentBlock.parentId }
+                .sortedBy { it.position }
+
+            val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
+
+            if (currentIndex > 0) {
+                val prevBlock = siblings[currentIndex - 1]
+                val newContent = prevBlock.content + currentBlock.content
+                val mergePoint = prevBlock.content.length
+
+                val updatedPrevBlock = prevBlock.copy(content = newContent)
+                blockRepository.saveBlock(updatedPrevBlock)
+
+                blockRepository.deleteBlock(blockUuid)
+
+                // Update subsequent siblings
+                val subsequentSiblings = siblings.drop(currentIndex + 1)
+                if (subsequentSiblings.isNotEmpty()) {
+                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = currentIndex + idx,
+                            leftId = if (idx == 0) prevBlock.id else subsequentSiblings[idx - 1].id
+                        )
+                    }
+                    blockRepository.saveBlocks(updatedSubsequent)
+                }
+
+                requestEditBlock(prevBlock.uuid, mergePoint)
+            }
+        }
+    }
+
+    fun handleBackspace(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val siblings = allBlocks
+                .filter { it.parentId == currentBlock.parentId }
+                .sortedBy { it.position }
+
+            val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
+
+            if (currentIndex > 0) {
+                val previousBlock = siblings[currentIndex - 1]
+                blockRepository.deleteBlock(blockUuid)
+
+                val subsequentSiblings = siblings.drop(currentIndex + 1)
+                if (subsequentSiblings.isNotEmpty()) {
+                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = currentIndex + idx,
+                            leftId = if (idx == 0) previousBlock.id else subsequentSiblings[idx - 1].id
+                        )
+                    }
+                    blockRepository.saveBlocks(updatedSubsequent)
+                }
+
+                requestEditBlock(previousBlock.uuid, previousBlock.content.length)
+
+            } else if (currentBlock.parentId != null) {
+                val parent = allBlocks.find { it.id == currentBlock.parentId }
+                blockRepository.deleteBlock(blockUuid)
+
+                val remainingSiblings = siblings.drop(1)
+                if (remainingSiblings.isNotEmpty()) {
+                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = idx,
+                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
+                        )
+                    }
+                    blockRepository.saveBlocks(updatedRemaining)
+                }
+
+                if (parent != null) {
+                    requestEditBlock(parent.uuid, parent.content.length)
+                }
+            } else if (siblings.size > 1) {
+                val nextBlock = siblings[1]
+                blockRepository.deleteBlock(blockUuid)
+
+                val remainingSiblings = siblings.drop(1)
+                val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
+                    block.copy(
+                        position = idx,
+                        leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
+                    )
+                }
+                blockRepository.saveBlocks(updatedRemaining)
+
+                requestEditBlock(nextBlock.uuid, 0)
+            }
+        }
+    }
+
+    fun focusPreviousBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val sortedBlocks = com.logseq.kmp.outliner.BlockSorter.sort(allBlocks)
+
+            val currentIndex = sortedBlocks.indexOfFirst { it.uuid == blockUuid }
+
+            if (currentIndex > 0) {
+                val prevBlock = sortedBlocks[currentIndex - 1]
+                requestEditBlock(prevBlock.uuid, prevBlock.content.length)
+            }
+        }
+    }
+
+    fun focusNextBlock(blockUuid: String) {
+        scope.launch {
+            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
+            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val sortedBlocks = com.logseq.kmp.outliner.BlockSorter.sort(allBlocks)
+
+            val currentIndex = sortedBlocks.indexOfFirst { it.uuid == blockUuid }
+
+            if (currentIndex != -1 && currentIndex < sortedBlocks.size - 1) {
+                val nextBlock = sortedBlocks[currentIndex + 1]
+                requestEditBlock(nextBlock.uuid, 0)
+            }
         }
     }
 
@@ -478,14 +669,22 @@ class LogseqViewModel(
     /**
      * Generate a unique page ID
      */
-    private var pageIdCounter = System.currentTimeMillis()
+    private var pageIdCounter = Clock.System.now().toEpochMilliseconds()
     private fun generatePageId(): Long = pageIdCounter++
 
-    private var blockIdCounter = System.currentTimeMillis()
+    private var blockIdCounter = Clock.System.now().toEpochMilliseconds()
     private fun generateBlockId(): Long = blockIdCounter++
 
     // requestEditBlock and addNewBlock were duplicated here - removing the second definitions
     
+    /**
+     * Get the content of a block by its UUID
+     */
+    suspend fun getBlockContent(blockUuid: String): String? {
+        val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
+        return blockResult.getOrNull()?.content
+    }
+
     /**
      * Save a block's content change and persist to disk via GraphWriter
      */

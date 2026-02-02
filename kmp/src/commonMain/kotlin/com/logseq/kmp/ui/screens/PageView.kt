@@ -1,10 +1,8 @@
 package com.logseq.kmp.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -13,14 +11,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.db.GraphWriter
+import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
+import com.logseq.kmp.outliner.BlockSorter
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SimplePageRepository
 import com.logseq.kmp.ui.LogseqViewModel
-import com.logseq.kmp.ui.editor.EditorView
-import com.logseq.kmp.ui.editor.EditorViewModel
+import com.logseq.kmp.ui.components.BlockList
+import com.logseq.kmp.ui.components.MobileBlockToolbar
 import com.logseq.kmp.ui.i18n.t
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @Composable
 fun PageView(
@@ -28,78 +31,154 @@ fun PageView(
     blockRepository: BlockRepository,
     pageRepository: SimplePageRepository,
     graphWriter: GraphWriter,
+    graphLoader: GraphLoader,
     currentGraphPath: String,
     onToggleFavorite: (Page) -> Unit,
     onRefresh: () -> Unit,
+    onLinkClick: (String) -> Unit,
     viewModel: LogseqViewModel,
-    editorViewModel: EditorViewModel
+    isDebugMode: Boolean = false
 ) {
-    // Load blocks for this page into the EditorViewModel
-    LaunchedEffect(page.id) {
-        editorViewModel.loadPage(page.id)
+    val scope = rememberCoroutineScope()
+
+    // Local state for editing
+    var editingBlockId by remember { mutableStateOf<String?>(null) }
+    var editingCursorIndex by remember { mutableStateOf<Int?>(null) }
+    var collapsedBlockIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
+    // Load blocks for this page
+    var blocks by remember { mutableStateOf<List<Block>>(emptyList()) }
+
+    // Trigger full load if page content hasn't been loaded yet
+    LaunchedEffect(page.id, page.isContentLoaded) {
+        if (!page.isContentLoaded) {
+            graphLoader.loadFullPage(page.id)
+        }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) {
-        // Page header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    // Collect blocks from repository
+    LaunchedEffect(page.id) {
+        blockRepository.getBlocksForPage(page.id).collect { result ->
+            result.onSuccess { loadedBlocks ->
+                blocks = loadedBlocks
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp)
         ) {
-            Text(
-                text = page.name,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            IconButton(onClick = {
-                onToggleFavorite(page)
-            }) {
-                Icon(
-                    imageVector = if (page.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = if (page.isFavorite) "Unfavorite" else "Favorite",
-                    tint = if (page.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // Page header
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = page.name,
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    IconButton(onClick = { onToggleFavorite(page) }) {
+                        Icon(
+                            imageVector = if (page.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (page.isFavorite) "Unfavorite" else "Favorite",
+                            tint = if (page.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (page.namespace != null) {
+                    Text(
+                        text = "${t("common.namespace")}: ${page.namespace}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Blocks content
+            item {
+                if (blocks.isEmpty()) {
+                    // Empty page placeholder
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.addBlockToPage(page.uuid) }
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Click to write...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
+                        )
+                    }
+                } else {
+                    val sortedBlocks = remember(blocks) { BlockSorter.sort(blocks) }
+
+                    BlockList(
+                        blocks = sortedBlocks,
+                        isDebugMode = isDebugMode,
+                        editingBlockId = editingBlockId,
+                        editingCursorIndex = editingCursorIndex,
+                        collapsedBlocks = collapsedBlockIds,
+                        onStartEditing = { blockId -> editingBlockId = blockId },
+                        onStopEditing = { editingBlockId = null },
+                        onContentChange = { blockId, newContent ->
+                            viewModel.saveBlockContent(blockId, newContent, page)
+                        },
+                        onLinkClick = onLinkClick,
+                        onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
+                        onSplitBlock = { uuid, pos -> viewModel.splitBlock(uuid, pos) },
+                        onMergeBlock = { uuid -> viewModel.mergeBlock(uuid) },
+                        onIndent = { blockUuid -> viewModel.indentBlock(blockUuid) },
+                        onOutdent = { blockUuid -> viewModel.outdentBlock(blockUuid) },
+                        onMoveUp = { blockUuid -> viewModel.moveBlockUp(blockUuid) },
+                        onMoveDown = { blockUuid -> viewModel.moveBlockDown(blockUuid) },
+                        onLoadContent = { pageId -> scope.launch { graphLoader.loadFullPage(pageId) } },
+                        onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
+                        onToggleCollapse = { blockId ->
+                            collapsedBlockIds = if (collapsedBlockIds.contains(blockId)) {
+                                collapsedBlockIds - blockId
+                            } else {
+                                collapsedBlockIds + blockId
+                            }
+                        },
+                        onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
+                        onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) },
+                        onResolveContent = { uuid -> viewModel.getBlockContent(uuid) }
+                    )
+
+                    // Clickable area below blocks to append new block
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clickable { viewModel.addBlockToPage(page.uuid) }
+                    )
+                }
             }
         }
 
-        if (page.namespace != null) {
-            Text(
-                text = "${t("common.namespace")}: ${page.namespace}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Editor Area
-        // Replaces the old scrollable Column + BlockList
-        // EditorView manages its own LazyColumn scrolling.
-        Box(modifier = Modifier.weight(1f)) {
-            EditorView(
-                viewModel = editorViewModel,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        
-        // References Panel (kept at bottom, but note: if EditorView consumes scroll, 
-        // we might want this to be PART of EditorView or below it? 
-        // If EditorView is a LazyColumn, this should probably be a footer item in that column 
-        // or a separate UI section below if space permits. 
-        // For now, let's put it below, but this might push it off screen if list is long.
-        // Ideally, EditorView should support a 'footer' composable.
-        // Or we wrap everything in one LazyColumn.
-        // But EditorView assumes full control of LazyColumn for blocks.
-        
-        // Decision: For this migration step, let's keep ReferencesPanel below. 
-        // If EditorView takes weight(1f), it will scroll internally. 
-        // ReferencesPanel might get squeezed or hidden.
-        // Let's leave it as is for now to prove EditorView works.
+        MobileBlockToolbar(
+            editingBlockId = editingBlockId,
+            onIndent = { blockId -> scope.launch { viewModel.indentBlock(blockId) } },
+            onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
+            onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
+            onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .imePadding()
+        )
     }
 }

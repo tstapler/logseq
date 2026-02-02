@@ -17,17 +17,17 @@ Logseq allows blocks to be reused via references. Currently, the KMP implementat
 
 ## Atomic Steps
 
-### 1. Parser Support (1h)
+### 1. Parser Support (1h) ✅
 - **File**: `kmp/src/commonMain/kotlin/com/logseq/kmp/parsing/LogseqParser.kt`
 - **Task**: Update the AST/Parser to recognize `((...))` pattern.
 - **Output**: A new `BlockReference` token or node type in the parsed content.
 
-### 2. Repository Lookup (1h)
+### 2. Repository Lookup (1h) ✅
 - **File**: `shared/src/commonMain/kotlin/logseq/repository/BlockRepository.kt`
 - **Task**: Add `getBlockByUuid(uuid: String): Flow<Block?>` to the interface.
 - **Validation**: Unit test fetching a known block by UUID.
 
-### 3. UI Rendering (2h)
+### 3. UI Rendering (2h) ✅
 - **File**: `kmp/src/commonMain/kotlin/com/logseq/kmp/ui/components/BlockRenderer.kt`
 - **Task**: Update `BlockRenderer` to handle block reference nodes.
 - **Logic**: Use a `LaunchedEffect` or injected provider to fetch the referenced block's content using the UUID.
