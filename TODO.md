@@ -128,6 +128,9 @@ kmp/
   - Parser: Hardened `InlineParser` to strict #tag validation
   - UI: Added regex rendering for tags in `BlockRenderer`
   - Interaction: Tags are clickable and navigate to the page
+- [x] **Fix: Editor Cursor Jumping** (Feb 1, 2026)
+  - Fixed issue where typing would reset cursor to beginning
+  - Improved state synchronization in `BlockRenderer` to handle external updates gracefully
 - [x] **Feat: Block References** (Feb 1, 2026)
   - Parser: Added `((uuid))` syntax support (Token, Lexer, InlineParser)
   - Data: Verified `getBlockByUuid` repository support

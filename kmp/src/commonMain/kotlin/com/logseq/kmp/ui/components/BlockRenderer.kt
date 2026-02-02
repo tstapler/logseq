@@ -98,8 +98,21 @@ fun BlockRenderer(
 ) {
     val focusRequester = remember { FocusRequester() }
 
-    var textFieldValue by remember(block.uuid, block.content) {
+    var textFieldValue by remember(block.uuid) {
         mutableStateOf(TextFieldValue(text = block.content))
+    }
+
+    // Handle external updates to block content (e.g. undo/redo, sync)
+    // Only update if content has actually changed externally to avoid resetting cursor
+    LaunchedEffect(block.content) {
+        if (textFieldValue.text != block.content) {
+            val newSelection = if (textFieldValue.selection.max <= block.content.length) {
+                textFieldValue.selection
+            } else {
+                TextRange(block.content.length)
+            }
+            textFieldValue = TextFieldValue(text = block.content, selection = newSelection)
+        }
     }
     
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
