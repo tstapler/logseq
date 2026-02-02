@@ -1,7 +1,8 @@
 ## 🐛 BUG-004: GraphWriter Corrupts Block Order on Save [SEVERITY: Critical]
 
-**Status**: 🐛 Open
+**Status**: ✅ Fixed (Jan 23, 2026)
 **Discovered**: Jan 23, 2026 during Code Analysis
+**Fixed**: Jan 23, 2026 - Commit `cbb837380`
 **Impact**: Data corruption. Saving a page destroys the block hierarchy and order.
 
 **Reproduction**:
