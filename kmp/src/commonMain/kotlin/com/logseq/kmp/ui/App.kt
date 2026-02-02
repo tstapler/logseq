@@ -2,6 +2,7 @@ package com.logseq.kmp.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,7 +15,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.logging.Logger
@@ -53,6 +60,7 @@ fun LogseqApp(
             fileSystem,
             pageRepository,
             blockRepository,
+            graphLoader,
             graphWriter,
             platformSettings,
             scope
@@ -61,14 +69,6 @@ fun LogseqApp(
         }
     }
     
-    // Create EditorViewModel
-    val editorViewModel = remember {
-        com.logseq.kmp.ui.editor.EditorViewModel(
-            blockRepository,
-            scope
-        )
-    }
-
     // Create JournalsViewModel
     val journalsViewModel = remember {
         com.logseq.kmp.ui.screens.JournalsViewModel(
@@ -104,9 +104,35 @@ fun LogseqApp(
                     }
                 )
             } else {
+                val focusManager = LocalFocusManager.current
+                @OptIn(ExperimentalComposeUiApi::class)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = {
+                                focusManager.clearFocus()
+                            })
+                        }
+                        .onPointerEvent(PointerEventType.Press) { event ->
+                            event.changes.forEach { change ->
+                                when (change.pressed && change.previousPressed.not()) {
+                                    true -> when {
+                                        // Mouse back button (Button 4)
+                                        event.button == PointerButton.Back -> {
+                                            viewModel.goBack()
+                                            change.consume()
+                                        }
+                                        // Mouse forward button (Button 5)
+                                        event.button == PointerButton.Forward -> {
+                                            viewModel.goForward()
+                                            change.consume()
+                                        }
+                                    }
+                                    else -> {}
+                                }
+                            }
+                        }
                         .onKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {
                                 val isMod = keyEvent.isCtrlPressed || keyEvent.isMetaPressed
@@ -161,7 +187,9 @@ fun LogseqApp(
                                 onThemeChange = { viewModel.setThemeMode(it) },
                                 onLanguageChange = { language -> viewModel.setLanguage(language) },
                                 onResetOnboarding = { viewModel.setOnboardingCompleted(false) },
-                                onToggleDebug = { viewModel.toggleDebugMode() }
+                                onToggleDebug = { viewModel.toggleDebugMode() },
+                                onGoBack = { viewModel.goBack() },
+                                onGoForward = { viewModel.goForward() }
                             )
                         },
                         leftSidebar = {
@@ -197,11 +225,13 @@ fun LogseqApp(
                                             blockRepository = blockRepository,
                                             pageRepository = pageRepository,
                                             graphWriter = graphWriter,
+                                            graphLoader = graphLoader,
                                             currentGraphPath = appState.currentGraphPath,
                                             onToggleFavorite = { viewModel.toggleFavorite(it) },
                                             onRefresh = { viewModel.refreshCurrentPage() },
+                                            onLinkClick = { pageName -> viewModel.navigateToPageByName(pageName) },
                                             viewModel = viewModel,
-                                            editorViewModel = editorViewModel
+                                            isDebugMode = appState.isDebugMode
                                         )
                                     }
                                     is Screen.Journals -> {

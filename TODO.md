@@ -131,6 +131,9 @@ kmp/
 - [x] **Fix: Editor Cursor Jumping** (Feb 1, 2026)
   - Fixed issue where typing would reset cursor to beginning
   - Improved state synchronization in `BlockRenderer` to handle external updates gracefully
+- [x] **Fix: Clicking Outside Edit Box** (Feb 1, 2026)
+  - Added global tap handler to clear focus when clicking empty space
+  - Ensures edit mode is exited correctly
 - [x] **Feat: Block References** (Feb 1, 2026)
   - Parser: Added `((uuid))` syntax support (Token, Lexer, InlineParser)
   - Data: Verified `getBlockByUuid` repository support
