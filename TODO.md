@@ -5,14 +5,14 @@
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
 - **Recent Activity**: Completed Stories 1-8: Tags and Block References implemented!
 - **Last Updated**: February 1, 2026
-- **Current Focus**: Polish and Advanced Features (Graph View)
+- **Current Focus**: Wiki Link Autocomplete
 
 ## Build Status
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| JVM/Desktop | ✅ BUILDS | Primary development target |
-| Android | ✅ BUILDS | Warnings only (expect/actual beta) |
+| JVM/Desktop | ❌ FAILING | [See Fix Plan](docs/tasks/fix-build-2026-02-05.md) |
+| Android | ❌ FAILING | Compilation errors |
 | JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
 | iOS | ⏸️ Disabled | Ivy repository issues |
 
@@ -74,6 +74,9 @@ kmp/
 
 ## Active Development
 
+### 🚨 URGENT REPAIRS
+- [ ] **Fix Build Errors** - [View Plan](docs/tasks/fix-build-2026-02-05.md)
+
 ### 🎯 FEATURE PARITY IMPLEMENTATION
 
 #### Story 1: Block Editing ✅ Complete
@@ -122,6 +125,11 @@ kmp/
 #### Story 8: Tags Support ✅ Complete - [View Plan](docs/tasks/tags-support.md)
 - [x] Task 8.1: Parser Hardening for #tag (1h)
 - [x] Task 8.2: UI Rendering and Interaction (1h)
+
+#### Story 9: Wiki Link Autocomplete (Next Up) - [View Plan](docs/tasks/wiki-link-autocomplete.md)
+- [ ] Task 9.1: Trigger Detection in RichTextEditor (1h)
+- [ ] Task 9.2: Autocomplete UI Component (2h)
+- [ ] Task 9.3: Integration and Wiring (1h)
 
 ### 🎯 COMPLETED TASKS
 - [x] **Feat: Tags Support (#tag)** (Feb 1, 2026)
