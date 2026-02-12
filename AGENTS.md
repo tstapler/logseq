@@ -40,6 +40,52 @@ We are migrating all of our logic to the Kotlin Multiplatform app. As functional
 ## Code Guidance
 - Keep in mind: @prompts/review.md
 
+## Kotlin Coroutines and Flow Best Practices (KMP)
+
+### Coroutines
+
+1. **Inject Dispatchers** - Never hardcode `Dispatchers.Default` or `Dispatchers.IO`. Inject them as constructor parameters for testability:
+   ```kotlin
+   class Repository(private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO)
+   ```
+
+2. **Suspend functions must be main-safe** - Classes doing blocking work should use `withContext` internally, not callers.
+
+3. **ViewModel creates coroutines** - Use `viewModelScope.launch {}` in ViewModels rather than exposing suspend functions.
+
+4. **Don't expose mutable types** - Expose `StateFlow<T>` not `MutableStateFlow<T>`:
+   ```kotlin
+   private val _uiState = MutableStateFlow(UiState.Loading)
+   val uiState: StateFlow<UiState> = _uiState
+   ```
+
+5. **Avoid GlobalScope** - Inject `CoroutineScope` as a parameter instead.
+
+6. **Make coroutines cancellable** - Use `ensureActive()` in loops for blocking operations.
+
+7. **Exception handling** - Catch specific exceptions, always rethrow `CancellationException`.
+
+8. **coroutineScope vs supervisorScope** - Use `coroutineScope` for screen-lifecycle work (parallel operations), external scope for app-lifetime work.
+
+### Flow
+
+1. **Flows are cold and lazy** - Producer code runs each time `collect` is called.
+
+2. **Use `flowOn` for context** - Affects upstream operations:
+   ```kotlin
+   flow.map { transform(it) }
+       .flowOn(Dispatchers.Default)  // map runs on Default
+       .collect { }  // collect runs on caller's context
+   ```
+
+3. **Use `catch` for exceptions** - Handle producer errors, can emit fallback values.
+
+4. **Use `callbackFlow` for callbacks** - When emitting from different contexts or callback-based APIs.
+
+5. **Share flows with `shareIn`** - Avoid duplicate producer work for multiple collectors.
+
+6. **Data layer** - Expose `suspend fun` for one-shot calls, `Flow<T>` for data that changes over time.
+
 ## Review Checklist
 - Linters and unit-tests must pass
 - Check the review notes listed in `prompts/review.md`.
