@@ -12,4 +12,5 @@ expect class PlatformFileSystem() : FileSystem {
     override fun createDirectory(path: String): Boolean
     override fun deleteFile(path: String): Boolean
     override fun pickDirectory(): String?
+    override fun getLastModifiedTime(path: String): Long?
 }

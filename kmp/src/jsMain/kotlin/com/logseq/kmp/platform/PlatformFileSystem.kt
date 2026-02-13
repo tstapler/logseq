@@ -70,4 +70,10 @@ actual class PlatformFileSystem actual constructor() {
         console.log("Picking directory not supported in JS yet")
         return null
     }
+
+    actual fun getLastModifiedTime(path: String): Long? {
+        // Browser environment - not supported
+        console.log("Getting last modified time not supported in JS: $path")
+        return null
+    }
 }

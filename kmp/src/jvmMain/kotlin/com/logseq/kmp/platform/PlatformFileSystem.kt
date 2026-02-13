@@ -161,6 +161,21 @@ actual class PlatformFileSystem actual constructor() : FileSystem {
         return selectedPath
     }
 
+    actual override fun getLastModifiedTime(path: String): Long? {
+        return try {
+            val expandedPath = expandTilde(path)
+            val validatedPath = validatePath(expandedPath)
+            val file = File(validatedPath)
+            if (file.exists() && file.isFile) {
+                file.lastModified()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun validatePath(path: String): String {
         require(path.length <= maxPathLength) { "Path exceeds maximum length" }
         require(!path.contains('\u0000')) { "Path contains null bytes" }
