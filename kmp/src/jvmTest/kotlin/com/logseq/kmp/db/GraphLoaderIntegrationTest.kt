@@ -16,19 +16,20 @@ class GraphLoaderIntegrationTest {
 
     private val fileSystem = object : FileSystem {
         val files = mutableMapOf<String, String>()
-        
+
         override fun getDefaultGraphPath(): String = "/docs"
         override fun expandTilde(path: String): String = path
         override fun pickDirectory(): String? = "/graph"
         override fun listDirectories(path: String): List<String> = emptyList()
         override fun fileExists(path: String): Boolean = files.containsKey(path)
-        
+
         override fun directoryExists(path: String): Boolean = true
         override fun listFiles(path: String): List<String> = files.keys.filter { it.startsWith(path) }.map { it.substringAfterLast("/") }
         override fun readFile(path: String): String? = files[path]
         override fun writeFile(path: String, content: String): Boolean { files[path] = content; return true }
         override fun deleteFile(path: String): Boolean { files.remove(path); return true }
         override fun createDirectory(path: String): Boolean { return true }
+        override fun getLastModifiedTime(path: String): Long? = null
     }
 
     private val pageRepository = InMemorySimplePageRepository()

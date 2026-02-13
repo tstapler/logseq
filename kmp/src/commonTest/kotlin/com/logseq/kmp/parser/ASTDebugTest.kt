@@ -2,9 +2,11 @@ package com.logseq.kmp.parser
 
 import org.intellij.markdown.flavours.commonmark.CommonMarkFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser as JetbrainsMarkdownParser
+import kotlin.test.Ignore
 import kotlin.test.Test
 
 class ASTDebugTest {
+    @Ignore("Debug utility - intentionally fails to print AST structure")
     @Test
     fun `debug AST structure`() {
         val input = """

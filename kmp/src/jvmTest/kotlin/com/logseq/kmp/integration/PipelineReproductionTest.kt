@@ -33,6 +33,7 @@ class PipelineReproductionTest {
         override fun createDirectory(path: String) = true
         override fun deleteFile(path: String) = true
         override fun pickDirectory() = null
+        override fun getLastModifiedTime(path: String): Long? = null
     }
 
     private val pageRepository = InMemorySimplePageRepository()

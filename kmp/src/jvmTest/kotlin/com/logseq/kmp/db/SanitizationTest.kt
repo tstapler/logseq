@@ -32,6 +32,7 @@ class SanitizationTest {
             return files.remove(path) != null
         }
         override fun pickDirectory() = null
+        override fun getLastModifiedTime(path: String): Long? = null
     }
 
     private val pageRepository = InMemorySimplePageRepository()

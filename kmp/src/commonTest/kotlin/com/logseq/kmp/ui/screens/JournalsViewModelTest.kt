@@ -33,6 +33,7 @@ class JournalsViewModelTest {
         override fun createDirectory(path: String): Boolean = true
         override fun deleteFile(path: String): Boolean = true
         override fun pickDirectory(): String? = null
+        override fun getLastModifiedTime(path: String): Long? = null
     }
 
     class FakeBlockRepository : BlockRepository {
@@ -91,6 +92,7 @@ class JournalsViewModelTest {
             return Result.success(Unit)
         }
         override suspend fun deletePage(pageUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> = Result.success(Unit)
         override suspend fun toggleFavorite(pageUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun clear() { pages.clear() }
     }
@@ -122,7 +124,8 @@ class JournalsViewModelTest {
         val blockRepo = FakeBlockRepository()
         val fileSystem = FakeFileSystem()
         val graphLoader = GraphLoader(fileSystem, repo, blockRepo)
-        val viewModel = JournalsViewModel(repo, blockRepo, graphLoader, CoroutineScope(Dispatchers.Unconfined))
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val viewModel = JournalsViewModel(repo, blockRepo, graphLoader, scope)
         
         // Initial load (10 pages)
         assertEquals(10, viewModel.uiState.value.pages.size)
