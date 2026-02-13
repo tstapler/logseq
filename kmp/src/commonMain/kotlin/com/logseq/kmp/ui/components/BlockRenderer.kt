@@ -39,6 +39,17 @@ import androidx.compose.ui.input.key.*
 import com.logseq.kmp.model.Block
 import kotlin.math.abs
 
+import androidx.compose.ui.geometry.Rect
+import com.logseq.kmp.ui.screens.SearchResultItem
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import com.logseq.kmp.editor.components.AutocompleteMenu
+
+data class AutocompleteState(
+    val query: String,
+    val cursorRect: Rect
+)
+
 /**
  * Markdown patterns for parsing various markdown syntax elements
  */
@@ -94,12 +105,31 @@ fun BlockRenderer(
     onFocusUp: () -> Unit = {},
     onFocusDown: () -> Unit = {},
     onResolveContent: suspend (String) -> String? = { null },
+    onSearchPages: (String) -> Flow<List<SearchResultItem>> = { emptyFlow() },
     modifier: Modifier = Modifier
 ) {
     val focusRequester = remember { FocusRequester() }
 
     var textFieldValue by remember(block.uuid) {
         mutableStateOf(TextFieldValue(text = block.content))
+    }
+
+    // Autocomplete State
+    var autocompleteState by remember { mutableStateOf<AutocompleteState?>(null) }
+    var searchResults by remember { mutableStateOf<List<SearchResultItem>>(emptyList()) }
+    var selectedIndex by remember { mutableStateOf(0) }
+
+    // Fetch autocomplete results
+    LaunchedEffect(autocompleteState?.query) {
+        val query = autocompleteState?.query
+        if (query != null) {
+            onSearchPages(query).collect { results ->
+                searchResults = results
+                selectedIndex = 0
+            }
+        } else {
+            searchResults = emptyList()
+        }
     }
 
     // Handle external updates to block content (e.g. undo/redo, sync)
@@ -150,6 +180,7 @@ fun BlockRenderer(
             focusRequester.requestFocus()
         } else {
             hasFocused = false
+            autocompleteState = null // Clear autocomplete when exiting edit mode
         }
     }
 
@@ -160,226 +191,331 @@ fun BlockRenderer(
         }
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(start = (block.level * 24).dp, top = 2.dp, bottom = 2.dp)
-            .zIndex(if (isDragging) 1f else 0f)
-            .graphicsLayer {
-                translationY = offsetY
-            },
-        verticalAlignment = Alignment.Top
-    ) {
-        // Drag Handle
-        Icon(
-            imageVector = Icons.Default.DragHandle,
-            contentDescription = "Drag to move",
-            modifier = Modifier
-                .size(18.dp)
-                .padding(end = 4.dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { isDragging = true },
-                        onDragEnd = {
-                            isDragging = false
-                            offsetY = 0f
-                        },
-                        onDragCancel = {
-                            isDragging = false
-                            offsetY = 0f
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            offsetY += dragAmount.y
-                            if (abs(offsetY) > dragThreshold) {
-                                if (offsetY > 0) onMoveDown() else onMoveUp()
-                                offsetY = 0f
-                            }
-                        }
-                    )
+    Box {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(start = (block.level * 24).dp, top = 2.dp, bottom = 2.dp)
+                .zIndex(if (isDragging) 1f else 0f)
+                .graphicsLayer {
+                    translationY = offsetY
                 },
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
-
-        // Collapse/expand indicator (caret)
-        if (hasChildren) {
+            verticalAlignment = Alignment.Top
+        ) {
+            // Drag Handle
             Icon(
-                imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Drag to move",
                 modifier = Modifier
                     .size(18.dp)
-                    .clickable { onToggleCollapse() }
-                    .padding(end = 4.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    .padding(end = 4.dp)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = {
+                                isDragging = false
+                                offsetY = 0f
+                            },
+                            onDragCancel = {
+                                isDragging = false
+                                offsetY = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                offsetY += dragAmount.y
+                                if (abs(offsetY) > dragThreshold) {
+                                    if (offsetY > 0) onMoveDown() else onMoveUp()
+                                    offsetY = 0f
+                                }
+                            }
+                        )
+                    },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
-        } else {
-            Spacer(modifier = Modifier.width(18.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-        }
 
-        // Bullet point (Always shown)
-        Text(
-            text = "•",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(end = 8.dp, top = 2.dp)
-        )
-        
-        // DEBUG: Show level to diagnose indentation issues
-        if (isDebugMode) {
-            Text(
-               text = "L${block.level}",
-               style = MaterialTheme.typography.labelSmall,
-               color = Color.Red
-            )
-        }
+            // Collapse/expand indicator (caret)
+            if (hasChildren) {
+                Icon(
+                    imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { onToggleCollapse() }
+                        .padding(end = 4.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Spacer(modifier = Modifier.width(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+            }
 
-        if (!block.isLoaded) {
+            // Bullet point (Always shown)
             Text(
-                text = "Loading...",
+                text = "•",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(vertical = 4.dp)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 8.dp, top = 2.dp)
             )
-        } else if (isEditing) {
-            // Edit mode
-            BasicTextField(
-                value = textFieldValue,
-                onValueChange = { newValue ->
-                    textFieldValue = newValue
-                    onContentChange(newValue.text)
-                },
-                onTextLayout = { textLayoutResult = it },
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onBackground
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown) {
-                            when (event.key) {
-                                Key.Enter -> {
-                                    if (event.isShiftPressed) {
-                                        false
-                                    } else {
-                                        val selection = textFieldValue.selection
-                                        if (selection.collapsed && selection.start < textFieldValue.text.length) {
-                                            onSplitBlock(block.uuid, selection.start)
-                                        } else {
-                                            onNewBlock(block.uuid)
-                                        }
-                                        true
-                                    }
-                                }
-                                Key.Backspace -> {
-                                    if (textFieldValue.selection.collapsed && textFieldValue.selection.start == 0) {
-                                        if (textFieldValue.text.isEmpty()) {
-                                            onBackspace()
-                                        } else {
-                                            onMergeBlock(block.uuid)
-                                        }
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                                Key.Tab -> {
-                                    if (event.isShiftPressed) {
-                                        onOutdent()
-                                    } else {
-                                        onIndent()
-                                    }
-                                    true
-                                }
-                                Key.DirectionUp -> {
-                                    if (event.isAltPressed) {
-                                        onMoveUp()
-                                        true
-                                    } else {
-                                        val selection = textFieldValue.selection
-                                        val layout = textLayoutResult
-                                        if (selection.collapsed && layout != null) {
-                                            val line = layout.getLineForOffset(selection.start)
-                                            if (line == 0) {
-                                                onFocusUp()
-                                                true
-                                            } else {
-                                                false
-                                            }
-                                        } else {
-                                            false
-                                        }
-                                    }
-                                }
-                                Key.DirectionDown -> {
-                                    if (event.isAltPressed) {
-                                        onMoveDown()
-                                        true
-                                    } else {
-                                        val selection = textFieldValue.selection
-                                        val layout = textLayoutResult
-                                        if (selection.collapsed && layout != null) {
-                                            val line = layout.getLineForOffset(selection.end)
-                                            if (line == layout.lineCount - 1) {
-                                                onFocusDown()
-                                                true
-                                            } else {
-                                                false
-                                            }
-                                        } else {
-                                            false
-                                        }
-                                    }
-                                }
-                                else -> false
+            
+            // DEBUG: Show level to diagnose indentation issues
+            if (isDebugMode) {
+                Text(
+                   text = "L${block.level}",
+                   style = MaterialTheme.typography.labelSmall,
+                   color = Color.Red
+                )
+            }
+
+            if (!block.isLoaded) {
+                Text(
+                    text = "Loading...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else if (isEditing) {
+                // Edit mode
+                BasicTextField(
+                    value = textFieldValue,
+                    onValueChange = { newValue ->
+                        textFieldValue = newValue
+                        onContentChange(newValue.text)
+
+                        // Trigger detection logic
+                        val cursor = newValue.selection.min
+                        val textBeforeCursor = newValue.text.take(cursor)
+                        val match = Regex("\\[\\[([^\\]]*)$").find(textBeforeCursor)
+
+                        if (match != null) {
+                            val query = match.groupValues[1]
+                            val rect = textLayoutResult?.getCursorRect(cursor)
+                            if (rect != null) {
+                                autocompleteState = AutocompleteState(query, rect)
+                            } else {
+                                autocompleteState = null
                             }
                         } else {
-                            false
-                        }
-                    }
-                    .onFocusChanged { focusState ->
-                        if (focusState.isFocused) {
-                            hasFocused = true
-                        }
-                        if (!focusState.isFocused && isEditing && hasFocused) {
-                            onStopEditing()
+                            autocompleteState = null
                         }
                     },
-                decorationBox = { innerTextField ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                MaterialTheme.shapes.small
-                            )
-                            .padding(8.dp)
-                    ) {
-                        innerTextField()
+                    onTextLayout = { textLayoutResult = it },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onBackground
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (autocompleteState != null && searchResults.isNotEmpty()) {
+                                if (event.type == KeyEventType.KeyDown) {
+                                    when (event.key) {
+                                        Key.DirectionUp -> {
+                                            selectedIndex = (selectedIndex - 1 + searchResults.size) % searchResults.size
+                                            true
+                                        }
+                                        Key.DirectionDown -> {
+                                            selectedIndex = (selectedIndex + 1) % searchResults.size
+                                            true
+                                        }
+                                        Key.Enter -> {
+                                            val item = searchResults[selectedIndex]
+                                            val pageName = when (item) {
+                                                is SearchResultItem.PageItem -> item.page.name
+                                                is SearchResultItem.CreatePageItem -> item.query
+                                                else -> null
+                                            }
+                                            
+                                            if (pageName != null) {
+                                                // Replace query with [[Page Name]]
+                                                // Query is matched from `[[`
+                                                val text = textFieldValue.text
+                                                val cursor = textFieldValue.selection.min
+                                                val query = autocompleteState!!.query
+                                                val triggerLength = 2 // [[
+                                                
+                                                val startIndex = cursor - query.length - triggerLength
+                                                if (startIndex >= 0) {
+                                                    val before = text.substring(0, startIndex)
+                                                    val after = text.substring(cursor)
+                                                    val replacement = "[[${pageName}]]"
+                                                    val newText = before + replacement + after
+                                                    val newCursor = startIndex + replacement.length
+                                                    
+                                                    textFieldValue = TextFieldValue(newText, TextRange(newCursor))
+                                                    onContentChange(newText)
+                                                    autocompleteState = null
+                                                }
+                                            }
+                                            true
+                                        }
+                                        Key.Escape -> {
+                                            autocompleteState = null
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                } else false
+                            } else if (event.type == KeyEventType.KeyDown) {
+                                when (event.key) {
+                                    Key.Enter -> {
+                                        if (event.isShiftPressed) {
+                                            false
+                                        } else {
+                                            val selection = textFieldValue.selection
+                                            if (selection.collapsed && selection.start < textFieldValue.text.length) {
+                                                onSplitBlock(block.uuid, selection.start)
+                                            } else {
+                                                onNewBlock(block.uuid)
+                                            }
+                                            true
+                                        }
+                                    }
+                                    Key.Backspace -> {
+                                        if (textFieldValue.selection.collapsed && textFieldValue.selection.start == 0) {
+                                            if (textFieldValue.text.isEmpty()) {
+                                                onBackspace()
+                                            } else {
+                                                onMergeBlock(block.uuid)
+                                            }
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
+                                    Key.Tab -> {
+                                        if (event.isShiftPressed) {
+                                            onOutdent()
+                                        } else {
+                                            onIndent()
+                                        }
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        if (event.isAltPressed) {
+                                            onMoveUp()
+                                            true
+                                        } else {
+                                            val selection = textFieldValue.selection
+                                            val layout = textLayoutResult
+                                            if (selection.collapsed && layout != null) {
+                                                val line = layout.getLineForOffset(selection.start)
+                                                if (line == 0) {
+                                                    onFocusUp()
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                    }
+                                    Key.DirectionDown -> {
+                                        if (event.isAltPressed) {
+                                            onMoveDown()
+                                            true
+                                        } else {
+                                            val selection = textFieldValue.selection
+                                            val layout = textLayoutResult
+                                            if (selection.collapsed && layout != null) {
+                                                val line = layout.getLineForOffset(selection.end)
+                                                if (line == layout.lineCount - 1) {
+                                                    onFocusDown()
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                    }
+                                    else -> false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                hasFocused = true
+                            }
+                            if (!focusState.isFocused && isEditing && hasFocused) {
+                                onStopEditing()
+                            }
+                        },
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                    MaterialTheme.shapes.small
+                                )
+                                .padding(8.dp)
+                        ) {
+                            innerTextField()
+                        }
                     }
-                }
-            )
-        } else {
-            // View mode with wiki links
-            // WikiLinkText handles both link clicks and regular text clicks internally
-            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-            WikiLinkText(
-                text = block.content,
-                textColor = if (textColor != Color.Unspecified) textColor else MaterialTheme.colorScheme.onBackground,
-                linkColor = linkColor,
-                resolvedRefs = resolvedRefs,
-                onLinkClick = onLinkClick,
-                onUrlClick = { url ->
-                    try {
-                        uriHandler.openUri(url)
-                    } catch (e: Exception) {
-                        // Ignore if can't open URL
+                )
+            } else {
+                // View mode with wiki links
+                // WikiLinkText handles both link clicks and regular text clicks internally
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                WikiLinkText(
+                    text = block.content,
+                    textColor = if (textColor != Color.Unspecified) textColor else MaterialTheme.colorScheme.onBackground,
+                    linkColor = linkColor,
+                    resolvedRefs = resolvedRefs,
+                    onLinkClick = onLinkClick,
+                    onUrlClick = { url ->
+                        try {
+                            uriHandler.openUri(url)
+                        } catch (e: Exception) {
+                            // Ignore if can't open URL
+                        }
+                    },
+                    onClick = onStartEditing,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+            }
+        }
+        
+        // Render Autocomplete Menu
+        if (autocompleteState != null && searchResults.isNotEmpty()) {
+            AutocompleteMenu(
+                items = searchResults,
+                selectedIndex = selectedIndex,
+                onItemSelected = { item ->
+                    val pageName = when (item) {
+                        is SearchResultItem.PageItem -> item.page.name
+                        is SearchResultItem.CreatePageItem -> item.query
+                        else -> null
+                    }
+                    
+                    if (pageName != null) {
+                        val text = textFieldValue.text
+                        val cursor = textFieldValue.selection.min
+                        val query = autocompleteState!!.query
+                        val triggerLength = 2 // [[
+                        
+                        val startIndex = cursor - query.length - triggerLength
+                        if (startIndex >= 0) {
+                            val before = text.substring(0, startIndex)
+                            val after = text.substring(cursor)
+                            val replacement = "[[${pageName}]]"
+                            val newText = before + replacement + after
+                            val newCursor = startIndex + replacement.length
+                            
+                            textFieldValue = TextFieldValue(newText, TextRange(newCursor))
+                            onContentChange(newText)
+                            autocompleteState = null
+                        }
                     }
                 },
-                onClick = onStartEditing,
-                modifier = Modifier.weight(1f).fillMaxWidth()
+                onDismiss = { autocompleteState = null },
+                cursorRect = autocompleteState?.cursorRect
             )
         }
     }
@@ -640,6 +776,7 @@ fun BlockList(
     onFocusUp: (String) -> Unit = {},
     onFocusDown: (String) -> Unit = {},
     onResolveContent: suspend (String) -> String? = { null },
+    onSearchPages: (String) -> Flow<List<SearchResultItem>> = { emptyFlow() },
     modifier: Modifier = Modifier
 ) {
     // Build a map of parent ID to children for quick lookup
@@ -702,7 +839,8 @@ fun BlockList(
                     onMoveDown = { onMoveDown(block.uuid) },
                     onFocusUp = { onFocusUp(block.uuid) },
                     onFocusDown = { onFocusDown(block.uuid) },
-                    onResolveContent = onResolveContent
+                    onResolveContent = onResolveContent,
+                    onSearchPages = onSearchPages
                 )
             }
         }

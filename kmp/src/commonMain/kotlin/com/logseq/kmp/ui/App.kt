@@ -60,6 +60,7 @@ fun LogseqApp(
             fileSystem,
             pageRepository,
             blockRepository,
+            searchRepository,
             graphLoader,
             graphWriter,
             platformSettings,

@@ -169,6 +169,8 @@ private fun ReferencePageGroup(
                     )
                     WikiLinkText(
                         text = block.content,
+                        textColor = MaterialTheme.colorScheme.onSurface,
+                        linkColor = MaterialTheme.colorScheme.primary,
                         onLinkClick = onLinkClick,
                         onClick = { /* Could open this specific block */ },
                         modifier = Modifier.weight(1f)

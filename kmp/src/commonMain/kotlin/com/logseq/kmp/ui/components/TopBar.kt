@@ -3,7 +3,8 @@ package com.logseq.kmp.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
@@ -29,7 +30,9 @@ fun TopBar(
     onThemeChange: (LogseqThemeMode) -> Unit,
     onLanguageChange: (Language) -> Unit,
     onResetOnboarding: () -> Unit,
-    onToggleDebug: () -> Unit
+    onToggleDebug: () -> Unit,
+    onGoBack: () -> Unit = {},
+    onGoForward: () -> Unit = {}
 ) {
     var viewMenuExpanded by remember { mutableStateOf(false) }
     var fileMenuExpanded by remember { mutableStateOf(false) }
@@ -122,6 +125,39 @@ fun TopBar(
         }
 
         Text(t("menu.help"), modifier = Modifier.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelMedium)
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // Navigation buttons
+        IconButton(
+            onClick = onGoBack,
+            enabled = appState.canGoBack
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Go Back",
+                modifier = Modifier.size(18.dp),
+                tint = if (appState.canGoBack)
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+            )
+        }
+        IconButton(
+            onClick = onGoForward,
+            enabled = appState.canGoForward
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Go Forward",
+                modifier = Modifier.size(18.dp),
+                tint = if (appState.canGoForward)
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+            )
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         IconButton(onClick = onNewPageClick) {

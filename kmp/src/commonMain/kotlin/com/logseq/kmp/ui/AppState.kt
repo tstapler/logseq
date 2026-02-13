@@ -39,6 +39,7 @@ data class AppState(
     val favoritePages: List<Page> = emptyList(),
     val recentPages: List<Page> = emptyList(),
     val editingBlockId: String? = null,
+    val editingCursorIndex: Int? = null,
     // Debug settings
     val isDebugMode: Boolean = false
 ) {

@@ -112,17 +112,20 @@ class JournalsViewModel(
         scope.launch {
             val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val block = blockResult.getOrNull() ?: return@launch
-            
+
             val updatedBlock = block.copy(content = newContent)
             blockRepository.saveBlock(updatedBlock)
-            
-            // Refresh blocks for the page
-            val pageBlocksResult = blockRepository.getBlocksForPage(block.pageId).first()
-            val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
-            
+
+            // Update just this block in the local state without refreshing from repository
+            // This prevents the UI from resetting during typing
             _uiState.update { state ->
                 val newBlocks = state.blocks.toMutableMap()
-                newBlocks[block.pageId] = pageBlocks
+                val pageBlocks = newBlocks[block.pageId]?.toMutableList() ?: return@update state
+                val blockIndex = pageBlocks.indexOfFirst { it.uuid == blockUuid }
+                if (blockIndex >= 0) {
+                    pageBlocks[blockIndex] = updatedBlock
+                    newBlocks[block.pageId] = pageBlocks
+                }
                 state.copy(blocks = newBlocks)
             }
         }
@@ -131,41 +134,44 @@ class JournalsViewModel(
     fun indentBlock(blockUuid: String) {
         scope.launch {
             blockRepository.indentBlock(blockUuid)
-            refreshBlocksForBlock(blockUuid)
+            refreshBlocksForPage(blockUuid)
         }
     }
 
     fun outdentBlock(blockUuid: String) {
         scope.launch {
             blockRepository.outdentBlock(blockUuid)
-            refreshBlocksForBlock(blockUuid)
+            refreshBlocksForPage(blockUuid)
         }
     }
 
     fun moveBlockUp(blockUuid: String) {
         scope.launch {
             blockRepository.moveBlockUp(blockUuid)
-            refreshBlocksForBlock(blockUuid)
+            refreshBlocksForPage(blockUuid)
         }
     }
 
     fun moveBlockDown(blockUuid: String) {
         scope.launch {
             blockRepository.moveBlockDown(blockUuid)
-            refreshBlocksForBlock(blockUuid)
+            refreshBlocksForPage(blockUuid)
         }
     }
-    
-    private suspend fun refreshBlocksForBlock(blockUuid: String) {
-        val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
-        val block = blockResult.getOrNull() ?: return
-        
-        val pageBlocksResult = blockRepository.getBlocksForPage(block.pageId).first()
-        val pageBlocks = pageBlocksResult.getOrNull() ?: return
-        
+
+    private suspend fun refreshBlocksForPage(blockUuid: String) {
+        // Find the pageId from the current UI state to avoid an extra query
+        val pageId = _uiState.value.blocks.entries
+            .find { (_, blocks) -> blocks.any { it.uuid == blockUuid } }
+            ?.key
+            ?: return
+
+        // Single query to get updated blocks
+        val pageBlocks = blockRepository.getBlocksForPage(pageId).first().getOrNull() ?: return
+
         _uiState.update { state ->
             val newBlocks = state.blocks.toMutableMap()
-            newBlocks[block.pageId] = pageBlocks
+            newBlocks[pageId] = pageBlocks
             state.copy(blocks = newBlocks)
         }
     }
@@ -365,10 +371,14 @@ class JournalsViewModel(
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
 
-            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
-            val siblings = siblingsResult.getOrNull()?.sortedBy { it.position } ?: return@launch
+            // Get ALL siblings including current block (getBlockSiblings excludes current)
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val siblings = allBlocks
+                .filter { it.parentId == currentBlock.parentId }
+                .sortedBy { it.position }
 
-            val currentIndex = siblings.indexOfFirst { it.id == currentBlock.id }
+            val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
 
             if (currentIndex > 0) {
                 val prevBlock = siblings[currentIndex - 1]
@@ -380,21 +390,19 @@ class JournalsViewModel(
 
                 blockRepository.deleteBlock(blockUuid)
 
+                // Update subsequent siblings: fix both position AND leftId
                 val subsequentSiblings = siblings.drop(currentIndex + 1)
                 if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.map { it.copy(position = it.position - 1) }
+                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = currentIndex + idx,  // Positions continue from currentIndex
+                            leftId = if (idx == 0) prevBlock.id else subsequentSiblings[idx - 1].id
+                        )
+                    }
                     blockRepository.saveBlocks(updatedSubsequent)
                 }
 
-                val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
-                val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
-                
-                _uiState.update { state ->
-                    val newBlocks = state.blocks.toMutableMap()
-                    newBlocks[currentBlock.pageId] = pageBlocks
-                    state.copy(blocks = newBlocks)
-                }
-
+                refreshBlocksForPage(prevBlock.uuid)
                 requestEditBlock(prevBlock.uuid, mergePoint)
             }
         }
@@ -404,49 +412,78 @@ class JournalsViewModel(
         scope.launch {
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
-            
-            // Only handle if block is empty
-            
-            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
-            val siblings = siblingsResult.getOrNull()?.sortedBy { it.position } ?: return@launch
-            
-            val currentIndex = siblings.indexOfFirst { it.id == currentBlock.id }
-            
+
+            // Get ALL siblings including current block (getBlockSiblings excludes current)
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
+            val siblings = allBlocks
+                .filter { it.parentId == currentBlock.parentId }
+                .sortedBy { it.position }
+
+            val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
+
             if (currentIndex > 0) {
                 // Move to previous sibling
                 val previousBlock = siblings[currentIndex - 1]
-                
+
                 // Delete current empty block
                 blockRepository.deleteBlock(blockUuid)
-                
-                // Shift subsequent siblings up
+
+                // Update subsequent siblings: fix both position AND leftId
                 val subsequentSiblings = siblings.drop(currentIndex + 1)
                 if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.map { it.copy(position = it.position - 1) }
+                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = currentIndex + idx,
+                            leftId = if (idx == 0) previousBlock.id else subsequentSiblings[idx - 1].id
+                        )
+                    }
                     blockRepository.saveBlocks(updatedSubsequent)
                 }
-                
-                // Request focus on previous block (at end, potentially)
-                requestEditBlock(previousBlock.uuid)
-                
+
+                refreshBlocksForPage(previousBlock.uuid)
+                requestEditBlock(previousBlock.uuid, previousBlock.content.length)
+
             } else if (currentBlock.parentId != null) {
-                // At start of list, move to parent
+                // At start of children list, move to parent
+                val parent = allBlocks.find { it.id == currentBlock.parentId }
+
                 blockRepository.deleteBlock(blockUuid)
-                
-                // Find parent UUID
-                val parentResult = blockRepository.getBlockParent(blockUuid).first()
-                val parent = parentResult.getOrNull()
-                
+
+                // Update remaining siblings' positions and leftIds
+                val remainingSiblings = siblings.drop(1)  // Skip current (index 0)
+                if (remainingSiblings.isNotEmpty()) {
+                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = idx,
+                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
+                        )
+                    }
+                    blockRepository.saveBlocks(updatedRemaining)
+                }
+
                 if (parent != null) {
-                    requestEditBlock(parent.uuid)
+                    refreshBlocksForPage(parent.uuid)
+                    requestEditBlock(parent.uuid, parent.content.length)
                 }
             } else {
-                // Root block at position 0. If it's not the only block, delete it.
+                // Root block at position 0. If there are other root blocks, delete this one.
                 if (siblings.size > 1) {
-                     blockRepository.deleteBlock(blockUuid)
-                     // Focus next (now at pos 0)?
-                     val nextBlock = siblings[1]
-                     requestEditBlock(nextBlock.uuid)
+                    val nextBlock = siblings[1]  // Next sibling (index 1)
+                    blockRepository.deleteBlock(blockUuid)
+
+                    // Update remaining siblings
+                    val remainingSiblings = siblings.drop(1)
+                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
+                        block.copy(
+                            position = idx,
+                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
+                        )
+                    }
+                    blockRepository.saveBlocks(updatedRemaining)
+
+                    refreshBlocksForPage(nextBlock.uuid)
+                    requestEditBlock(nextBlock.uuid, 0)
                 }
             }
         }

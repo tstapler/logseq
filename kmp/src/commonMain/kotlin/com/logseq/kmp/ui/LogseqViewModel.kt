@@ -8,6 +8,8 @@ import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.platform.PlatformSettings
 import com.logseq.kmp.repository.BlockRepository
+import com.logseq.kmp.repository.SearchRepository
+import com.logseq.kmp.repository.SearchRequest
 import com.logseq.kmp.repository.SimplePageRepository
 import com.logseq.kmp.ui.i18n.Language
 import com.logseq.kmp.ui.theme.LogseqThemeMode
@@ -15,13 +17,17 @@ import com.logseq.kmp.editor.commands.CommandContext
 import com.logseq.kmp.editor.commands.CommandManager
 import com.logseq.kmp.editor.commands.EditorCommand
 import com.logseq.kmp.editor.commands.CommandResult
+import com.logseq.kmp.performance.DebounceManager
+import com.logseq.kmp.ui.screens.SearchResultItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.Clock
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,6 +36,7 @@ class LogseqViewModel(
     private val fileSystem: PlatformFileSystem,
     private val pageRepository: SimplePageRepository,
     private val blockRepository: BlockRepository,
+    private val searchRepository: SearchRepository,
     private val graphLoader: GraphLoader,
     private val graphWriter: GraphWriter,
     private val platformSettings: PlatformSettings,
@@ -50,6 +57,9 @@ class LogseqViewModel(
     private val commandManager = CommandManager.create(scope) { message, type, timeout ->
         notificationManager?.show(message, type, timeout)
     }
+    
+    // Debounce manager for block updates
+    private val debounceManager = DebounceManager(scope, 300L)
 
     private val _uiState = MutableStateFlow(
         AppState(
@@ -135,7 +145,21 @@ class LogseqViewModel(
                 if (graphExists) {
                     _uiState.update { it.copy(statusMessage = "Loading journals...") }
                     logger.info("Loading graph progressively from: $path")
-                    pageRepository.clear()
+                    
+                    // Persistence Strategy:
+                    // Only clear the cache if we are switching to a DIFFERENT graph.
+                    // If we are reloading the same graph (e.g. startup), keep the DB to allow GraphLoader
+                    // to skip unchanged files (Startup Performance).
+                    val cachedPath = platformSettings.getString("cached_graph_path", "")
+                    
+                    if (path != cachedPath) {
+                        logger.info("Switching graph from '$cachedPath' to '$path' - Clearing persistent cache")
+                        pageRepository.clear()
+                        blockRepository.clear()
+                        platformSettings.putString("cached_graph_path", path)
+                    } else {
+                        logger.info("Loading same graph '$path' - Keeping persistent cache for incremental load")
+                    }
 
                     withContext(Dispatchers.Default) {
                         graphLoader.loadGraphProgressive(
@@ -689,13 +713,14 @@ class LogseqViewModel(
      * Save a block's content change and persist to disk via GraphWriter
      */
     fun saveBlockContent(blockId: String, newContent: String, page: Page) {
-        scope.launch {
+        // Debounce the database write to avoid UI stutter on every keystroke
+        debounceManager.debounce(blockId) {
             try {
                 // 1. Get the current block
                 val blockResult = blockRepository.getBlockByUuid(blockId).first()
                 val block = blockResult.getOrNull() ?: run {
                     logger.error("Block not found: $blockId")
-                    return@launch
+                    return@debounce
                 }
 
                 // 2. Update the block with new content
@@ -837,4 +862,30 @@ class LogseqViewModel(
      * Get the command manager for advanced usage
      */
     fun getCommandManager(): CommandManager = commandManager
+    
+    /**
+     * Search pages for autocomplete
+     */
+    fun searchPages(query: String): Flow<List<SearchResultItem>> {
+        val request = SearchRequest(query = query, limit = 10)
+        return searchRepository.searchWithFilters(request).map {
+            val searchResult = it.getOrNull()
+            if (searchResult != null) {
+                val items = mutableListOf<SearchResultItem>()
+                // Add Pages
+                if (searchResult.pages.isNotEmpty()) {
+                    items.addAll(searchResult.pages.map { SearchResultItem.PageItem(it) })
+                }
+                
+                // Add "Create Page" option if no exact match
+                val exactMatch = items.any { it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true) }
+                if (!exactMatch && query.isNotBlank()) {
+                    items.add(SearchResultItem.CreatePageItem(query))
+                }
+                items
+            } else {
+                emptyList()
+            }
+        }
+    }
 }
