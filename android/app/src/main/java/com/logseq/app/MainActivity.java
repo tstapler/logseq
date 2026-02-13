@@ -18,8 +18,6 @@ import androidx.activity.OnBackPressedDispatcher;
 import android.util.Log;
 import android.view.View;
 
-import ee.forgr.capacitor_navigation_bar.NavigationBarPlugin;
-
 public class MainActivity extends BridgeActivity {
     private NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
@@ -145,15 +143,6 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             // ignore
         }
-    }
-
-    public void initNavigationBarBgColor() {
-        NavigationBarPlugin navigationBarPlugin = new NavigationBarPlugin();
-        JSObject data = new JSObject();
-        data.put("color", "transparent");
-
-        PluginCall call = new PluginCall(null, null, null, "t", data);
-        navigationBarPlugin.setNavigationBarColor(call);
     }
 
     @Override
