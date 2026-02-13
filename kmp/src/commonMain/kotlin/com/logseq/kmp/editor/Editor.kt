@@ -6,6 +6,7 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.isCtrlPressed
 import com.logseq.kmp.model.Page
+import com.logseq.kmp.model.CursorState
 import com.logseq.kmp.editor.commands.*
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockRepository
@@ -122,7 +123,7 @@ class Editor(
             key == Key.Escape -> {
                 // Command palette
                 scope.value?.launch {
-                    _editorState.update { it.copy(mode = EditorMode.COMMAND) }
+                    _editorState.update { it.copy(mode = EditorMode.VIEW) }
                 }
                 return true
             }
@@ -135,8 +136,8 @@ class Editor(
         return try {
             val traceId = com.logseq.kmp.performance.PerformanceMonitor.startTrace("execute-command")
             
-            val blockId = _cursorState.value.blockUuid
-            val textState = blockId?.let { textOperations.getTextState(it).value }
+            val currentBlockId = _cursorState.value.blockId
+            val textState = currentBlockId?.let { blockId: String -> textOperations.getTextState(blockId).value }
             val content = textState?.content ?: ""
             val selection = textState?.selection
             
@@ -144,7 +145,7 @@ class Editor(
                 currentText = content,
                 selectionStart = selection?.range?.start ?: _cursorState.value.position,
                 selectionEnd = selection?.range?.end ?: _cursorState.value.position,
-                currentBlockId = blockId,
+                currentBlockId = currentBlockId,
                 currentBlockContent = content,
                 currentPageId = _currentPage.value?.uuid,
                 cursorPosition = _cursorState.value.position
@@ -176,8 +177,8 @@ class Editor(
 
     override suspend fun executeCommand(commandId: String, args: Map<String, Any>): Result<Any?> {
         return try {
-            val blockId = _cursorState.value.blockUuid
-            val textState = blockId?.let { textOperations.getTextState(it).value }
+            val currentBlockId = _cursorState.value.blockId
+            val textState = currentBlockId?.let { textOperations.getTextState(it).value }
             val content = textState?.content ?: ""
             val selection = textState?.selection
             
@@ -185,7 +186,7 @@ class Editor(
                 currentText = content,
                 selectionStart = selection?.range?.start ?: _cursorState.value.position,
                 selectionEnd = selection?.range?.end ?: _cursorState.value.position,
-                currentBlockId = blockId,
+                currentBlockId = currentBlockId,
                 currentBlockContent = content,
                 currentPageId = _currentPage.value?.uuid,
                 cursorPosition = _cursorState.value.position,
@@ -199,6 +200,7 @@ class Editor(
                 is CommandResult.Error -> Result.failure(result.exception ?: Exception(result.message))
                 is CommandResult.Partial -> Result.success(mapOf("completed" to result.completed, "total" to result.total))
                 is CommandResult.Nothing -> Result.success(null)
+                else -> Result.success(null)
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -208,9 +210,9 @@ class Editor(
     // Editor-specific helper methods
 
     suspend fun insertText(text: String): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            textOperations.insertText(blockId, text)
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            textOperations.insertText(currentBlockId, text)
         } else {
             Result.failure(IllegalStateException("No block focused"))
         }
@@ -218,7 +220,7 @@ class Editor(
 
     suspend fun createNewBlock(content: String = ""): Result<Block> {
         val currentPage = _currentPage.value
-        val focusedBlockId = _cursorState.value.blockUuid
+        val focusedBlockId = _cursorState.value.blockId
         
         return if (currentPage != null) {
             // Create new block after focused block or at root
@@ -253,7 +255,7 @@ class Editor(
                         }
                         // Focus new block
                         _cursorState.value = CursorState(
-                            blockUuid = newBlock.uuid,
+                            blockId = newBlock.uuid,
                             position = content.length
                         )
                     }
@@ -265,14 +267,14 @@ class Editor(
     }
 
     suspend fun deleteCurrentBlock(): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            blockOperations.deleteBlock(blockId, false).also { result ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            blockOperations.deleteBlock(currentBlockId, false).also { result ->
                 if (result.isSuccess) {
                     // Update editor state
                     _editorState.update { current ->
                         current.copy(
-                            blocks = current.blocks.filter { block -> block.uuid != blockId }
+                            blocks = current.blocks.filter { block -> block.uuid != currentBlockId }
                         )
                     }
                     // Move focus to next sibling or parent
@@ -285,9 +287,9 @@ class Editor(
     }
 
     suspend fun indentCurrentBlock(): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            blockOperations.indentBlock(blockId).also { result ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            blockOperations.indentBlock(currentBlockId).also { result ->
                 if (result.isSuccess) {
                     refreshBlocks()
                 }
@@ -298,9 +300,9 @@ class Editor(
     }
 
     suspend fun outdentCurrentBlock(): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            blockOperations.outdentBlock(blockId).also { result ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            blockOperations.outdentBlock(currentBlockId).also { result ->
                 if (result.isSuccess) {
                     refreshBlocks()
                 }
@@ -311,9 +313,9 @@ class Editor(
     }
 
     suspend fun moveBlockUp(): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            blockOperations.moveBlockUp(blockId).also { result ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            blockOperations.moveBlockUp(currentBlockId).also { result ->
                 if (result.isSuccess) {
                     refreshBlocks()
                 }
@@ -324,9 +326,9 @@ class Editor(
     }
 
     suspend fun moveBlockDown(): Result<Unit> {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            blockOperations.moveBlockDown(blockId).also { result ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            blockOperations.moveBlockDown(currentBlockId).also { result ->
                 if (result.isSuccess) {
                     refreshBlocks()
                 }
@@ -337,18 +339,18 @@ class Editor(
     }
 
     suspend fun splitCurrentBlock(): Result<Block> {
-        val blockId = _cursorState.value.blockUuid
+        val currentBlockId = _cursorState.value.blockId
         val position = _cursorState.value.position
         
-        return if (blockId != null) {
-            blockOperations.splitBlock(blockId, position).also { result ->
+        return if (currentBlockId != null) {
+            blockOperations.splitBlock(currentBlockId, position).also { result ->
                 if (result.isSuccess) {
                     refreshBlocks()
                     // Focus the new block
                     val newBlock = result.getOrNull()
                     if (newBlock != null) {
                         _cursorState.value = CursorState(
-                            blockUuid = newBlock.uuid,
+                            blockId = newBlock.uuid,
                             position = 0
                         )
                     }
@@ -362,11 +364,11 @@ class Editor(
     // Private helper methods
 
     private fun getSelectedText(): String? {
-        val blockId = _cursorState.value.blockUuid
-        return if (blockId != null) {
-            textOperations.getTextState(blockId).value.selection.let { selection ->
+        val currentBlockId = _cursorState.value.blockId
+        return if (currentBlockId != null) {
+            textOperations.getTextState(currentBlockId).value.selection.let { selection ->
                 selection?.let { textSelection ->
-                    val textState = textOperations.getTextState(blockId).value
+                    val textState = textOperations.getTextState(currentBlockId).value
                     if (textSelection.range.start >= 0 && textSelection.range.end <= textState.content.length) {
                         textState.content.substring(textSelection.range.start, textSelection.range.end)
                     } else null
@@ -386,7 +388,7 @@ class Editor(
     }
 
     private suspend fun moveToNextBlockOrParent() {
-        val currentBlockId = _cursorState.value.blockUuid ?: return
+        val currentBlockId = _cursorState.value.blockId ?: return
         
         // Try to get next sibling
         val nextSibling = blockOperations.getBlockSiblings(currentBlockId).first().getOrNull()
@@ -396,7 +398,7 @@ class Editor(
         
         if (nextSibling != null) {
             _cursorState.value = CursorState(
-                blockUuid = nextSibling.uuid,
+                blockId = nextSibling.uuid,
                 position = 0
             )
         } else {
@@ -404,7 +406,7 @@ class Editor(
             val parent = blockOperations.getBlockParent(currentBlockId).first().getOrNull()
             if (parent != null) {
                 _cursorState.value = CursorState(
-                    blockUuid = parent.uuid,
+                    blockId = parent.uuid,
                     position = 0
                 )
             }

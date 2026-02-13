@@ -1,5 +1,6 @@
 package com.logseq.kmp.parser
 
+import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.model.ParsedBlock
 import com.logseq.kmp.model.ParsedPage
 import com.logseq.kmp.parsing.LogseqParser
@@ -7,19 +8,27 @@ import com.logseq.kmp.parsing.ast.*
 
 class MarkdownParser {
 
+    private val logger = Logger("MarkdownParser")
     private val parser = LogseqParser()
 
     fun parsePage(content: String, mode: com.logseq.kmp.parsing.ParseMode = com.logseq.kmp.parsing.ParseMode.FULL): ParsedPage {
-        val document = parser.parse(content, mode)
-        
-        // Convert AST to ParsedPage model
-        val parsedBlocks = document.children.map { convertBlock(it) }
-        
-        return ParsedPage(
-            title = null,
-            properties = emptyMap(), // Page props handled in GraphLoader via first block?
-            blocks = parsedBlocks
-        )
+        try {
+            val document = parser.parse(content, mode)
+
+            // Convert AST to ParsedPage model
+            val parsedBlocks = document.children.map { convertBlock(it) }
+
+            return ParsedPage(
+                title = null,
+                properties = emptyMap(), // Page props handled in GraphLoader via first block?
+                blocks = parsedBlocks
+            )
+        } catch (e: Exception) {
+            // Log the content that caused the error for debugging
+            logger.error("Error parsing content (length=${content.length}): ${e.message}", e)
+            logger.error("Content preview: ${content.take(200)}...")
+            throw e
+        }
     }
 
     private fun convertBlock(block: BlockNode): ParsedBlock {

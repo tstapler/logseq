@@ -2,6 +2,7 @@ package com.logseq.kmp.editor
 
 import androidx.compose.ui.input.key.KeyEvent
 import com.logseq.kmp.model.Page
+import com.logseq.kmp.model.CursorState
 import com.logseq.kmp.editor.commands.EditorCommand
 import com.logseq.kmp.editor.state.EditorState
 import com.logseq.kmp.editor.state.EditorConfig

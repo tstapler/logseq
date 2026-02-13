@@ -41,7 +41,7 @@ fun PerformanceOptimizedEditor(
     
     // Performance: Debounced state update
     var lastContentUpdate by remember { mutableStateOf(0L) }
-    val debouncedUpdateDelay = remember { 300L }
+    val debouncedUpdateDelay = remember { 16L } // ~60fps for responsive typing
     
     // Performance: Virtual scrolling for large documents
     val listState = rememberLazyListState()
@@ -56,14 +56,14 @@ fun PerformanceOptimizedEditor(
     // Performance: Cleanup job for debouncing
     val debounceJob = remember { mutableStateOf<Job?>(null) }
     
-    // Performance: Cancel old debounced updates
+    // Performance: Immediate UI updates with debounced persistence
     LaunchedEffect(editorStateValue.blocks) {
         debounceJob.value?.cancel()
         debounceJob.value = scope.launch {
-            delay(debouncedUpdateDelay)
+            delay(16L) // ~60fps for responsive typing
             // Update only if not within debounce window
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            if (now - lastContentUpdate > debouncedUpdateDelay) {
+            if (now - lastContentUpdate > 16L) {
                 lastContentUpdate = now
             }
         }

@@ -56,7 +56,8 @@ fun RichTextEditor(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     interactionSource: androidx.compose.foundation.interaction.MutableInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
     cursorBrush: Brush = SolidColor(MaterialTheme.colorScheme.primary),
-    onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = { }
+    onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = { },
+    onTriggerDetected: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> }
 ) {
     val logger = remember { Logger("RichTextEditor") }
     val scope = rememberCoroutineScope()
@@ -78,25 +79,52 @@ fun RichTextEditor(
         )
     }
     
+    var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+
     // Note: In a real implementation, we would sync textFieldValue with the specific block's text state.
     // For now, assuming single block editing or passed state. 
     // Since this is a component, it should probably receive the specific text/selection, not the whole EditorState?
     // But keeping signature as requested.
     
-    // Handle text changes
+    // Handle text changes with incremental updates
     fun onValueChange(newValue: TextFieldValue) {
         val oldValue = textFieldValue
         textFieldValue = newValue
         
+        // Trigger Detection
+        try {
+            val cursor = newValue.selection.min
+            val textBeforeCursor = newValue.text.take(cursor)
+            val match = Regex("\\[\\[([^\\]]*)\$").find(textBeforeCursor)
+            
+            if (match != null) {
+                val query = match.groupValues[1]
+                val rect = textLayoutResult?.getCursorRect(cursor)
+                onTriggerDetected(query, rect)
+            } else {
+                onTriggerDetected("", null)
+            }
+        } catch (e: Exception) {
+            logger.error("Error in trigger detection", e)
+        }
+        
         scope.launch {
             try {
-                // Detect what type of change occurred
+                // Calculate actual diff for efficient updates
+                val commonPrefix = oldValue.text.commonPrefixWith(newValue.text).length
+                val commonSuffix = oldValue.text.commonSuffixWith(newValue.text).length
                 
-                // Simple replacement strategy for now
-                textOperations.replaceText(blockId, TextRange(0, oldValue.text.length), newValue.text)
+                if (commonPrefix + commonSuffix < oldValue.text.length || commonPrefix + commonSuffix < newValue.text.length) {
+                    // Only replace the changed portion
+                    val replaceStart = commonPrefix
+                    val replaceEnd = oldValue.text.length - commonSuffix
+                    val newText = newValue.text.substring(commonPrefix, newValue.text.length - commonSuffix)
+                    
+                    textOperations.replaceText(blockId, TextRange(replaceStart, replaceEnd), newText)
+                }
                 
-                // Update selection
-                if (newValue.selection.start != oldValue.selection.start || newValue.selection.end != oldValue.selection.end) {
+                // Update selection efficiently 
+                if (newValue.selection != oldValue.selection) {
                     textOperations.setSelection(blockId, TextRange(newValue.selection.start, newValue.selection.end))
                 }
             } catch (e: Exception) {
@@ -163,6 +191,7 @@ fun RichTextEditor(
             keyboardActions = keyboardActions,
             interactionSource = interactionSource,
             onTextLayout = { result ->
+                textLayoutResult = result
                 onTextLayout(result)
             }
         )

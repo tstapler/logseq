@@ -81,3 +81,14 @@ object PerformanceMonitor {
         }
     }
 }
+
+/**
+ * Performance trace event
+ */
+data class TraceEvent(
+    val name: String,
+    val startTime: Long,
+    val duration: Long,
+    val type: String,
+    val thread: String
+)

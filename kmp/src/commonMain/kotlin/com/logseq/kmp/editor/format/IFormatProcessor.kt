@@ -83,7 +83,16 @@ enum class FormatType {
     MARKDOWN,
     RICH_TEXT,
     HTML,
-    ORG_MODE
+    ORG_MODE,
+    // Text formatting types
+    BOLD,
+    ITALIC,
+    CODE,
+    LINK,
+    STRIKETHROUGH,
+    HEADING,
+    LIST,
+    QUOTE
 }
 
 /**
