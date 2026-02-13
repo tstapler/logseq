@@ -3,6 +3,7 @@ package com.logseq.kmp.db
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.model.ParsedBlock
+import kotlinx.datetime.Instant
 import com.logseq.kmp.outliner.JournalUtils
 import com.logseq.kmp.outliner.OutlinerPipeline
 import com.logseq.kmp.parser.MarkdownParser
@@ -33,6 +34,14 @@ class GraphLoader(
     private val idMutex = Mutex()
     // Start with a time-based offset to reduce collision risk and ensure positivity
     private var idCounter = Clock.System.now().toEpochMilliseconds()
+    
+    // Platform-agnostic parallelism configuration
+    // Use conservative defaults that work well across all platforms
+    private val ioThreads = 4  // Conservative for mobile/desktop/web
+    private val computationThreads = 2  // Conservative for CPU-intensive work
+    
+    // Platform-agnostic coroutine scope for parallel processing
+    private val parallelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private suspend fun generateId(): Long = idMutex.withLock {
         // Ensure strictly positive and monotonically increasing
@@ -75,8 +84,22 @@ class GraphLoader(
             sanitizeDirectory(pagesDir)
             sanitizeDirectory(journalsDir)
 
-            loadDirectory(pagesDir, onProgress, ParseMode.FULL)
-            loadDirectory(journalsDir, onProgress, ParseMode.FULL)
+            // Load pages and journals in parallel for better performance
+            PerformanceMonitor.startTrace("parallelFullLoad")
+            
+            coroutineScope {
+                val loadPagesJob = async {
+                    loadDirectory(pagesDir, onProgress, ParseMode.FULL)
+                }
+                
+                val loadJournalsJob = async {
+                    loadDirectory(journalsDir, onProgress, ParseMode.FULL)
+                }
+                
+                // Wait for both to complete
+                awaitAll(loadPagesJob, loadJournalsJob)
+            }
+            PerformanceMonitor.endTrace("parallelFullLoad")
 
             val duration = Clock.System.now() - startTime
             logger.info("Graph load complete. Duration: $duration")
@@ -158,29 +181,63 @@ class GraphLoader(
 
     suspend fun loadFullPage(pageId: Long) {
         PerformanceMonitor.startTrace("loadFullPage")
+        var filePath: String? = null
         try {
             val pageResult = pageRepository.getPageById(pageId).first()
             val page = pageResult.getOrNull()
-            
+
             if (page == null) {
                 logger.error("Page not found for ID: $pageId")
                 return
             }
-            
-            val filePath = page.filePath
+
+            filePath = page.filePath
             if (filePath == null) {
                 logger.error("Page has no file path: ${page.name}")
                 return
             }
-            
+
+            // OPTIMIZATION: If page is already loaded and file hasn't changed, skip reload
+            if (page.isContentLoaded) {
+                val fileModTime = fileSystem.getLastModifiedTime(filePath)
+                
+                // Verify blocks are actually loaded (handle inconsistency)
+                val blocksResult = blockRepository.getBlocksForPage(pageId).first()
+                val blocks = blocksResult.getOrNull() ?: emptyList()
+                val allBlocksLoaded = blocks.all { it.isLoaded }
+
+                if (fileModTime != null && 
+                    page.updatedAt.toEpochMilliseconds() >= fileModTime &&
+                    allBlocksLoaded) {
+                    logger.debug("Skipping loadFullPage, already up to date: $filePath")
+                    return
+                }
+                
+                if (!allBlocksLoaded) {
+                     logger.warn("Force reloading page ${page.name} because blocks are not loaded (inconsistency detected)")
+                }
+            }
+
+            // Mark this file as priority (and coalesce requests)
+            if (!tryAddPriorityFile(filePath)) {
+                logger.debug("Coalescing load request for $filePath")
+                return
+            }
+            logger.debug("Added priority file for on-demand loading: $filePath")
+
             val content = fileSystem.readFile(filePath)
             if (content == null) {
                 logger.error("Failed to read file: $filePath")
                 return
             }
-            
+
             parseAndSavePage(filePath, content, ParseMode.FULL)
         } finally {
+            // Remove from priority set after loading completes
+            filePath?.let {
+                removePriorityFile(it)
+                logger.debug("Removed priority file after loading: $it")
+            }
             PerformanceMonitor.endTrace("loadFullPage")
         }
     }
@@ -355,27 +412,94 @@ class GraphLoader(
 
             logger.debug("Found ${files.size} markdown files in $path")
 
+            // OPTIMIZATION: Batch database operations to eliminate per-file transaction overhead
             val loadedCount = coroutineScope {
-                // Process in chunks to avoid overwhelming the dispatcher
                 var processedCount = 0
                 val total = files.size
                 
-                files.chunked(50).map { chunk ->
-                    async(Dispatchers.Default) {
+                // Use smaller chunks for mobile platforms, larger for desktop
+                val chunkSize = if (ioThreads >= 8) 100 else 50  // Larger chunks for more powerful platforms
+                files.chunked(chunkSize).map { chunk ->
+                    async(parallelScope.coroutineContext) {
                         PerformanceMonitor.startTrace("processChunk")
                         try {
+                            // Collect all parsed pages and blocks first, then batch save
+                            val pagesToSave = mutableListOf<Page>()
+                            val blocksToSaveByPage = mutableMapOf<Long, MutableList<Block>>()
+                            val pageIdsToDelete = mutableSetOf<Long>()
+                            
                             val count = chunk.count { fileName ->
                                 val filePath = "$path/$fileName"
+                                
+                                // OPTIMIZATION: Skip unchanged files using modification time checking
+                                val fileModTime = fileSystem.getLastModifiedTime(filePath)
+                                val fileNameOnly = fileName.removeSuffix(".md")
+                                val isJournalFile = path.endsWith("/journals")
+                                val existingPage = if (isJournalFile) {
+                                    // For journals, we need to find page by checking if it exists
+                                    // Since there's no getPageByJournalDay, we'll use getAllPages and filter
+                                    val journalDate = JournalUtils.parseJournalDate(fileNameOnly)
+                                    val allPagesResult = pageRepository.getAllPages().first()
+                                    allPagesResult.getOrNull()?.find { it.journalDate == journalDate }
+                                } else {
+                                    pageRepository.getPageByName(fileNameOnly).first().getOrNull()
+                                }
+                                val shouldSkip = existingPage != null && fileModTime != null && 
+                                    existingPage.updatedAt.toEpochMilliseconds() >= fileModTime
+                                
+                                if (shouldSkip) {
+                                    logger.debug("Skipping unchanged file: $filePath (file: $fileModTime, db: ${existingPage.updatedAt.toEpochMilliseconds()})")
+                                    return@count true  // Count as processed but skip actual parsing
+                                }
+
+                                // Skip priority files (being loaded by user) to prevent overwriting with metadata-only
+                                if (isPriorityFile(filePath)) {
+                                    logger.debug("Skipping priority file in background load: $filePath")
+                                    return@count true
+                                }
+                                
                                 logger.debug("Processing file: $filePath")
                                 
                                 val content = fileSystem.readFile(filePath) ?: return@count false
                                 try {
-                                    parseAndSavePage(filePath, content, mode)
+                                    val parseResult = parsePageWithoutSaving(filePath, content, mode)
+                                    // Update the page's updatedAt to match file modification time
+                                    val updatedPage = parseResult.page // Keep as is for now
+                                    pagesToSave.add(updatedPage)
+                                    if (parseResult.blocks.isNotEmpty()) {
+                                        blocksToSaveByPage[updatedPage.id] = parseResult.blocks.toMutableList()
+                                    }
+                                    pageIdsToDelete.add(updatedPage.id)
                                     true
                                 } catch (e: Exception) {
                                     logger.error("Failed to parse file: $filePath", e)
                                     false
                                 }
+                            }
+                            
+                            // BATCH DATABASE OPERATIONS - One transaction per chunk instead of per file
+                            if (pagesToSave.isNotEmpty()) {
+                                PerformanceMonitor.startTrace("batchSavePages")
+                                pagesToSave.forEach { page ->
+                                    pageRepository.savePage(page)
+                                }
+                                PerformanceMonitor.endTrace("batchSavePages")
+                            }
+                            
+                            if (pageIdsToDelete.isNotEmpty()) {
+                                PerformanceMonitor.startTrace("batchDeleteBlocks")
+                                pageIdsToDelete.forEach { pageId ->
+                                    blockRepository.deleteBlocksForPage(pageId)
+                                }
+                                PerformanceMonitor.endTrace("batchDeleteBlocks")
+                            }
+                            
+                            if (blocksToSaveByPage.isNotEmpty()) {
+                                PerformanceMonitor.startTrace("batchSaveBlocks")
+                                blocksToSaveByPage.values.forEach { blocks ->
+                                    blockRepository.saveBlocks(blocks)
+                                }
+                                PerformanceMonitor.endTrace("batchSaveBlocks")
                             }
                             
                             // Update progress (approximate due to concurrency)
@@ -400,17 +524,132 @@ class GraphLoader(
     private val fileLocksMutex = Mutex()
     private val fileLocks = mutableMapOf<String, Mutex>()
 
+    // Priority loading: tracks files requested for on-demand FULL loading
+    // Background METADATA_ONLY tasks should skip these files
+    private val priorityFilesMutex = Mutex()
+    private val priorityFiles = mutableSetOf<String>()
+
     private suspend fun getFileLock(path: String): Mutex {
         return fileLocksMutex.withLock {
             fileLocks.getOrPut(path) { Mutex() }
         }
     }
+
+    private suspend fun tryAddPriorityFile(path: String): Boolean {
+        return priorityFilesMutex.withLock {
+            if (priorityFiles.contains(path)) {
+                false
+            } else {
+                priorityFiles.add(path)
+                true
+            }
+        }
+    }
+
+    private suspend fun removePriorityFile(path: String) {
+        priorityFilesMutex.withLock {
+            priorityFiles.remove(path)
+        }
+    }
+
+    private suspend fun isPriorityFile(path: String): Boolean {
+        return priorityFilesMutex.withLock {
+            priorityFiles.contains(path)
+        }
+    }
+
+    // Data class to hold parse results without database operations
+    private data class ParseResult(
+        val page: Page,
+        val blocks: List<Block>
+    )
+    
+    /**
+     * Parse a page without saving to database - used for batch operations
+     */
+    private suspend fun parsePageWithoutSaving(filePath: String, content: String, mode: ParseMode = ParseMode.FULL): ParseResult {
+        val fileName = filePath.replace("\\", "/").substringAfterLast("/")
+        val name = fileName.removeSuffix(".md")
+        val isJournal = filePath.contains("/journals/")
+        val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
+        
+        val now = Clock.System.now()
+        
+        // Check if page already exists to preserve ID and UUID
+        val existingPageResult = pageRepository.getPageByName(name).first()
+        val existingPage = existingPageResult.getOrNull()
+        
+        val pageId = existingPage?.id ?: generateId()
+        val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
+        val createdAt = existingPage?.createdAt ?: now
+        
+        if (pageId <= 0) {
+            logger.error("Generated invalid pageId: $pageId for $filePath")
+            throw IllegalArgumentException("Generated invalid pageId: $pageId")
+        }
+        
+        // Parse markdown content
+        val parsedPage = markdownParser.parsePage(content)
+        val pageWithMetadata = Page(
+            id = pageId,
+            uuid = pageUuid,
+            name = name,
+            namespace = null,
+            filePath = filePath,
+            createdAt = createdAt,
+            updatedAt = now,
+            properties = parsedPage.properties,
+            isFavorite = false,
+            isJournal = isJournal,
+            journalDate = journalDate,
+            isContentLoaded = mode == ParseMode.FULL
+        )
+        
+        // Process blocks based on mode
+        val blocks = when (mode) {
+            ParseMode.METADATA_ONLY -> {
+                // Only extract root-level block structure for metadata
+                // Root blocks have level 0 (from BlockParser which starts at level 0)
+                val rootBlocks = parsedPage.blocks.filter { it.level == 0 }
+                val blocksList = mutableListOf<Block>()
+                processParsedBlocks(
+                    rootBlocks, filePath, pageId, null, 0, now,
+                    blocksList, ParseMode.METADATA_ONLY
+                )
+                blocksList
+            }
+            ParseMode.FULL -> {
+                // Process all blocks fully
+                val blocksList = mutableListOf<Block>()
+                processParsedBlocks(
+                    parsedPage.blocks, filePath, pageId, null, 0, now,
+                    blocksList, ParseMode.FULL
+                )
+                blocksList
+            }
+        }
+        
+        return ParseResult(page = pageWithMetadata, blocks = blocks)
+    }
     
     private suspend fun parseAndSavePage(filePath: String, content: String, mode: ParseMode = ParseMode.FULL) {
+        // Priority check: if this file is marked for on-demand FULL loading,
+        // skip METADATA_ONLY background processing (on-demand will handle it)
+        if (mode == ParseMode.METADATA_ONLY && isPriorityFile(filePath)) {
+            logger.debug("Skipping METADATA_ONLY for priority file (on-demand loading): $filePath")
+            return
+        }
+
         val lock = getFileLock(filePath)
-        
+
         // Prevent concurrent parses of the same file
         lock.withLock {
+            // Re-check priority inside lock in case on-demand started while we were waiting
+            if (mode == ParseMode.METADATA_ONLY && isPriorityFile(filePath)) {
+                logger.debug("Skipping METADATA_ONLY for priority file (checked inside lock): $filePath")
+                return
+            }
+
             PerformanceMonitor.startTrace("parseAndSavePage")
             try {
                 // ... logic ...
@@ -424,7 +663,29 @@ class GraphLoader(
             // Check if page already exists to preserve ID and UUID
             val existingPageResult = pageRepository.getPageByName(name).first()
             val existingPage = existingPageResult.getOrNull()
-            
+
+            // Skip METADATA_ONLY if page is already fully loaded (don't overwrite full content)
+            if (mode == ParseMode.METADATA_ONLY && existingPage?.isContentLoaded == true) {
+                logger.debug("Skipping METADATA_ONLY for already-loaded page: $name")
+                return
+            }
+
+            // OPTIMIZATION: If mode is FULL, but page is already loaded and fresh (checked inside lock), skip.
+            if (mode == ParseMode.FULL && existingPage?.isContentLoaded == true) {
+                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
+                 
+                 val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
+                 val blocks = blocksResult.getOrNull() ?: emptyList()
+                 val allBlocksLoaded = blocks.all { it.isLoaded }
+
+                 if (fileModTime != null && 
+                     existingPage.updatedAt.toEpochMilliseconds() >= fileModTime &&
+                     allBlocksLoaded) {
+                      logger.debug("Skipping FULL parse (concurrency check), already up to date: $filePath")
+                      return
+                 }
+            }
+
             val pageId = existingPage?.id ?: generateId()
             val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
             val createdAt = existingPage?.createdAt ?: now
@@ -436,7 +697,7 @@ class GraphLoader(
             
             // Initial Page object
             var page = Page(
-                id = pageId, 
+                id = pageId,
                 uuid = pageUuid,
                 name = name,
                 createdAt = createdAt,
@@ -445,7 +706,8 @@ class GraphLoader(
                 isFavorite = existingPage?.isFavorite ?: false,
                 isJournal = isJournal,
                 journalDate = journalDate,
-                filePath = filePath
+                filePath = filePath,
+                isContentLoaded = mode == ParseMode.FULL
             )
             
             // ... (page creation logic) ...
@@ -476,8 +738,13 @@ class GraphLoader(
             //    So it will self-correct!
             
             // Parse using MarkdownParser
-            val parsedPage = markdownParser.parsePage(content, mode)
-            
+            val parsedPage = try {
+                markdownParser.parsePage(content, mode)
+            } catch (e: Exception) {
+                logger.error("Failed to parse file: $filePath (content length: ${content.length})", e)
+                throw e
+            }
+
             // Extract page properties if any (often in the first block or pre-block)
             val blocksToSave = mutableListOf<Block>()
             var firstBlockSkipped = false

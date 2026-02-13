@@ -70,6 +70,24 @@ class InMemorySimplePageRepository : SimplePageRepository {
         return Result.success(Unit)
     }
 
+    override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
+        val current = pages.value.toMutableMap()
+        val page = current[pageUuid] ?: return Result.failure(Exception("Page not found"))
+
+        // Check for name collision
+        val existing = current.values.find { it.name.equals(newName, ignoreCase = true) && it.uuid != pageUuid }
+        if (existing != null) {
+            return Result.failure(Exception("A page with name '$newName' already exists"))
+        }
+
+        current[pageUuid] = page.copy(
+            name = newName,
+            updatedAt = kotlinx.datetime.Clock.System.now()
+        )
+        pages.value = current
+        return Result.success(Unit)
+    }
+
     override suspend fun toggleFavorite(pageUuid: String): Result<Unit> {
         val current = pages.value.toMutableMap()
         val page = current[pageUuid] ?: return Result.failure(Exception("Page not found"))

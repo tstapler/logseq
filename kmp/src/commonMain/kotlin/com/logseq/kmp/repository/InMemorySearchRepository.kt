@@ -4,6 +4,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlin.Result.Companion.success
@@ -51,6 +52,28 @@ class InMemorySearchRepository(
 
     // ===== REPOSITORY IMPLEMENTATION =====
 
+    /**
+     * Get all blocks - from repository if available, otherwise from test data
+     */
+    private suspend fun getAllBlocks(): List<Block> {
+        return if (blockRepository != null) {
+            // Query all pages first, then get blocks for each
+            val pages = pageRepository?.getAllPages()?.first()?.getOrNull() ?: emptyList()
+            pages.flatMap { page ->
+                blockRepository.getBlocksForPage(page.id).first().getOrNull() ?: emptyList()
+            }
+        } else {
+            blocksMap.values.toList()
+        }
+    }
+
+    /**
+     * Get all pages - from repository if available, otherwise from test data
+     */
+    private suspend fun getAllPages(): List<Page> {
+        return pageRepository?.getAllPages()?.first()?.getOrNull() ?: pagesMap.values.toList()
+    }
+
     override fun searchBlocksByContent(
         query: String,
         limit: Int,
@@ -61,7 +84,8 @@ class InMemorySearchRepository(
             return@flow
         }
 
-        val results = blocksMap.values
+        val allBlocks = getAllBlocks()
+        val results = allBlocks
             .filter { block ->
                 block.content.contains(query, ignoreCase = true) ||
                     block.properties.values.any { it.contains(query, ignoreCase = true) }
@@ -76,7 +100,7 @@ class InMemorySearchRepository(
             .take(limit)
 
         emit(success(results))
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun searchPagesByTitle(query: String, limit: Int): Flow<Result<List<Page>>> = flow {
         if (query.isBlank()) {
@@ -84,7 +108,8 @@ class InMemorySearchRepository(
             return@flow
         }
 
-        val results = pagesMap.values
+        val allPages = getAllPages()
+        val results = allPages
             .filter { page ->
                 page.name.contains(query, ignoreCase = true)
             }
@@ -92,7 +117,7 @@ class InMemorySearchRepository(
             .take(limit)
 
         emit(success(results))
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun findBlocksReferencing(blockUuid: String): Flow<Result<List<Block>>> = flow {
         if (blockUuid.isBlank()) {
@@ -101,16 +126,17 @@ class InMemorySearchRepository(
         }
 
         // Find blocks that reference the given block UUID
-        val results = blocksMap.values.filter { block ->
+        val allBlocks = getAllBlocks()
+        val results = allBlocks.filter { block ->
             references.any { it.fromUuid == block.uuid && it.toUuid == blockUuid }
         }
 
         emit(success(results))
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun searchWithFilters(searchRequest: SearchRequest): Flow<Result<SearchResult>> = flow {
-        var filteredBlocks = blocksMap.values.toList()
-        var filteredPages = pagesMap.values.toList()
+        var filteredBlocks = getAllBlocks()
+        var filteredPages = getAllPages()
 
         // Apply query filter to blocks
         if (!searchRequest.query.isNullOrBlank()) {
@@ -156,7 +182,7 @@ class InMemorySearchRepository(
 
         // Apply page UUID filter
         searchRequest.pageUuid?.let { pageUuid ->
-            val page = pagesMap.values.find { it.uuid == pageUuid }
+            val page = filteredPages.find { it.uuid == pageUuid }
             if (page != null) {
                 filteredBlocks = filteredBlocks.filter { it.pageId == page.id }
             }
@@ -196,7 +222,7 @@ class InMemorySearchRepository(
                 )
             )
         )
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     /**
      * Calculate relevance score for block content matching.
@@ -216,7 +242,9 @@ class InMemorySearchRepository(
         // Exact match
         if (lowerContent.contains(lowerQuery)) {
             // Check if it's an exact word match for higher score
-            val wordPattern = Regex("""\b${Regex.escape(lowerQuery)}\b""")
+            // Fixed regex to handle spaces in query properly
+            val escapedQuery = Regex.escape(lowerQuery)
+            val wordPattern = Regex("""\b${escapedQuery}\b""")
             if (wordPattern.containsMatchIn(lowerContent)) {
                 return 1.0f
             }

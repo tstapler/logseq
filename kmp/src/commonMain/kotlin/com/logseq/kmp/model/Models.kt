@@ -63,7 +63,9 @@ data class Page(
     val properties: Map<String, String> = emptyMap(),
     val isFavorite: Boolean = false,
     val isJournal: Boolean = false,
-    val journalDate: LocalDate? = null
+    val journalDate: LocalDate? = null,
+    /** True when page content (blocks) has been fully loaded from file */
+    val isContentLoaded: Boolean = true
 ) {
     init {
         Validation.validateId(id)

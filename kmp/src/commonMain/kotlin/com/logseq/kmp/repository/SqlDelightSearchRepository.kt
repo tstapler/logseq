@@ -35,7 +35,7 @@ class SqlDelightSearchRepository(
         } catch (e: Exception) {
             emit(Result.failure(e))
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun searchPagesByTitle(query: String, limit: Int): Flow<Result<List<Page>>> = flow {
         try {
@@ -45,7 +45,7 @@ class SqlDelightSearchRepository(
         } catch (e: Exception) {
             emit(Result.failure(e))
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun findBlocksReferencing(blockUuid: String): Flow<Result<List<Block>>> = flow {
         try {
@@ -55,7 +55,7 @@ class SqlDelightSearchRepository(
         } catch (e: Exception) {
             emit(Result.failure(e))
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 
     override fun searchWithFilters(searchRequest: SearchRequest): Flow<Result<SearchResult>> = flow {
         try {
@@ -94,7 +94,7 @@ class SqlDelightSearchRepository(
         } catch (e: Exception) {
             emit(Result.failure(e))
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.Default)
 }
 
 /**

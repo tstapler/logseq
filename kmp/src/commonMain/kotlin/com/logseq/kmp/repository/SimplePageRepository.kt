@@ -14,6 +14,7 @@ interface SimplePageRepository {
     fun getPageByName(name: String): Flow<Result<Page?>>
     suspend fun savePage(page: Page): Result<Unit>
     suspend fun deletePage(pageUuid: String): Result<Unit>
+    suspend fun renamePage(pageUuid: String, newName: String): Result<Unit>
     suspend fun toggleFavorite(pageUuid: String): Result<Unit>
     suspend fun clear()
 }
