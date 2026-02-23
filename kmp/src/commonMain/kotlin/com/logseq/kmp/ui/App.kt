@@ -15,11 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.input.pointer.PointerButton
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
@@ -106,7 +102,6 @@ fun LogseqApp(
                 )
             } else {
                 val focusManager = LocalFocusManager.current
-                @OptIn(ExperimentalComposeUiApi::class)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -115,25 +110,10 @@ fun LogseqApp(
                                 focusManager.clearFocus()
                             })
                         }
-                        .onPointerEvent(PointerEventType.Press) { event ->
-                            event.changes.forEach { change ->
-                                when (change.pressed && change.previousPressed.not()) {
-                                    true -> when {
-                                        // Mouse back button (Button 4)
-                                        event.button == PointerButton.Back -> {
-                                            viewModel.goBack()
-                                            change.consume()
-                                        }
-                                        // Mouse forward button (Button 5)
-                                        event.button == PointerButton.Forward -> {
-                                            viewModel.goForward()
-                                            change.consume()
-                                        }
-                                    }
-                                    else -> {}
-                                }
-                            }
-                        }
+                        .platformNavigationInput(
+                            onBack = { viewModel.goBack() },
+                            onForward = { viewModel.goForward() }
+                        )
                         .onKeyEvent { keyEvent ->
                             if (keyEvent.type == KeyEventType.KeyDown) {
                                 val isMod = keyEvent.isCtrlPressed || keyEvent.isMetaPressed
@@ -243,9 +223,10 @@ fun LogseqApp(
                                             onLinkClick = { pageName ->
                                                 viewModel.navigateToPageByName(pageName)
                                             },
-                                            onContentChange = { blockId, newContent, page ->
-                                                viewModel.saveBlockContent(blockId, newContent, page)
-                                            }
+                                            onContentChange = { blockId, newContent, version, page ->
+                                                viewModel.saveBlockContent(blockId, newContent, version, page)
+                                            },
+                                            onSearchPages = { query -> viewModel.searchPages(query) }
                                         )
                                     }
                                     is Screen.Flashcards -> {

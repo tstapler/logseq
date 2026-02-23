@@ -712,7 +712,7 @@ class LogseqViewModel(
     /**
      * Save a block's content change and persist to disk via GraphWriter
      */
-    fun saveBlockContent(blockId: String, newContent: String, page: Page) {
+    fun saveBlockContent(blockId: String, newContent: String, version: Long, page: Page) {
         // Debounce the database write to avoid UI stutter on every keystroke
         debounceManager.debounce(blockId) {
             try {
@@ -723,8 +723,8 @@ class LogseqViewModel(
                     return@debounce
                 }
 
-                // 2. Update the block with new content
-                val updatedBlock = block.copy(content = newContent)
+                // 2. Update the block with new content and version
+                val updatedBlock = block.copy(content = newContent, version = version)
                 blockRepository.saveBlock(updatedBlock)
 
                 // 3. Get all blocks for the page to save to disk
@@ -872,13 +872,31 @@ class LogseqViewModel(
             val searchResult = it.getOrNull()
             if (searchResult != null) {
                 val items = mutableListOf<SearchResultItem>()
-                // Add Pages
-                if (searchResult.pages.isNotEmpty()) {
-                    items.addAll(searchResult.pages.map { SearchResultItem.PageItem(it) })
+                // Add Pages and Aliases
+                searchResult.pages.forEach { page ->
+                    // Check if it's a name match
+                    if (page.name.contains(query, ignoreCase = true)) {
+                        items.add(SearchResultItem.PageItem(page))
+                    }
+                    
+                    // Check for alias matches
+                    val aliases = page.properties["alias"]?.split(",")?.map { it.trim() } ?: emptyList()
+                    aliases.forEach { alias ->
+                        if (alias.contains(query, ignoreCase = true) && !alias.equals(page.name, ignoreCase = true)) {
+                            // Only add alias if it's not the same as the page name (to avoid duplicates)
+                            // and if it hasn't been added already for this page
+                            if (items.none { it is SearchResultItem.AliasItem && it.page.id == page.id && it.alias.equals(alias, ignoreCase = true) }) {
+                                items.add(SearchResultItem.AliasItem(page, alias))
+                            }
+                        }
+                    }
                 }
                 
                 // Add "Create Page" option if no exact match
-                val exactMatch = items.any { it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true) }
+                val exactMatch = items.any { 
+                    (it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true)) ||
+                    (it is SearchResultItem.AliasItem && it.alias.equals(query, ignoreCase = true))
+                }
                 if (!exactMatch && query.isNotBlank()) {
                     items.add(SearchResultItem.CreatePageItem(query))
                 }

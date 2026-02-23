@@ -88,6 +88,7 @@ data class SearchUiState(
 sealed class SearchResultItem {
     data class Header(val title: String) : SearchResultItem()
     data class PageItem(val page: Page) : SearchResultItem()
+    data class AliasItem(val page: Page, val alias: String) : SearchResultItem()
     data class BlockItem(val block: Block) : SearchResultItem()
     data class CreatePageItem(val query: String) : SearchResultItem()
 }

@@ -111,9 +111,10 @@ class InMemorySearchRepository(
         val allPages = getAllPages()
         val results = allPages
             .filter { page ->
-                page.name.contains(query, ignoreCase = true)
+                page.name.contains(query, ignoreCase = true) ||
+                    page.properties["alias"]?.contains(query, ignoreCase = true) == true
             }
-            .sortedByDescending { calculatePageRelevance(it.name, query) }
+            .sortedByDescending { calculatePageRelevance(it, query) }
             .take(limit)
 
         emit(success(results))
@@ -148,8 +149,10 @@ class InMemorySearchRepository(
 
         // Apply query filter to pages
         if (!searchRequest.query.isNullOrBlank()) {
+            val query = searchRequest.query
             filteredPages = filteredPages.filter { page ->
-                page.name.contains(searchRequest.query, ignoreCase = true)
+                page.name.contains(query, ignoreCase = true) ||
+                    page.properties["alias"]?.contains(query, ignoreCase = true) == true
             }
         }
 
@@ -200,13 +203,22 @@ class InMemorySearchRepository(
             .sortedByDescending { (_, score) -> score }
             .map { (block, _) -> block }
 
+        // Calculate relevance for pages and sort
+        val scoredPages = filteredPages.map { page ->
+            val score = calculatePageRelevance(page, searchRequest.query ?: "")
+            page to score
+        }
+        val sortedPages = scoredPages
+            .sortedByDescending { (_, score) -> score }
+            .map { (page, _) -> page }
+
         // Apply pagination
-        val totalCount = sortedBlocks.size + filteredPages.size
+        val totalCount = sortedBlocks.size + sortedPages.size
         val paginatedBlocks = sortedBlocks
             .drop(searchRequest.offset)
             .take(searchRequest.limit)
 
-        val paginatedPages = filteredPages
+        val paginatedPages = sortedPages
             .drop(searchRequest.offset)
             .take(searchRequest.limit)
 
@@ -268,15 +280,18 @@ class InMemorySearchRepository(
      * Calculate relevance score for page title matching.
      *
      * Scoring hierarchy:
-     * - Exact prefix match = 1.0
-     * - Contains match = 0.7
-     * - Properties match = 0.3
+     * - Name Exact prefix match = 1.0
+     * - Name Contains match = 0.8
+     * - Alias Exact prefix match = 0.6
+     * - Alias Contains match = 0.4
+     * - Properties match = 0.2
      */
-    private fun calculatePageRelevance(name: String, query: String): Float {
+    private fun calculatePageRelevance(page: Page, query: String): Float {
         if (query.isBlank()) return 0f
 
-        val lowerName = name.lowercase()
+        val lowerName = page.name.lowercase()
         val lowerQuery = query.lowercase()
+        val aliases = page.properties["alias"]?.split(",")?.map { it.trim().lowercase() } ?: emptyList()
 
         // Exact prefix match on name
         if (lowerName.startsWith(lowerQuery)) {
@@ -285,10 +300,20 @@ class InMemorySearchRepository(
 
         // Contains match on name
         if (lowerName.contains(lowerQuery)) {
-            return 0.7f
+            return 0.8f
         }
 
-        return 0.3f
+        // Exact prefix match on any alias
+        if (aliases.any { it.startsWith(lowerQuery) }) {
+            return 0.6f
+        }
+
+        // Contains match on any alias
+        if (aliases.any { it.contains(lowerQuery) }) {
+            return 0.4f
+        }
+
+        return 0.2f
     }
 
     /**

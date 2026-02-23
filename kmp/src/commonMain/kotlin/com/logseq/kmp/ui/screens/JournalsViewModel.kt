@@ -108,12 +108,12 @@ class JournalsViewModel(
         loadMore()
     }
     
-    fun updateBlockContent(blockUuid: String, newContent: String) {
+    fun updateBlockContent(blockUuid: String, newContent: String, newVersion: Long) {
         scope.launch {
             val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val block = blockResult.getOrNull() ?: return@launch
 
-            val updatedBlock = block.copy(content = newContent)
+            val updatedBlock = block.copy(content = newContent, version = newVersion)
             blockRepository.saveBlock(updatedBlock)
 
             // Update just this block in the local state without refreshing from repository

@@ -80,7 +80,8 @@ class SqlDelightPageRepository(
                 file_path = page.filePath,
                 created_at = page.createdAt.toEpochMilliseconds(),
                 updated_at = page.updatedAt.toEpochMilliseconds(),
-                properties = page.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
+                properties = page.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
+                version = page.version
             )
             success(Unit)
         } catch (e: Exception) {
@@ -121,6 +122,7 @@ class SqlDelightPageRepository(
             filePath = this.file_path,
             createdAt = Instant.fromEpochMilliseconds(this.created_at),
             updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
+            version = this.version,
             properties = this.properties?.split(",")?.associate {
                 val parts = it.split(":", limit = 2)
                 if (parts.size == 2) parts[0] to parts[1] else "" to ""

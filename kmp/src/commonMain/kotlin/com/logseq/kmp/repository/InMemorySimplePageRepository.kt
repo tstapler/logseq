@@ -51,8 +51,12 @@ class InMemorySimplePageRepository : SimplePageRepository {
 
     override fun getPageByName(name: String): Flow<Result<Page?>> {
         return pages.map { map ->
-            // Case-insensitive search by page name
-            Result.success(map.values.find { it.name.equals(name, ignoreCase = true) })
+            // Case-insensitive search by page name or alias
+            val page = map.values.find { page ->
+                page.name.equals(name, ignoreCase = true) ||
+                    page.properties["alias"]?.split(",")?.any { it.trim().equals(name, ignoreCase = true) } == true
+            }
+            Result.success(page)
         }
     }
 

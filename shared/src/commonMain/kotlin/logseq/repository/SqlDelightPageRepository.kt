@@ -285,6 +285,7 @@ class SqlDelightPageRepository(
             filePath = file_path,
             createdAt = Instant.fromEpochMilliseconds(created_at),
             updatedAt = Instant.fromEpochMilliseconds(updated_at),
+            version = version,
             properties = extendedProps,
             collapsed = extendedProps["collapsed"]?.toBoolean() ?: false,
             journalDay = extendedProps["journalDay"]?.toLong(),
@@ -316,7 +317,8 @@ class SqlDelightPageRepository(
             file_path = filePath,
             created_at = createdAt.toEpochMilliseconds(),
             updated_at = updatedAt.toEpochMilliseconds(),
-            properties = json.encodeToString(extendedProps)
+            properties = json.encodeToString(extendedProps),
+            version = version
         )
     }
 }

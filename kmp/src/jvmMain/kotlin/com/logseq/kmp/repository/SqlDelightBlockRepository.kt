@@ -208,7 +208,8 @@ class SqlDelightBlockRepository(
                         block.position.toLong(),
                         block.createdAt.toEpochMilliseconds(),
                         block.updatedAt.toEpochMilliseconds(),
-                        block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
+                        block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
+                        block.version
                     )
                 }
             }
@@ -230,7 +231,8 @@ class SqlDelightBlockRepository(
                 block.position.toLong(),
                 block.createdAt.toEpochMilliseconds(),
                 block.updatedAt.toEpochMilliseconds(),
-                block.properties.entries.joinToString(",") { "${it.key}:${it.value}" }
+                block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
+                block.version
             )
             success(Unit)
         } catch (e: Exception) {
@@ -356,6 +358,7 @@ class SqlDelightBlockRepository(
             position = this.position.toInt(),
             createdAt = Instant.fromEpochMilliseconds(this.created_at),
             updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
+            version = this.version,
             properties = parseProperties(this.properties)
         )
     }

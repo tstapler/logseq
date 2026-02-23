@@ -37,6 +37,9 @@ data class Page(
     @SerialName("updated_at")
     val updatedAt: Instant,
 
+    @SerialName("version")
+    val version: Long = 0,
+
     // UI state
     @SerialName("collapsed")
     val collapsed: Boolean = false,
@@ -119,6 +122,7 @@ data class Page(
             position = 0,
             createdAt = createdAt,
             updatedAt = updatedAt,
+            version = version,
             title = title,
             name = name,
             collapsed = collapsed,
@@ -148,6 +152,7 @@ data class Page(
                 filePath = null, // Not stored in blocks
                 createdAt = block.createdAt,
                 updatedAt = block.updatedAt,
+                version = block.version,
                 collapsed = block.collapsed,
                 journalDay = block.journalDay,
                 aliases = block.aliases,

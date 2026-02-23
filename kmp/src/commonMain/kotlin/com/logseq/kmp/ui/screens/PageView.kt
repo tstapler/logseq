@@ -143,8 +143,8 @@ fun PageView(
                         collapsedBlocks = collapsedBlockIds,
                         onStartEditing = { blockId -> editingBlockId = blockId },
                         onStopEditing = { editingBlockId = null },
-                        onContentChange = { blockId, newContent ->
-                            viewModel.saveBlockContent(blockId, newContent, page)
+                        onContentChange = { blockId, newContent, version ->
+                            viewModel.saveBlockContent(blockId, newContent, version, page)
                         },
                         onLinkClick = onLinkClick,
                         onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
@@ -165,7 +165,8 @@ fun PageView(
                         },
                         onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
                         onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) },
-                        onResolveContent = { uuid -> viewModel.getBlockContent(uuid) }
+                        onResolveContent = { uuid -> viewModel.getBlockContent(uuid) },
+                        onSearchPages = { query -> viewModel.searchPages(query) }
                     )
 
                     // Clickable area below blocks to append new block

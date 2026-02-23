@@ -89,7 +89,7 @@ fun BlockRenderer(
     linkColor: Color = MaterialTheme.colorScheme.primary,
     onStartEditing: () -> Unit,
     onStopEditing: () -> Unit,
-    onContentChange: (String) -> Unit,
+    onContentChange: (String, Long) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
@@ -114,6 +114,8 @@ fun BlockRenderer(
         mutableStateOf(TextFieldValue(text = block.content))
     }
 
+    var localVersion by remember(block.uuid) { mutableLongStateOf(block.version) }
+
     // Autocomplete State
     var autocompleteState by remember { mutableStateOf<AutocompleteState?>(null) }
     var searchResults by remember { mutableStateOf<List<SearchResultItem>>(emptyList()) }
@@ -133,15 +135,16 @@ fun BlockRenderer(
     }
 
     // Handle external updates to block content (e.g. undo/redo, sync)
-    // Only update if content has actually changed externally to avoid resetting cursor
-    LaunchedEffect(block.content) {
-        if (textFieldValue.text != block.content) {
+    // Only update if the incoming version is newer than our local version
+    LaunchedEffect(block.version) {
+        if (block.version > localVersion) {
             val newSelection = if (textFieldValue.selection.max <= block.content.length) {
                 textFieldValue.selection
             } else {
                 TextRange(block.content.length)
             }
             textFieldValue = TextFieldValue(text = block.content, selection = newSelection)
+            localVersion = block.version
         }
     }
     
@@ -278,8 +281,12 @@ fun BlockRenderer(
                 BasicTextField(
                     value = textFieldValue,
                     onValueChange = { newValue ->
+                        val oldText = textFieldValue.text
                         textFieldValue = newValue
-                        onContentChange(newValue.text)
+                        if (newValue.text != oldText) {
+                            localVersion++
+                            onContentChange(newValue.text, localVersion)
+                        }
 
                         // Trigger detection logic
                         val cursor = newValue.selection.min
@@ -322,6 +329,7 @@ fun BlockRenderer(
                                             val item = searchResults[selectedIndex]
                                             val pageName = when (item) {
                                                 is SearchResultItem.PageItem -> item.page.name
+                                                is SearchResultItem.AliasItem -> item.alias
                                                 is SearchResultItem.CreatePageItem -> item.query
                                                 else -> null
                                             }
@@ -343,7 +351,8 @@ fun BlockRenderer(
                                                     val newCursor = startIndex + replacement.length
                                                     
                                                     textFieldValue = TextFieldValue(newText, TextRange(newCursor))
-                                                    onContentChange(newText)
+                                                    localVersion++
+                                                    onContentChange(newText, localVersion)
                                                     autocompleteState = null
                                                 }
                                             }
@@ -490,6 +499,7 @@ fun BlockRenderer(
                 onItemSelected = { item ->
                     val pageName = when (item) {
                         is SearchResultItem.PageItem -> item.page.name
+                        is SearchResultItem.AliasItem -> item.alias
                         is SearchResultItem.CreatePageItem -> item.query
                         else -> null
                     }
@@ -508,11 +518,11 @@ fun BlockRenderer(
                             val newText = before + replacement + after
                             val newCursor = startIndex + replacement.length
                             
-                            textFieldValue = TextFieldValue(newText, TextRange(newCursor))
-                            onContentChange(newText)
-                            autocompleteState = null
-                        }
-                    }
+                                                                textFieldValue = TextFieldValue(newText, TextRange(newCursor))
+                                                                localVersion++
+                                                                onContentChange(newText, localVersion)
+                                                                autocompleteState = null
+                                                            }                    }
                 },
                 onDismiss = { autocompleteState = null },
                 cursorRect = autocompleteState?.cursorRect
@@ -760,7 +770,7 @@ fun BlockList(
     collapsedBlocks: Set<Long> = emptySet(),
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
-    onContentChange: (String, String) -> Unit,
+    onContentChange: (String, String, Long) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
@@ -824,7 +834,7 @@ fun BlockList(
                     isCollapsed = isCollapsed,
                     onStartEditing = { onStartEditing(block.uuid) },
                     onStopEditing = onStopEditing,
-                    onContentChange = { newContent -> onContentChange(block.uuid, newContent) },
+                    onContentChange = { newContent, version -> onContentChange(block.uuid, newContent, version) },
                     onLinkClick = onLinkClick,
                     onNewBlock = onNewBlock,
                     onSplitBlock = onSplitBlock,

@@ -9,7 +9,8 @@ CREATE TABLE pages (
     file_path TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    properties TEXT -- JSON string for page properties
+    properties TEXT, -- JSON string for page properties
+    version INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE blocks (
@@ -24,6 +25,7 @@ CREATE TABLE blocks (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     properties TEXT, -- JSON string for block properties
+    version INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES blocks(id) ON DELETE CASCADE,
     FOREIGN KEY (left_id) REFERENCES blocks(id) ON DELETE CASCADE
@@ -176,8 +178,8 @@ deleteBlocksByPageId:
 DELETE FROM blocks WHERE page_id = ?;
 
 insertBlock:
-INSERT INTO blocks (uuid, page_id, parent_id, left_id, content, level, position, created_at, updated_at, properties)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO blocks (uuid, page_id, parent_id, left_id, content, level, position, created_at, updated_at, properties, version)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Page queries
 selectPageById:
@@ -237,8 +239,8 @@ deletePageById:
 DELETE FROM pages WHERE id = ?;
 
 insertPage:
-INSERT INTO pages (uuid, name, namespace, file_path, created_at, updated_at, properties)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO pages (uuid, name, namespace, file_path, created_at, updated_at, properties, version)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Reference queries
 selectReferencesFromBlock:

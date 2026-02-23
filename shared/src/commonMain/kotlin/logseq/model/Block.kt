@@ -46,6 +46,9 @@ data class Block(
     @SerialName("updated_at")
     val updatedAt: Instant,
 
+    @SerialName("version")
+    val version: Long = 0,
+
     // Page-specific attributes (when block represents a page)
     @SerialName("title")
     val title: String? = null,

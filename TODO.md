@@ -3,16 +3,16 @@
 ## Current Status
 - **Migration State**: Feature Implementation Phase - Core features complete!
 - **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
-- **Recent Activity**: Completed Stories 1-8: Tags and Block References implemented!
-- **Last Updated**: February 1, 2026
-- **Current Focus**: Wiki Link Autocomplete
+- **Recent Activity**: Completed Story 10: Page Alias Support!
+- **Last Updated**: February 22, 2026
+- **Current Focus**: Graph View
 
 ## Build Status
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| JVM/Desktop | ❌ FAILING | [See Fix Plan](docs/tasks/fix-build-2026-02-05.md) |
-| Android | ❌ FAILING | Compilation errors |
+| JVM/Desktop | ✅ PASSING | Stable |
+| Android | ✅ PASSING | BUG-007 resolved |
 | JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
 | iOS | ⏸️ Disabled | Ivy repository issues |
 
@@ -75,7 +75,7 @@ kmp/
 ## Active Development
 
 ### 🚨 URGENT REPAIRS
-- [ ] **Fix Build Errors** - [View Plan](docs/tasks/fix-build-2026-02-05.md)
+- [ ] **Fix Android Build (BUG-007)** - [View Plan](docs/tasks/fix-build-2026-02-22.md)
 
 ### 🎯 FEATURE PARITY IMPLEMENTATION
 
@@ -85,7 +85,7 @@ kmp/
 - [x] Task 1.3: Undo/redo support (2h) - Ctrl+Z / Ctrl+Shift+Z
 - [x] Task 1.4: Block editing enhancements - Enter, Backspace, Split, Merge
 
-#### Story 2: Block Hierarchy & Outliner (In Progress) - [View Plan](docs/tasks/block-hierarchy.md)
+#### Story 2: Block Hierarchy & Outliner ✅ Complete - [View Plan](docs/tasks/block-hierarchy.md)
 - [x] Task 2.1: Tree structure visualization (2h) - Vertical guide lines
 - [x] Task 2.2: Indent/outdent blocks (2h) - Tab / Shift+Tab
 - [x] Task 2.3: Collapse/expand blocks (1h)
@@ -126,10 +126,17 @@ kmp/
 - [x] Task 8.1: Parser Hardening for #tag (1h)
 - [x] Task 8.2: UI Rendering and Interaction (1h)
 
-#### Story 9: Wiki Link Autocomplete (Next Up) - [View Plan](docs/tasks/wiki-link-autocomplete.md)
-- [ ] Task 9.1: Trigger Detection in RichTextEditor (1h)
-- [ ] Task 9.2: Autocomplete UI Component (2h)
-- [ ] Task 9.3: Integration and Wiring (1h)
+#### Story 9: Wiki Link Autocomplete ✅ Complete - [View Plan](docs/tasks/wiki-link-autocomplete.md)
+- [x] Task 9.0: Fix Android Build (2h)
+- [x] Task 9.1: Trigger Detection in RichTextEditor (1h)
+- [x] Task 9.2: Autocomplete UI Component (2h)
+- [x] Task 9.3: Integration and Wiring (1h)
+
+#### Story 10: Page Aliases ✅ Complete - [View Plan](docs/tasks/page-aliases.md)
+- [x] Task 10.1: Update Page Repository to handle aliases (1h)
+- [x] Task 10.2: Update Search Repository to index aliases (1h)
+- [x] Task 10.3: Autocomplete support for aliases (1h)
+- [x] Task 10.4: Navigation support for aliased pages (1h)
 
 ### 🎯 COMPLETED TASKS
 - [x] **Feat: Tags Support (#tag)** (Feb 1, 2026)
@@ -216,6 +223,7 @@ kmp/
 |----|----------|-------------|--------|
 | BUG-003 | Medium | JS/iOS targets disabled | Open |
 | BUG-004 | Critical | GraphWriter corrupts block order | ✅ Fixed (Jan 23) |
+| BUG-007 | High | Editor Content Replay / Typing Wiped | ✅ Fixed (Feb 24) |
 | - | Low | ClickableText deprecated API | Warning only |
 | - | Low | expect/actual beta warnings | Cosmetic |
 

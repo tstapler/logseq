@@ -101,6 +101,10 @@ fun SearchDialog(
                                                 onNavigateToPage(item.page.uuid)
                                                 onDismiss()
                                             }
+                                            is SearchResultItem.AliasItem -> {
+                                                onNavigateToPage(item.page.uuid)
+                                                onDismiss()
+                                            }
                                             is SearchResultItem.BlockItem -> {
                                                 onNavigateToBlock(item.block.uuid)
                                                 onDismiss()
@@ -175,6 +179,17 @@ fun SearchDialog(
                                     SearchResultRow(
                                         title = item.page.name,
                                         subtitle = "Page",
+                                        isSelected = index == selectedIndex,
+                                        onClick = {
+                                            onNavigateToPage(item.page.uuid)
+                                            onDismiss()
+                                        }
+                                    )
+                                }
+                                is SearchResultItem.AliasItem -> {
+                                    SearchResultRow(
+                                        title = item.alias,
+                                        subtitle = "Alias for ${item.page.name}",
                                         isSelected = index == selectedIndex,
                                         onClick = {
                                             onNavigateToPage(item.page.uuid)

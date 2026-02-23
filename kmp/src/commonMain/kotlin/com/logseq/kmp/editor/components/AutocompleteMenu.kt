@@ -116,6 +116,21 @@ private fun AutocompleteItem(
                     color = contentColor
                 )
             }
+            is SearchResultItem.AliasItem -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = item.alias,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "→ ${item.page.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.6f)
+                    )
+                }
+            }
             is SearchResultItem.BlockItem -> {
                 Text(
                     text = item.block.content.take(50),

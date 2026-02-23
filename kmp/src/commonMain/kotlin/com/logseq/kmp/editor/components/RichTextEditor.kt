@@ -223,7 +223,8 @@ fun RichTextBlockField(
     modifier: Modifier = Modifier,
     placeholder: String = "New block...",
     level: Int = 0,
-    onDelete: () -> Unit = { }
+    onDelete: () -> Unit = { },
+    onTriggerDetected: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> }
 ) {
     val scope = rememberCoroutineScope()
     
@@ -233,6 +234,7 @@ fun RichTextBlockField(
         textOperations = textOperations,
         editorConfig = editorConfig,
         onEditorStateChange = onEditorStateChange,
+        onTriggerDetected = onTriggerDetected,
         modifier = modifier.padding(
             start = (level * 24).dp,
             top = 4.dp,

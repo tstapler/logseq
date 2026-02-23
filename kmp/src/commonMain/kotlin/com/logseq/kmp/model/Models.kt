@@ -60,6 +60,7 @@ data class Page(
     val filePath: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val version: Long = 0,
     val properties: Map<String, String> = emptyMap(),
     val isFavorite: Boolean = false,
     val isJournal: Boolean = false,
@@ -91,6 +92,7 @@ data class Block(
     val position: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val version: Long = 0,
     val properties: Map<String, String> = emptyMap(),
     val isLoaded: Boolean = true // Indicates if the content is fully loaded
 ) {

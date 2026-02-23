@@ -30,7 +30,8 @@ fun JournalsView(
     blockRepository: BlockRepository,
     isDebugMode: Boolean,
     onLinkClick: (String) -> Unit,
-    onContentChange: (String, String, Page) -> Unit,
+    onContentChange: (String, String, Long, Page) -> Unit,
+    onSearchPages: (String) -> kotlinx.coroutines.flow.Flow<List<SearchResultItem>> = { kotlinx.coroutines.flow.emptyFlow() },
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -90,8 +91,8 @@ fun JournalsView(
                     collapsedBlocks = collapsedBlockIds,
                     onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
                     onStopEditing = { viewModel.requestEditBlock(null) },
-                    onContentChange = { blockId, newContent ->
-                        viewModel.updateBlockContent(blockId, newContent)
+                    onContentChange = { blockId, newContent, version ->
+                        viewModel.updateBlockContent(blockId, newContent, version)
                     },
                     onLinkClick = onLinkClick,
                     onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
@@ -114,7 +115,8 @@ fun JournalsView(
                     onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) },
                     onToggleCollapse = { blockId -> viewModel.toggleBlockCollapse(blockId) },
                     onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
-                    onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) }
+                    onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) },
+                    onSearchPages = onSearchPages
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -158,7 +160,7 @@ private fun JournalEntry(
     collapsedBlocks: Set<Long>,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
-    onContentChange: (String, String) -> Unit,
+    onContentChange: (String, String, Long) -> Unit,
     onLinkClick: (String) -> Unit,
     onNewBlock: (String) -> Unit,
     onSplitBlock: (String, Int) -> Unit,
@@ -173,6 +175,7 @@ private fun JournalEntry(
     onToggleCollapse: (Long) -> Unit,
     onFocusUp: (String) -> Unit,
     onFocusDown: (String) -> Unit,
+    onSearchPages: (String) -> kotlinx.coroutines.flow.Flow<List<SearchResultItem>> = { kotlinx.coroutines.flow.emptyFlow() },
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -227,7 +230,8 @@ private fun JournalEntry(
                 onBackspace = onBackspace,
                 onToggleCollapse = onToggleCollapse,
                 onFocusUp = onFocusUp,
-                onFocusDown = onFocusDown
+                onFocusDown = onFocusDown,
+                onSearchPages = onSearchPages
             )
             
             // Clickable area below blocks to append new block

@@ -248,6 +248,7 @@ class SqlDelightBlockRepository(
             position = position.toInt(),
             createdAt = Instant.fromEpochMilliseconds(created_at),
             updatedAt = Instant.fromEpochMilliseconds(updated_at),
+            version = version,
             properties = extendedProps,
             // Extended properties from JSON - simplified for now
             title = extendedProps["title"],
@@ -307,7 +308,8 @@ class SqlDelightBlockRepository(
             position = position.toLong(),
             created_at = createdAt.toEpochMilliseconds(),
             updated_at = updatedAt.toEpochMilliseconds(),
-            properties = json.encodeToString(extendedProps)
+            properties = json.encodeToString(extendedProps),
+            version = version
         )
     }
 }
