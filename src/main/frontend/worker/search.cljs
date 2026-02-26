@@ -119,17 +119,21 @@ DROP TRIGGER IF EXISTS blocks_au;
   [^Object db blocks]
   (.transaction db (fn [tx]
                      (doseq [item blocks]
-                       (if (and (common-util/uuid-string? (.-id item))
-                                (common-util/uuid-string? (.-page item)))
-                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
-                                        :bind #js {:$id (.-id item)
-                                                   :$title (.-title item)
-                                                   :$page (.-page item)}})
-                         (do
-                           (js/console.error "Upsert blocks wrong data: ")
-                           (js/console.dir item)
-                           (throw (ex-info "Search upsert-blocks wrong data: "
-                                           (bean/->clj item)))))))))
+                       (when-not (and (common-util/uuid-string? (.-id item))
+                                      (common-util/uuid-string? (.-page item)))
+                         (js/console.error "Upsert blocks wrong data: ")
+                         (js/console.dir item)
+                         (throw (ex-info "Search upsert-blocks wrong data: "
+                                         (bean/->clj item)))))
+                     (doseq [chunk (partition-all 100 blocks)]
+                       (let [n (count chunk)
+                             placeholders (string/join ", " (repeat n "(?, ?, ?)"))
+                             sql (str "INSERT INTO blocks (id, title, page) VALUES "
+                                      placeholders
+                                      " ON CONFLICT (id) DO UPDATE SET title = excluded.title, page = excluded.page")
+                             params (to-array (mapcat (fn [item] [(.-id item) (.-title item) (.-page item)]) chunk))]
+                         (.exec tx #js {:sql sql
+                                        :bind params}))))))
 
 (defn delete-blocks!
   [db ids]
