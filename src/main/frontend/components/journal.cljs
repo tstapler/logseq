@@ -1,8 +1,6 @@
 (ns frontend.components.journal
   (:require [frontend.components.page :as page]
             [frontend.components.views :as views]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -21,7 +19,7 @@
 
 (defn- load-journals
   [offset limit]
-  (when-let [repo (state/get-current-repo)]
+  (when-let [_repo (state/get-current-repo)]
     (p/let [{:keys [data count has-more?]} (views/<load-view-data nil {:journals? true
                                                                         :journal-limit limit
                                                                         :journal-offset offset})]
@@ -29,7 +27,7 @@
        :count count
        :has-more? has-more?})))
 
-(rum/defc all-journals < rum/reactive
+(rum/defcs all-journals-render < rum/reactive
   {:init (fn [state]
            (assoc state
                   ::loaded-journals (atom [])
@@ -49,11 +47,10 @@
                       (reset! loading? false)
                       (reset! initialized? true))))
                 state)}
-  [_]
-  (let [*state (rum/state _)
-        loaded-journals (::loaded-journals *state)
-        loading? (::loading? *state)
-        has-more? (::has-more? *state)
+  [state]
+  (let [loaded-journals (::loaded-journals state)
+        loading? (::loading? state)
+        has-more? (::has-more? state)
         data @loaded-journals
         load-more! (fn []
                      (when (and @has-more? (not @loading?))
@@ -80,3 +77,7 @@
                         (when @has-more?
                           (load-more!)))
          :overscan 200})])))
+
+(defn all-journals
+  ([] [all-journals-render])
+  ([_] [all-journals-render]))
