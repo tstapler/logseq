@@ -27,7 +27,7 @@
        :count count
        :has-more? has-more?})))
 
-(rum/defcs all-journals < rum/reactive
+(rum/defcs all-journals-render < rum/reactive
   {:init (fn [state]
            (assoc state
                   ::loaded-journals (atom [])
@@ -77,3 +77,7 @@
                         (when @has-more?
                           (load-more!)))
          :overscan 200})])))
+
+(defn all-journals
+  ([] [all-journals-render])
+  ([_] [all-journals-render]))
