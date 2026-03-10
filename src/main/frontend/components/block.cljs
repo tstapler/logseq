@@ -3920,10 +3920,11 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             page-ids (map (comp :db/id first) blocks)
-            pages-map (into {} (map (juxt :db/id identity) (db/pull-many '[*] page-ids)))]
+            pages-map (into {} (map (juxt :db/id identity) (remove nil? (db/pull-many '[*] page-ids))))]
         (for [[page blocks] blocks]
           (let [alias? (:block/alias? page)
-                page (get pages-map (:db/id page))
+                page (or (get pages-map (:db/id page))
+                         (db/entity (:db/id page)))
                 blocks (tree/non-consecutive-blocks->vec-tree blocks)
                 parent-blocks (group-by :block/parent blocks)]
             [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
@@ -3971,12 +3972,13 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             page-ids (map (comp :db/id first) blocks)
-            pages-map (into {} (map (juxt :db/id identity) (db/pull-many '[*] page-ids)))]
+            pages-map (into {} (map (juxt :db/id identity) (remove nil? (db/pull-many '[*] page-ids))))]
         (for [[page blocks] blocks]
           (let [blocks (remove nil? blocks)]
             (when (seq blocks)
               (let [alias? (:block/alias? page)
-                    page (get pages-map (:db/id page))]
+                    page (or (get pages-map (:db/id page))
+                             (db/entity (:db/id page)))]
                 [:div.my-2 {:key (str "page-" (:db/id page))}
                  (ui/foldable
                   [:div
