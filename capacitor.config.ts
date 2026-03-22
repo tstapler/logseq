@@ -5,7 +5,7 @@ import * as fs from 'fs'
 const version = fs.readFileSync('static/package.json', 'utf8').match(/"version": "(.*?)"/)?.at(1) ?? '0.0.0'
 
 const config: CapacitorConfig = {
-  appId: 'com.logseq.app',
+  appId: 'dev.stapler.logseq.app',
   appName: 'Logseq',
   webDir: 'static/mobile',
   loggingBehavior: process.env.NODE_ENV === 'development' ? 'debug' : 'production',

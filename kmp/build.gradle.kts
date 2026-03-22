@@ -4,6 +4,7 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.compose")
     id("app.cash.sqldelight")
+    id("io.github.takahirom.roborazzi")
 }
 
 kotlin {
@@ -38,6 +39,7 @@ kotlin {
 
                 // SQLDelight
                 implementation("app.cash.sqldelight:runtime:2.0.2")
+                implementation("app.cash.sqldelight:coroutines-extensions:2.0.2")
 
                 // Compose Multiplatform
                 implementation(compose.runtime)
@@ -46,6 +48,10 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.components.resources)
+
+                // Lifecycle
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
             }
         }
 
@@ -73,6 +79,12 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test-junit"))
+                @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+                implementation(compose.desktop.uiTestJUnit4)
+                implementation("io.github.takahirom.roborazzi:roborazzi-compose-desktop:1.59.0") {
+                    exclude(group = "org.jetbrains.compose.ui", module = "ui-test-junit4-desktop")
+                }
+                implementation("io.github.takahirom.roborazzi:roborazzi:1.59.0")
             }
         }
 
@@ -146,6 +158,14 @@ kotlin {
         //      it.compilations.getByName("test").defaultSourceSet.dependsOn(iosTest)
         // }
     }
+}
+
+// Configure JVM test task for Compose Desktop UI tests
+tasks.named<Test>("jvmTest") {
+    jvmArgs("-Djava.awt.headless=false")
+    // Enable software rendering for CI environments
+    environment("LIBGL_ALWAYS_SOFTWARE", System.getenv("LIBGL_ALWAYS_SOFTWARE") ?: "")
+    environment("GALLIUM_DRIVER", System.getenv("GALLIUM_DRIVER") ?: "")
 }
 
 compose.desktop {

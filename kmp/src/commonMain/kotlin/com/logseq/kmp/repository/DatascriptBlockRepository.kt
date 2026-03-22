@@ -142,12 +142,12 @@ class DatascriptBlockRepository : BlockRepository {
         }
     }
 
-    override fun searchBlocksByContent(query: String): Flow<Result<List<Block>>> {
-        return blocks.map { map ->
-            val matchingBlocks = map.values.filter { block ->
-                block.content.contains(query, ignoreCase = true)
-            }
-            success(matchingBlocks.sortedBy { it.pageId })
+    override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        return byUuid.map { map ->
+            val matching = map.values.filter { it.content.contains(query, ignoreCase = true) }
+                .drop(offset)
+                .take(limit)
+            Result.success(matching)
         }
     }
 
@@ -370,35 +370,23 @@ class DatascriptBlockRepository : BlockRepository {
             try {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
-                // Filter by BOTH parentId AND pageId to avoid mixing blocks from different pages
                 val siblings = currentBlocks.values
                     .filter { it.parentId == block.parentId && it.pageId == block.pageId }
                     .sortedBy { it.position }
+                    .toMutableList()
 
-                val result = TreeOperations.moveUp(block, siblings)
-                if (result != null) {
-                    val updates = result.associateBy { it.uuid }.toMutableMap()
-                    
-                    val updatedSiblings = siblings.map { existing ->
-                        updates[existing.uuid] ?: existing
-                    }.sortedBy { it.position }.toMutableList()
-                    
-                    val idx1 = updatedSiblings.indexOfFirst { it.id == result[0].id }
-                    val idx2 = updatedSiblings.indexOfFirst { it.id == result[1].id }
-                    
-                    if (idx1 != -1 && idx2 != -1) {
-                         val tmp = updatedSiblings[idx1]
-                         updatedSiblings[idx1] = updatedSiblings[idx2]
-                         updatedSiblings[idx2] = tmp
-                    }
-                    
-                    TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
-                    
-                    batchUpdateBlocks(updates)
-                    success(Unit)
-                } else {
-                    success(Unit)
-                }
+                val index = siblings.indexOfFirst { it.id == block.id }
+                if (index <= 0) return@withLock success(Unit)
+
+                // Swap in the list
+                val prev = siblings[index - 1]
+                siblings[index - 1] = siblings[index]
+                siblings[index] = prev
+
+                // Re-sequence everyone
+                val updates = TreeOperations.reorderSiblings(siblings).associateBy { it.uuid }
+                batchUpdateBlocks(updates)
+                success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
             }
@@ -410,42 +398,35 @@ class DatascriptBlockRepository : BlockRepository {
             try {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
-                // Filter by BOTH parentId AND pageId to avoid mixing blocks from different pages
                 val siblings = currentBlocks.values
                     .filter { it.parentId == block.parentId && it.pageId == block.pageId }
                     .sortedBy { it.position }
+                    .toMutableList()
 
-                val result = TreeOperations.moveDown(block, siblings)
-                if (result != null) {
-                    val updates = result.associateBy { it.uuid }.toMutableMap()
-                    
-                    val updatedSiblings = siblings.map { existing ->
-                        updates[existing.uuid] ?: existing
-                    }.toMutableList()
+                val index = siblings.indexOfFirst { it.id == block.id }
+                if (index < 0 || index >= siblings.size - 1) return@withLock success(Unit)
 
-                    val b1 = result[0]
-                    val b2 = result[1]
-                    
-                    val idx1 = updatedSiblings.indexOfFirst { it.id == b1.id }
-                    val idx2 = updatedSiblings.indexOfFirst { it.id == b2.id }
-                    
-                     if (idx1 != -1 && idx2 != -1) {
-                         val temp = updatedSiblings[idx1]
-                         updatedSiblings[idx1] = updatedSiblings[idx2]
-                         updatedSiblings[idx2] = temp
-                    }
+                // Swap in the list
+                val next = siblings[index + 1]
+                siblings[index + 1] = siblings[index]
+                siblings[index] = next
 
-                    TreeOperations.reorderSiblings(updatedSiblings).forEach { updates[it.uuid] = it }
-                    
-                    batchUpdateBlocks(updates)
-                    success(Unit)
-                } else {
-                    success(Unit)
-                }
+                // Re-sequence everyone
+                val updates = TreeOperations.reorderSiblings(siblings).associateBy { it.uuid }
+                batchUpdateBlocks(updates)
+                success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+    }
+
+    override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> {
+        return success(Unit)
+    }
+
+    override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> {
+        return Result.failure(NotImplementedError())
     }
 
     override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {

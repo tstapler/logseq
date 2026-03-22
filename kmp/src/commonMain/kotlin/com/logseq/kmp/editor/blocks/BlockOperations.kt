@@ -4,6 +4,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.performance.PerformanceMonitor
+import com.logseq.kmp.repository.BlockWithDepth
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -212,57 +213,76 @@ class BlockOperations(
         cursorPosition: Int,
         keepContentInOriginal: Boolean
     ): Result<Block> = operationMutex.withLock {
+        // Delegate to atomic repository method
+        blockRepository.splitBlock(blockUuid, cursorPosition)
+    }
+
+    override suspend fun mergeWithNext(
+        blockUuid: String,
+        separator: String
+    ): Result<Block> = operationMutex.withLock {
         try {
-            val block = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
+            val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            val content = block.content
-            if (cursorPosition < 0 || cursorPosition > content.length) {
-                return Result.failure(IllegalArgumentException("Invalid split position: $cursorPosition"))
+            val siblings = if (currentBlock.parentId == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            } else {
+                blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
+            }
+
+            val currentIndex = siblings.indexOfFirst { it.uuid == blockUuid }
+            if (currentIndex < 0 || currentIndex >= siblings.size - 1) {
+                return Result.failure(IllegalStateException("No next sibling to merge with"))
             }
             
-            val firstPart = content.substring(0, cursorPosition)
-            val secondPart = content.substring(cursorPosition)
+            val nextBlock = siblings[currentIndex + 1]
+            val mergeResult = blockRepository.mergeBlocks(blockUuid, nextBlock.uuid, separator)
             
-            if (keepContentInOriginal) {
-                val updatedBlock = block.copy(
-                    content = firstPart.trim(),
-                    updatedAt = kotlinx.datetime.Clock.System.now()
-                )
-                blockRepository.saveBlock(updatedBlock)
-                
-                val newBlock = Block(
-                    id = 0L,
-                    uuid = generateBlockUuid(),
-                    content = secondPart.trim(),
-                    pageId = block.pageId,
-                    parentId = block.parentId,
-                    leftId = null, // Needs logic
-                    position = block.position + 1,
-                    level = block.level,
-                    createdAt = kotlinx.datetime.Clock.System.now(),
-                    updatedAt = kotlinx.datetime.Clock.System.now(),
-                    properties = emptyMap()
-                )
-                val result = blockRepository.saveBlock(newBlock)
-                if (result.isSuccess) Result.success(newBlock) else Result.failure(result.exceptionOrNull() ?: Exception("Unknown error"))
+            if (mergeResult.isSuccess) {
+                // Return updated block (repository should have updated the content in DB)
+                blockRepository.getBlockByUuid(blockUuid).first()
+                    .map { it ?: throw IllegalStateException("Block disappeared after merge") }
             } else {
-                Result.failure(NotImplementedError("keepContentInOriginal=false not implemented"))
+                Result.failure(mergeResult.exceptionOrNull() ?: Exception("Merge failed"))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    override suspend fun mergeWithNext(
-        blockUuid: String,
-        separator: String
-    ): Result<Block> = Result.failure(NotImplementedError("mergeWithNext not implemented"))
-
     override suspend fun mergeWithPrevious(
         blockUuid: String,
         separator: String
-    ): Result<Block> = Result.failure(NotImplementedError("mergeWithPrevious not implemented"))
+    ): Result<Block> = operationMutex.withLock {
+        try {
+            val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
+                ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
+            
+            val siblings = if (currentBlock.parentId == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            } else {
+                blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
+            }
+
+            val currentIndex = siblings.indexOfFirst { it.uuid == blockUuid }
+            if (currentIndex <= 0) {
+                return Result.failure(IllegalStateException("No previous sibling to merge with"))
+            }
+            
+            val prevBlock = siblings[currentIndex - 1]
+            val mergeResult = blockRepository.mergeBlocks(prevBlock.uuid, blockUuid, separator)
+            
+            if (mergeResult.isSuccess) {
+                blockRepository.getBlockByUuid(prevBlock.uuid).first()
+                    .map { it ?: throw IllegalStateException("Block disappeared after merge") }
+            } else {
+                Result.failure(mergeResult.exceptionOrNull() ?: Exception("Merge failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     override suspend fun collapseSubtree(blockUuid: String, recursive: Boolean): Result<Unit> = Result.success(Unit)
     override suspend fun expandSubtree(blockUuid: String, recursive: Boolean): Result<Unit> = Result.success(Unit)

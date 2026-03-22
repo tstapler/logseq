@@ -25,7 +25,8 @@ fun SettingsDialog(
     currentTheme: LogseqThemeMode,
     onThemeChange: (LogseqThemeMode) -> Unit,
     currentLanguage: Language,
-    onLanguageChange: (Language) -> Unit
+    onLanguageChange: (Language) -> Unit,
+    onReindex: () -> Unit
 ) {
     if (visible) {
         Dialog(
@@ -105,7 +106,7 @@ fun SettingsDialog(
                                 )
                                 SettingsCategory.EDITOR -> EditorSettings()
                                 SettingsCategory.PLUGINS -> PluginsSettings()
-                                SettingsCategory.ADVANCED -> AdvancedSettings()
+                                SettingsCategory.ADVANCED -> AdvancedSettings(onReindex)
                             }
                         }
                     }
@@ -209,13 +210,19 @@ fun PluginsSettings() {
 }
 
 @Composable
-fun AdvancedSettings() {
+fun AdvancedSettings(onReindex: () -> Unit) {
     SettingsSection("Danger Zone") {
+        Text(
+            "If your graph data seems inconsistent or missing, you can force a full re-index of your files into the database.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
         Button(
-            onClick = {},
+            onClick = onReindex,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
         ) {
-            Text("Clear Cache")
+            Text("Re-index Graph")
         }
     }
 }

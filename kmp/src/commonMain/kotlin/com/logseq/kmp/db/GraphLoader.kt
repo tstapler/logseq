@@ -10,7 +10,7 @@ import com.logseq.kmp.parser.MarkdownParser
 import com.logseq.kmp.parsing.ParseMode
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.performance.PerformanceMonitor
 import com.logseq.kmp.util.FileUtils
@@ -23,7 +23,7 @@ import kotlinx.coroutines.sync.withLock
 
 class GraphLoader(
     private val fileSystem: FileSystem,
-    private val pageRepository: SimplePageRepository,
+    private val pageRepository: PageRepository,
     private val blockRepository: BlockRepository
 ) {
     private val logger = Logger("GraphLoader")
@@ -179,15 +179,15 @@ class GraphLoader(
         }
     }
 
-    suspend fun loadFullPage(pageId: Long) {
+    suspend fun loadFullPage(pageUuid: String) {
         PerformanceMonitor.startTrace("loadFullPage")
         var filePath: String? = null
         try {
-            val pageResult = pageRepository.getPageById(pageId).first()
+            val pageResult = pageRepository.getPageByUuid(pageUuid).first()
             val page = pageResult.getOrNull()
 
             if (page == null) {
-                logger.error("Page not found for ID: $pageId")
+                logger.error("Page not found for UUID: $pageUuid")
                 return
             }
 
@@ -202,9 +202,9 @@ class GraphLoader(
                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
                 
                 // Verify blocks are actually loaded (handle inconsistency)
-                val blocksResult = blockRepository.getBlocksForPage(pageId).first()
+                val blocksResult = blockRepository.getBlocksForPage(page.id).first()
                 val blocks = blocksResult.getOrNull() ?: emptyList()
-                val allBlocksLoaded = blocks.all { it.isLoaded }
+                val allBlocksLoaded = blocks.isNotEmpty() && blocks.all { it.isLoaded }
 
                 if (fileModTime != null && 
                     page.updatedAt.toEpochMilliseconds() >= fileModTime &&
@@ -582,6 +582,7 @@ class GraphLoader(
         val pageId = existingPage?.id ?: generateId()
         val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
         val createdAt = existingPage?.createdAt ?: now
+        val currentVersion = existingPage?.version ?: 0L
         
         if (pageId <= 0) {
             logger.error("Generated invalid pageId: $pageId for $filePath")
@@ -598,6 +599,7 @@ class GraphLoader(
             filePath = filePath,
             createdAt = createdAt,
             updatedAt = now,
+            version = currentVersion,
             properties = parsedPage.properties,
             isFavorite = false,
             isJournal = isJournal,
@@ -605,6 +607,12 @@ class GraphLoader(
             isContentLoaded = mode == ParseMode.FULL
         )
         
+        // Fetch existing blocks to preserve versions
+        val existingBlocksResult = blockRepository.getBlocksForPage(pageId).first()
+        val existingBlocks = existingBlocksResult.getOrNull() ?: emptyList()
+        val existingVersions = existingBlocks.associate { it.uuid to it.version }
+        val existingContent = existingBlocks.associate { it.uuid to it.content }
+
         // Process blocks based on mode
         val blocks = when (mode) {
             ParseMode.METADATA_ONLY -> {
@@ -614,7 +622,8 @@ class GraphLoader(
                 val blocksList = mutableListOf<Block>()
                 processParsedBlocks(
                     rootBlocks, filePath, pageId, null, 0, now,
-                    blocksList, ParseMode.METADATA_ONLY
+                    blocksList, ParseMode.METADATA_ONLY,
+                    existingVersions, existingContent
                 )
                 blocksList
             }
@@ -623,7 +632,8 @@ class GraphLoader(
                 val blocksList = mutableListOf<Block>()
                 processParsedBlocks(
                     parsedPage.blocks, filePath, pageId, null, 0, now,
-                    blocksList, ParseMode.FULL
+                    blocksList, ParseMode.FULL,
+                    existingVersions, existingContent
                 )
                 blocksList
             }
@@ -652,144 +662,120 @@ class GraphLoader(
 
             PerformanceMonitor.startTrace("parseAndSavePage")
             try {
-                // ... logic ...
-            val fileName = filePath.replace("\\", "/").substringAfterLast("/")
-            val name = fileName.removeSuffix(".md")
-            val isJournal = filePath.contains("/journals/")
-            val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
-            
-            val now = Clock.System.now()
-            
-            // Check if page already exists to preserve ID and UUID
-            val existingPageResult = pageRepository.getPageByName(name).first()
-            val existingPage = existingPageResult.getOrNull()
+                val fileName = filePath.replace("\\", "/").substringAfterLast("/")
+                val name = fileName.removeSuffix(".md")
+                val journalDate = JournalUtils.parseJournalDate(name)
+                val isJournal = journalDate != null || filePath.contains("/journals/")
+                
+                val now = Clock.System.now()
+                
+                // Check if page already exists to preserve ID and UUID
+                val existingPageResult = pageRepository.getPageByName(name).first()
+                val existingPage = existingPageResult.getOrNull()
 
-            // Skip METADATA_ONLY if page is already fully loaded (don't overwrite full content)
-            if (mode == ParseMode.METADATA_ONLY && existingPage?.isContentLoaded == true) {
-                logger.debug("Skipping METADATA_ONLY for already-loaded page: $name")
-                return
-            }
-
-            // OPTIMIZATION: If mode is FULL, but page is already loaded and fresh (checked inside lock), skip.
-            if (mode == ParseMode.FULL && existingPage?.isContentLoaded == true) {
-                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
-                 
-                 val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
-                 val blocks = blocksResult.getOrNull() ?: emptyList()
-                 val allBlocksLoaded = blocks.all { it.isLoaded }
-
-                 if (fileModTime != null && 
-                     existingPage.updatedAt.toEpochMilliseconds() >= fileModTime &&
-                     allBlocksLoaded) {
-                      logger.debug("Skipping FULL parse (concurrency check), already up to date: $filePath")
-                      return
-                 }
-            }
-
-            val pageId = existingPage?.id ?: generateId()
-            val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
-            val createdAt = existingPage?.createdAt ?: now
-            
-            if (pageId <= 0) {
-                logger.error("Generated invalid pageId: $pageId for $filePath")
-                throw IllegalArgumentException("Generated invalid pageId: $pageId")
-            }
-            
-            // Initial Page object
-            var page = Page(
-                id = pageId,
-                uuid = pageUuid,
-                name = name,
-                createdAt = createdAt,
-                updatedAt = now,
-                properties = emptyMap(),
-                isFavorite = existingPage?.isFavorite ?: false,
-                isJournal = isJournal,
-                journalDate = journalDate,
-                filePath = filePath,
-                isContentLoaded = mode == ParseMode.FULL
-            )
-            
-            // ... (page creation logic) ...
-            
-            // If we are in METADATA_ONLY mode, check if we should skip saving to avoid overwriting full data
-            // This is a heuristic: if we are writing metadata, but the page already exists, 
-            // and we suspect it might be fully loaded, we should be careful.
-            // But ensuring consistency with file content is also important.
-            // If the file content *passed in* is newer, we should update.
-            // But here we are just preventing the "stale" background task from overwriting the "fresh" foreground task.
-            
-            // Since we don't have a timestamp of the request, the Lock ensures serial execution.
-            // We just need to ensure that a METADATA_ONLY write doesn't clobber a FULL write 
-            // that happened *just before* it in the lock queue.
-            
-            // We can check the `page` object from the repository.
-            // If we fetch it inside the lock, we see the current state.
-            // But `Page` doesn't have `isLoaded`. 
-            // We can check `blockRepository.getBlocksForPage(pageId)`? Expensive.
-            
-            // Decision: For this iteration, the Lock fixes the corruption (interleaved writes).
-            // The "Overwrite" issue is acceptable for now because:
-            // 1. Background load usually finishes before user navigates deep.
-            // 2. If user navigates, they trigger `loadFullPage` again anyway?
-            //    Wait, `loadPageContent` checks `loadingPageIds`.
-            //    If background overwrites with empty blocks, the UI will show "Loading..." placeholders.
-            //    The `LaunchedEffect` in `BlockRenderer` will trigger `loadPageContent` AGAIN.
-            //    So it will self-correct!
-            
-            // Parse using MarkdownParser
-            val parsedPage = try {
-                markdownParser.parsePage(content, mode)
-            } catch (e: Exception) {
-                logger.error("Failed to parse file: $filePath (content length: ${content.length})", e)
-                throw e
-            }
-
-            // Extract page properties if any (often in the first block or pre-block)
-            val blocksToSave = mutableListOf<Block>()
-            var firstBlockSkipped = false
-            
-            if (parsedPage.blocks.isNotEmpty()) {
-                val firstBlock = parsedPage.blocks.first()
-                // If first block has properties but no content, treat as page properties
-                if (firstBlock.content.trim().isEmpty() && firstBlock.properties.isNotEmpty()) {
-                    page = page.copy(properties = firstBlock.properties)
-                    // Also check for ID
-                    val pagePropsId = firstBlock.properties["id"]
-                    if (pagePropsId != null) {
-                        // page = page.copy(uuid = pagePropsId) // TODO: Handle ID migration
-                    }
-                    firstBlockSkipped = true
+                // Skip METADATA_ONLY if page is already fully loaded (don't overwrite full content)
+                if (mode == ParseMode.METADATA_ONLY && existingPage?.isContentLoaded == true) {
+                    logger.debug("Skipping METADATA_ONLY for already-loaded page: $name")
+                    return
                 }
+
+                // OPTIMIZATION: If mode is FULL, but page is already loaded and fresh (checked inside lock), skip.
+                if (mode == ParseMode.FULL && existingPage?.isContentLoaded == true) {
+                     val fileModTime = fileSystem.getLastModifiedTime(filePath)
+                     
+                     val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
+                     val blocks = blocksResult.getOrNull() ?: emptyList()
+                     val allBlocksLoaded = blocks.all { it.isLoaded }
+
+                     if (fileModTime != null && 
+                         existingPage.updatedAt.toEpochMilliseconds() >= fileModTime &&
+                         allBlocksLoaded) {
+                          logger.debug("Skipping FULL parse (concurrency check), already up to date: $filePath")
+                          return
+                     }
+                }
+
+                val pageId = existingPage?.id ?: generateId()
+                val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
+                val createdAt = existingPage?.createdAt ?: now
+                
+                if (pageId <= 0) {
+                    logger.error("Generated invalid pageId: $pageId for $filePath")
+                    throw IllegalArgumentException("Generated invalid pageId: $pageId")
+                }
+                
+                // Initial Page object
+                var page = Page(
+                    id = pageId,
+                    uuid = pageUuid,
+                    name = name,
+                    createdAt = createdAt,
+                    updatedAt = now,
+                    version = existingPage?.version ?: 0L,
+                    properties = emptyMap(),
+                    isFavorite = existingPage?.isFavorite ?: false,
+                    isJournal = isJournal,
+                    journalDate = journalDate,
+                    filePath = filePath,
+                    isContentLoaded = mode == ParseMode.FULL
+                )
+                
+                // Parse using MarkdownParser
+                val parsedPage = try {
+                    markdownParser.parsePage(content, mode)
+                } catch (e: Exception) {
+                    logger.error("Failed to parse file: $filePath (content length: ${content.length})", e)
+                    throw e
+                }
+
+                // Extract page properties if any (often in the first block or pre-block)
+                val blocksToSave = mutableListOf<Block>()
+                var firstBlockSkipped = false
+                
+                if (parsedPage.blocks.isNotEmpty()) {
+                    val firstBlock = parsedPage.blocks.first()
+                    // If first block has properties but no content, treat as page properties
+                    if (firstBlock.content.trim().isEmpty() && firstBlock.properties.isNotEmpty()) {
+                        page = page.copy(properties = firstBlock.properties)
+                        firstBlockSkipped = true
+                    }
+                }
+                
+                val saveResult = pageRepository.savePage(page)
+                val actualPageId = saveResult.getOrNull() ?: pageId
+                
+                // Fetch existing blocks using actual identity to preserve versions
+                val existingBlocksResult = blockRepository.getBlocksForPage(actualPageId).first()
+                val existingBlocks = existingBlocksResult.getOrNull() ?: emptyList()
+                val existingVersions = existingBlocks.associate { it.uuid to it.version }
+                val existingContent = existingBlocks.associate { it.uuid to it.content }
+
+                // Recursively process blocks using the actual ID from DB
+                val rootBlocks = if (firstBlockSkipped) parsedPage.blocks.drop(1) else parsedPage.blocks
+                
+                processParsedBlocks(
+                    parsedBlocks = rootBlocks,
+                    pagePath = filePath,
+                    pageId = actualPageId,
+                    parentId = null,
+                    baseLevel = 0,
+                    now = now,
+                    destinationList = blocksToSave,
+                    mode = mode,
+                    existingVersions = existingVersions,
+                    existingContent = existingContent
+                )
+                
+                if (blocksToSave.isNotEmpty()) {
+                    // Clear existing blocks for this page to prevent duplicates/ordering issues on reload
+                    blockRepository.deleteBlocksForPage(actualPageId)
+                    blockRepository.saveBlocks(blocksToSave)
+                }
+            } finally {
+                PerformanceMonitor.endTrace("parseAndSavePage")
             }
-            
-            pageRepository.savePage(page)
-            
-            // Recursively process blocks
-            val rootBlocks = if (firstBlockSkipped) parsedPage.blocks.drop(1) else parsedPage.blocks
-            
-            processParsedBlocks(
-                parsedBlocks = rootBlocks,
-                pagePath = filePath, // Pass file path for deterministic UUIDs
-                pageId = pageId,
-                parentId = null,
-                baseLevel = 0,
-                now = now,
-                destinationList = blocksToSave,
-                mode = mode
-            )
-            
-            if (blocksToSave.isNotEmpty()) {
-                // Clear existing blocks for this page to prevent duplicates/ordering issues on reload
-                blockRepository.deleteBlocksForPage(pageId)
-                blockRepository.saveBlocks(blocksToSave)
-            }
-        } finally {
-            PerformanceMonitor.endTrace("parseAndSavePage")
         }
     }
-} // Close withLock
-// Close parseAndSavePage function
 
     private suspend fun processParsedBlocks(
         parsedBlocks: List<ParsedBlock>,
@@ -799,7 +785,9 @@ class GraphLoader(
         baseLevel: Int,
         now: kotlinx.datetime.Instant,
         destinationList: MutableList<Block>,
-        mode: ParseMode
+        mode: ParseMode,
+        existingVersions: Map<String, Long> = emptyMap(),
+        existingContent: Map<String, String> = emptyMap()
     ) {
         var previousSiblingId: Long? = null
         
@@ -807,6 +795,20 @@ class GraphLoader(
             val blockId = generateId()
             val blockUuid = generateUuid(parsedBlock, pagePath, index)
             
+            // Version Preservation:
+            // If the content is identical to what we have in DB, preserve version.
+            // If content changed (e.g. edited in external editor), reset version or increment.
+            val currentVersion = existingVersions[blockUuid] ?: 0L
+            val oldContent = existingContent[blockUuid]
+            
+            val versionToSave = if (oldContent == parsedBlock.content) {
+                currentVersion
+            } else {
+                // External change detected. 
+                // We should probably increment the version so UI knows to reload.
+                if (currentVersion > 0) currentVersion + 1 else 0L
+            }
+
             // Merge parsed metadata into properties
             val mergedProperties = parsedBlock.properties.toMutableMap()
             parsedBlock.scheduled?.let { mergedProperties["scheduled"] = it }
@@ -824,6 +826,7 @@ class GraphLoader(
                 position = index,
                 createdAt = now,
                 updatedAt = now,
+                version = versionToSave,
                 properties = mergedProperties,
                 isLoaded = mode == ParseMode.FULL
             )
@@ -841,7 +844,9 @@ class GraphLoader(
                     baseLevel = baseLevel + 1,
                     now = now,
                     destinationList = destinationList,
-                    mode = mode
+                    mode = mode,
+                    existingVersions = existingVersions,
+                    existingContent = existingContent
                 )
             }
         }

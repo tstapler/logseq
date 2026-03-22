@@ -162,7 +162,7 @@ class PageCache(
     /**
      * Save page - invalidates cache.
      */
-    suspend fun savePage(page: Page): Result<Unit> {
+    suspend fun savePage(page: Page): Result<Long> {
         invalidatePage(page.uuid)
         return delegate.savePage(page)
     }

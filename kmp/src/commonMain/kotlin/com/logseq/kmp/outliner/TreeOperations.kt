@@ -122,12 +122,31 @@ object TreeOperations {
         if (index <= 0) return null
 
         val prevSibling = siblings[index - 1]
+        val nextSibling = siblings.getOrNull(index + 1)
+        
+        val updates = mutableListOf<Block>()
         
         // Swap positions and leftIds
-        val updatedBlock = block.copy(leftId = prevSibling.leftId)
-        val updatedPrev = prevSibling.copy(leftId = block.id)
+        // Current block (B) takes previous sibling's (A) leftId and position
+        updates.add(block.copy(
+            leftId = prevSibling.leftId,
+            position = prevSibling.position
+        ))
         
-        return listOf(updatedBlock, updatedPrev)
+        // Previous sibling (A) now follows current block (B)
+        updates.add(prevSibling.copy(
+            leftId = block.id,
+            position = block.position
+        ))
+        
+        // If there was a next sibling (C) following B, it now follows A
+        if (nextSibling != null) {
+            updates.add(nextSibling.copy(
+                leftId = prevSibling.id
+            ))
+        }
+        
+        return updates
     }
 
     /**
@@ -141,12 +160,30 @@ object TreeOperations {
         if (index < 0 || index >= siblings.size - 1) return null
 
         val nextSibling = siblings[index + 1]
+        val afterNextSibling = siblings.getOrNull(index + 2)
         
-        // Swap positions and leftIds
-        val updatedBlock = block.copy(leftId = nextSibling.id)
-        val updatedNext = nextSibling.copy(leftId = block.leftId)
+        val updates = mutableListOf<Block>()
+
+        // Current block (A) now follows next sibling (B)
+        updates.add(block.copy(
+            leftId = nextSibling.id,
+            position = nextSibling.position
+        ))
         
-        return listOf(updatedBlock, updatedNext)
+        // Next sibling (B) takes current block's (A) leftId and position
+        updates.add(nextSibling.copy(
+            leftId = block.leftId,
+            position = block.position
+        ))
+        
+        // If there was a block (C) following B, it now follows A
+        if (afterNextSibling != null) {
+            updates.add(afterNextSibling.copy(
+                leftId = block.id
+            ))
+        }
+        
+        return updates
     }
 
     /**

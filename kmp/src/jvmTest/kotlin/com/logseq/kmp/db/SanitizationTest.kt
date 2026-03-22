@@ -2,7 +2,7 @@ package com.logseq.kmp.db
 
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
+import com.logseq.kmp.repository.InMemoryPageRepository
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -35,7 +35,7 @@ class SanitizationTest {
         override fun getLastModifiedTime(path: String): Long? = null
     }
 
-    private val pageRepository = InMemorySimplePageRepository()
+    private val pageRepository = InMemoryPageRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
 

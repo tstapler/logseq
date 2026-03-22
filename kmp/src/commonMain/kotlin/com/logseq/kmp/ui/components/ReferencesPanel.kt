@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import kotlinx.coroutines.flow.first
 
 /**
@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.first
 fun ReferencesPanel(
     page: Page,
     blockRepository: BlockRepository,
-    pageRepository: SimplePageRepository,
+    pageRepository: PageRepository,
     onLinkClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -69,7 +69,7 @@ fun ReferencesPanel(
 private fun ReferenceSection(
     title: String,
     blocks: List<Block>,
-    pageRepository: SimplePageRepository,
+    pageRepository: PageRepository,
     onLinkClick: (String) -> Unit,
     initiallyExpanded: Boolean = true
 ) {
@@ -122,7 +122,7 @@ private fun ReferenceSection(
 private fun ReferencePageGroup(
     pageId: Long,
     blocks: List<Block>,
-    pageRepository: SimplePageRepository,
+    pageRepository: PageRepository,
     onLinkClick: (String) -> Unit
 ) {
     // Look up the page name

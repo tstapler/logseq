@@ -4,7 +4,7 @@ import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import com.logseq.kmp.outliner.BlockSorter
 
 class JournalsViewModel(
-    private val pageRepository: SimplePageRepository,
+    private val pageRepository: PageRepository,
     private val blockRepository: BlockRepository,
     private val graphLoader: GraphLoader,
     private val scope: CoroutineScope
@@ -24,88 +24,79 @@ class JournalsViewModel(
     private val _uiState = MutableStateFlow(JournalsUiState())
     val uiState: StateFlow<JournalsUiState> = _uiState.asStateFlow()
 
-    private var currentOffset = 0
     private val pageSize = 10
+    private var totalVisibleCount = pageSize
     private var isLoading = false
     private var hasMore = true
 
+    private val blockCollectionJobs = mutableMapOf<Long, kotlinx.coroutines.Job>()
+    private var paginationJob: kotlinx.coroutines.Job? = null
+
     init {
-        // Observe the first page of journals continuously to handle initial loading and updates
-        // This fixes the empty state on startup when GraphLoader hasn't finished yet
-        scope.launch {
-            pageRepository.getJournalPages(pageSize, 0).collect { result ->
-                val latestFirstPage = result.getOrNull() ?: emptyList()
+        startPaginationObserver()
+    }
+
+    private fun startPaginationObserver() {
+        paginationJob?.cancel()
+        paginationJob = scope.launch {
+            // Observe all visible journal pages reactively
+            pageRepository.getJournalPages(totalVisibleCount, 0).collect { result ->
+                val journals = result.getOrNull() ?: emptyList()
                 
-                // Load blocks for these pages
-                loadBlocksForPages(latestFirstPage)
+                _uiState.update { it.copy(
+                    pages = journals,
+                    isLoading = false,
+                    hasMore = journals.size >= totalVisibleCount
+                ) }
                 
-                // If we are currently empty and we got some data, populate the list
-                // This happens when GraphLoader finishes loading Phase 1
-                if (_uiState.value.pages.isEmpty() && latestFirstPage.isNotEmpty()) {
-                    _uiState.update { it.copy(pages = latestFirstPage) }
-                    currentOffset = latestFirstPage.size
-                    hasMore = latestFirstPage.size >= pageSize
-                } else if (latestFirstPage.isNotEmpty()) {
-                    // Update existing pages if needed (e.g. refreshed content)
-                    _uiState.update { it.copy(pages = latestFirstPage) }
-                }
+                // Ensure blocks are observed for all current pages
+                observeBlocksForPages(journals)
             }
         }
     }
-    
-    private suspend fun loadBlocksForPages(pages: List<Page>) {
-        val newBlocks = _uiState.value.blocks.toMutableMap()
+
+    private fun observeBlocksForPages(pages: List<Page>) {
+        val currentIds = pages.map { it.id }.toSet()
         
+        // Cancel jobs for pages no longer visible (optional, for performance)
+        blockCollectionJobs.keys.filter { it !in currentIds }.forEach { id ->
+            blockCollectionJobs.remove(id)?.cancel()
+        }
+
         pages.forEach { page ->
-            val result = blockRepository.getBlocksForPage(page.id).first()
-            val blocks = result.getOrNull() ?: emptyList()
-            if (blocks.isNotEmpty()) {
-                newBlocks[page.id] = blocks
+            if (page.id !in blockCollectionJobs) {
+                blockCollectionJobs[page.id] = scope.launch {
+                    // Trigger initial load if needed
+                    if (!page.isContentLoaded) {
+                        graphLoader.loadFullPage(page.uuid)
+                    }
+                    
+                    // Observe blocks reactively for this page
+                    blockRepository.getBlocksForPage(page.id).collect { result ->
+                        val blocks = result.getOrNull() ?: emptyList()
+                        _uiState.update { state ->
+                            val newBlocks = state.blocks.toMutableMap()
+                            newBlocks[page.id] = blocks
+                            state.copy(blocks = newBlocks)
+                        }
+                    }
+                }
             }
         }
-        
-        _uiState.update { it.copy(blocks = newBlocks) }
     }
 
     fun loadMore() {
         if (isLoading || !hasMore) return
 
-        isLoading = true
-        scope.launch {
-            try {
-                val result = pageRepository.getJournalPages(pageSize, currentOffset).first()
-                val newPages = result.getOrNull() ?: emptyList()
-
-                if (newPages.isEmpty()) {
-                    hasMore = false
-                } else {
-                    loadBlocksForPages(newPages)
-                    
-                    _uiState.update { currentState ->
-                        currentState.copy(
-                            pages = currentState.pages + newPages
-                        )
-                    }
-                    currentOffset += newPages.size
-                    // If we got fewer pages than requested, we reached the end
-                    if (newPages.size < pageSize) {
-                        hasMore = false
-                    }
-                }
-            } catch (e: Exception) {
-                // Handle error
-                e.printStackTrace()
-            } finally {
-                isLoading = false
-            }
-        }
+        totalVisibleCount += pageSize
+        startPaginationObserver()
     }
     
     fun refresh() {
-        currentOffset = 0
+        totalVisibleCount = pageSize
         hasMore = true
         _uiState.update { it.copy(pages = emptyList(), blocks = emptyMap()) }
-        loadMore()
+        startPaginationObserver()
     }
     
     fun updateBlockContent(blockUuid: String, newContent: String, newVersion: Long) {
@@ -182,7 +173,10 @@ class JournalsViewModel(
         scope.launch {
             _uiState.update { it.copy(loadingPageIds = it.loadingPageIds + pageId) }
             try {
-                graphLoader.loadFullPage(pageId)
+                val page = _uiState.value.pages.find { it.id == pageId }
+                if (page != null && !page.isContentLoaded) {
+                    graphLoader.loadFullPage(page.uuid)
+                }
                 // Refresh blocks for the page
                 val result = blockRepository.getBlocksForPage(pageId).first()
                 val blocks = result.getOrNull() ?: emptyList()
@@ -214,106 +208,20 @@ class JournalsViewModel(
 
     fun addNewBlock(currentBlockUuid: String) {
         scope.launch {
-            val currentBlockResult = blockRepository.getBlockByUuid(currentBlockUuid).first()
-            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
-
-            val siblingsResult = blockRepository.getBlockSiblings(currentBlockUuid).first()
-            val siblings = siblingsResult.getOrNull() ?: emptyList()
-
-            val newPosition = currentBlock.position + 1
-            
-            // Shift siblings
-            val siblingsToShift = siblings.filter { it.position >= newPosition }
-            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
-
-            val now = kotlinx.datetime.Clock.System.now()
-            val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = currentBlock.pageId,
-                parentId = currentBlock.parentId,
-                leftId = currentBlock.id,
-                content = "",
-                level = currentBlock.level,
-                position = newPosition,
-                createdAt = now,
-                updatedAt = now,
-                properties = emptyMap(),
-                isLoaded = true
-            )
-
-            val blocksToSave = updatedSiblings + newBlock
-            blockRepository.saveBlocks(blocksToSave)
-            
-            // Refresh blocks for the page
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
-            val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
-            
-            _uiState.update { state ->
-                val newBlocks = state.blocks.toMutableMap()
-                newBlocks[currentBlock.pageId] = pageBlocks
-                state.copy(blocks = newBlocks)
+            // New block below current block is same as split at the end
+            blockRepository.getBlockByUuid(currentBlockUuid).first().getOrNull()?.let { block ->
+                blockRepository.splitBlock(currentBlockUuid, block.content.length).onSuccess { newBlock ->
+                    requestEditBlock(newBlock.uuid)
+                }
             }
-            
-            requestEditBlock(newBlock.uuid)
         }
     }
 
     fun splitBlock(blockUuid: String, cursorPosition: Int) {
         scope.launch {
-            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
-            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
-
-            val fullContent = currentBlock.content
-            // Safety check
-            val safeSplitIndex = cursorPosition.coerceIn(0, fullContent.length)
-            
-            val contentForCurrentBlock = fullContent.substring(0, safeSplitIndex)
-            val contentForNewBlock = fullContent.substring(safeSplitIndex)
-            
-            // Update current block
-            val updatedCurrentBlock = currentBlock.copy(content = contentForCurrentBlock)
-            blockRepository.saveBlock(updatedCurrentBlock)
-            
-            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
-            val siblings = siblingsResult.getOrNull() ?: emptyList()
-
-            val newPosition = currentBlock.position + 1
-            
-            // Shift siblings
-            val siblingsToShift = siblings.filter { it.position >= newPosition }
-            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
-
-            val now = kotlinx.datetime.Clock.System.now()
-            val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = currentBlock.pageId,
-                parentId = currentBlock.parentId,
-                leftId = currentBlock.id,
-                content = contentForNewBlock,
-                level = currentBlock.level,
-                position = newPosition,
-                createdAt = now,
-                updatedAt = now,
-                properties = emptyMap(),
-                isLoaded = true
-            )
-
-            val blocksToSave = updatedSiblings + newBlock
-            blockRepository.saveBlocks(blocksToSave)
-            
-            // Refresh blocks for the page
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
-            val pageBlocks = pageBlocksResult.getOrNull() ?: return@launch
-            
-            _uiState.update { state ->
-                val newBlocks = state.blocks.toMutableMap()
-                newBlocks[currentBlock.pageId] = pageBlocks
-                state.copy(blocks = newBlocks)
+            blockRepository.splitBlock(blockUuid, cursorPosition).onSuccess { newBlock ->
+                requestEditBlock(newBlock.uuid)
             }
-            
-            requestEditBlock(newBlock.uuid)
         }
     }
 
@@ -332,49 +240,41 @@ class JournalsViewModel(
             val topLevelBlocks = blocks.filter { it.parentId == null }.sortedBy { it.position }
             val lastBlock = topLevelBlocks.lastOrNull()
             
-            val newPosition = (lastBlock?.position ?: 0) + 1
-            val now = kotlinx.datetime.Clock.System.now()
-            
-            val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = page.id,
-                parentId = null,
-                leftId = lastBlock?.id,
-                content = "",
-                level = 0,
-                position = newPosition,
-                createdAt = now,
-                updatedAt = now,
-                properties = emptyMap(),
-                isLoaded = true
-            )
-
-            blockRepository.saveBlock(newBlock)
-            
-            // Refresh blocks for the page
-            val pageBlocksResult = blockRepository.getBlocksForPage(page.id).first()
-            val pageBlocks = pageBlocksResult.getOrNull() ?: emptyList()
-            
-            _uiState.update { state ->
-                val newBlocks = state.blocks.toMutableMap()
-                newBlocks[page.id] = pageBlocks
-                state.copy(blocks = newBlocks)
+            if (lastBlock != null) {
+                // Split at end of last block to append
+                blockRepository.splitBlock(lastBlock.uuid, lastBlock.content.length).onSuccess { newBlock ->
+                    requestEditBlock(newBlock.uuid)
+                }
+            } else {
+                // First block on page
+                val now = kotlinx.datetime.Clock.System.now()
+                val newBlock = Block(
+                    id = generateBlockId(),
+                    uuid = generateUuid(),
+                    pageId = page.id,
+                    parentId = null,
+                    leftId = null,
+                    content = "",
+                    level = 0,
+                    position = 0,
+                    createdAt = now,
+                    updatedAt = now,
+                    properties = emptyMap(),
+                    isLoaded = true
+                )
+                blockRepository.saveBlock(newBlock)
+                requestEditBlock(newBlock.uuid)
             }
-            
-            requestEditBlock(newBlock.uuid)
         }
     }
 
     fun mergeBlock(blockUuid: String) {
         scope.launch {
-            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
-            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+            val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull() ?: return@launch
 
-            // Get ALL siblings including current block (getBlockSiblings excludes current)
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
-            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
-            val siblings = allBlocks
+            // Get siblings including current block
+            val pageBlocks = blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull() ?: return@launch
+            val siblings = pageBlocks
                 .filter { it.parentId == currentBlock.parentId }
                 .sortedBy { it.position }
 
@@ -382,107 +282,51 @@ class JournalsViewModel(
 
             if (currentIndex > 0) {
                 val prevBlock = siblings[currentIndex - 1]
-                val newContent = prevBlock.content + currentBlock.content
-                val mergePoint = prevBlock.content.length
-
-                val updatedPrevBlock = prevBlock.copy(content = newContent)
-                blockRepository.saveBlock(updatedPrevBlock)
-
-                blockRepository.deleteBlock(blockUuid)
-
-                // Update subsequent siblings: fix both position AND leftId
-                val subsequentSiblings = siblings.drop(currentIndex + 1)
-                if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = currentIndex + idx,  // Positions continue from currentIndex
-                            leftId = if (idx == 0) prevBlock.id else subsequentSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedSubsequent)
+                blockRepository.mergeBlocks(prevBlock.uuid, blockUuid, "").onSuccess {
+                    requestEditBlock(prevBlock.uuid, prevBlock.content.length)
                 }
-
-                refreshBlocksForPage(prevBlock.uuid)
-                requestEditBlock(prevBlock.uuid, mergePoint)
             }
         }
     }
 
     fun handleBackspace(blockUuid: String) {
         scope.launch {
-            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
-            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
+            val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull() ?: return@launch
 
-            // Get ALL siblings including current block (getBlockSiblings excludes current)
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
-            val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
-            val siblings = allBlocks
+            // Get siblings including current block
+            val pageBlocks = blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull() ?: return@launch
+            val siblings = pageBlocks
                 .filter { it.parentId == currentBlock.parentId }
                 .sortedBy { it.position }
 
             val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
 
             if (currentIndex > 0) {
-                // Move to previous sibling
-                val previousBlock = siblings[currentIndex - 1]
-
-                // Delete current empty block
-                blockRepository.deleteBlock(blockUuid)
-
-                // Update subsequent siblings: fix both position AND leftId
-                val subsequentSiblings = siblings.drop(currentIndex + 1)
-                if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = currentIndex + idx,
-                            leftId = if (idx == 0) previousBlock.id else subsequentSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedSubsequent)
+                // Merge with previous sibling
+                val prevBlock = siblings[currentIndex - 1]
+                blockRepository.mergeBlocks(prevBlock.uuid, blockUuid, "").onSuccess {
+                    requestEditBlock(prevBlock.uuid, prevBlock.content.length)
                 }
-
-                refreshBlocksForPage(previousBlock.uuid)
-                requestEditBlock(previousBlock.uuid, previousBlock.content.length)
-
             } else if (currentBlock.parentId != null) {
                 // At start of children list, move to parent
-                val parent = allBlocks.find { it.id == currentBlock.parentId }
-
-                blockRepository.deleteBlock(blockUuid)
-
-                // Update remaining siblings' positions and leftIds
-                val remainingSiblings = siblings.drop(1)  // Skip current (index 0)
-                if (remainingSiblings.isNotEmpty()) {
-                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = idx,
-                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedRemaining)
-                }
-
+                val parent = pageBlocks.find { it.id == currentBlock.parentId }
                 if (parent != null) {
-                    refreshBlocksForPage(parent.uuid)
-                    requestEditBlock(parent.uuid, parent.content.length)
+                    // If current block is empty, just delete it and focus parent
+                    if (currentBlock.content.isEmpty()) {
+                        blockRepository.deleteBlock(blockUuid)
+                        requestEditBlock(parent.uuid, parent.content.length)
+                    } else {
+                        // Otherwise merge with parent
+                        blockRepository.mergeBlocks(parent.uuid, blockUuid, "").onSuccess {
+                            requestEditBlock(parent.uuid, parent.content.length)
+                        }
+                    }
                 }
             } else {
-                // Root block at position 0. If there are other root blocks, delete this one.
-                if (siblings.size > 1) {
-                    val nextBlock = siblings[1]  // Next sibling (index 1)
+                // Root block at position 0. Just delete if empty.
+                if (currentBlock.content.isEmpty() && siblings.size > 1) {
+                    val nextBlock = siblings[1]
                     blockRepository.deleteBlock(blockUuid)
-
-                    // Update remaining siblings
-                    val remainingSiblings = siblings.drop(1)
-                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = idx,
-                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedRemaining)
-
-                    refreshBlocksForPage(nextBlock.uuid)
                     requestEditBlock(nextBlock.uuid, 0)
                 }
             }
@@ -562,6 +406,8 @@ class JournalsViewModel(
 data class JournalsUiState(
     val pages: List<Page> = emptyList(),
     val blocks: Map<Long, List<Block>> = emptyMap(),
+    val isLoading: Boolean = false,
+    val hasMore: Boolean = true,
     val loadingPageIds: Set<Long> = emptySet(),
     val editingBlockId: String? = null,
     val editingCursorIndex: Int? = null,

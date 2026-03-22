@@ -20,7 +20,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.outliner.BlockSorter
 import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.ui.LogseqViewModel
 import com.logseq.kmp.ui.components.BlockList
 import com.logseq.kmp.ui.components.MobileBlockToolbar
@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 fun PageView(
     page: Page,
     blockRepository: BlockRepository,
-    pageRepository: SimplePageRepository,
+    pageRepository: PageRepository,
     graphWriter: GraphWriter,
     graphLoader: GraphLoader,
     currentGraphPath: String,
@@ -56,7 +56,7 @@ fun PageView(
     // Trigger full load if page content hasn't been loaded yet
     LaunchedEffect(page.id, page.isContentLoaded) {
         if (!page.isContentLoaded) {
-            graphLoader.loadFullPage(page.id)
+            graphLoader.loadFullPage(page.uuid)
         }
     }
 
@@ -154,7 +154,8 @@ fun PageView(
                         onOutdent = { blockUuid -> viewModel.outdentBlock(blockUuid) },
                         onMoveUp = { blockUuid -> viewModel.moveBlockUp(blockUuid) },
                         onMoveDown = { blockUuid -> viewModel.moveBlockDown(blockUuid) },
-                        onLoadContent = { pageId -> scope.launch { graphLoader.loadFullPage(pageId) } },
+                        onLoadContent = { _ -> scope.launch { graphLoader.loadFullPage(page.uuid) } },
+
                         onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
                         onToggleCollapse = { blockId ->
                             collapsedBlockIds = if (collapsedBlockIds.contains(blockId)) {
@@ -186,6 +187,7 @@ fun PageView(
             onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
             onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
             onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
+            onAddBlock = { blockId -> scope.launch { viewModel.addNewBlock(blockId) } },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .imePadding()

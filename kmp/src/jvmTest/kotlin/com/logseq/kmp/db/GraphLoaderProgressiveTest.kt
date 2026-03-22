@@ -4,7 +4,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
+import com.logseq.kmp.repository.InMemoryPageRepository
 import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -32,7 +32,7 @@ class GraphLoaderProgressiveTest {
         override fun getLastModifiedTime(path: String): Long? = null
     }
 
-    private val pageRepository = InMemorySimplePageRepository()
+    private val pageRepository = InMemoryPageRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
 
@@ -90,7 +90,7 @@ class GraphLoaderProgressiveTest {
         assertFalse(oldBlocks[0].isLoaded, "Phase 2 background blocks should be METADATA_ONLY")
         
         // Test lazy loading
-        graphLoader.loadFullPage(oldPage.id)
+        graphLoader.loadFullPage(oldPage.uuid)
         testScheduler.advanceUntilIdle()
         
         val reloadedBlocks = blockRepository.getBlocksForPage(oldPage.id).first().getOrNull()!!

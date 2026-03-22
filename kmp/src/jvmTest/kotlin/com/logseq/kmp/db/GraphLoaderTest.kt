@@ -2,7 +2,7 @@ package com.logseq.kmp.db
 
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.repository.DatascriptBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
+import com.logseq.kmp.repository.InMemoryPageRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -19,7 +19,7 @@ class GraphLoaderTest {
         runBlocking {
             val fileSystem = PlatformFileSystem()
             println("FileSystem created")
-        val pageRepository = InMemorySimplePageRepository()
+        val pageRepository = InMemoryPageRepository()
         println("PageRepository created")
         val blockRepository = DatascriptBlockRepository()
         println("BlockRepository created")
@@ -84,7 +84,7 @@ class GraphLoaderTest {
     fun testLoadGraphProgressive() {
         runBlocking {
             val fileSystem = PlatformFileSystem()
-            val pageRepository = InMemorySimplePageRepository()
+            val pageRepository = InMemoryPageRepository()
             val blockRepository = DatascriptBlockRepository()
             val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
 
@@ -131,7 +131,7 @@ class GraphLoaderTest {
             assertEquals(false, firstBlock.isLoaded, "Block should not be fully loaded initially") 
             
             // Now load full page
-            graphLoader.loadFullPage(contentsPage.id)
+            graphLoader.loadFullPage(contentsPage.uuid)
             
             // Verify blocks are now loaded
             val reloadedBlocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()

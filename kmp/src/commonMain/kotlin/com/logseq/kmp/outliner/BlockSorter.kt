@@ -19,26 +19,44 @@ object BlockSorter {
         val allBlockIds = blocks.map { it.id }.toSet()
 
         // Roots are blocks with no parent OR parent is not in the current list
+        // Sort descending because we'll push them onto a stack (LIFO)
         val roots = blocks.filter { 
             it.parentId == null || !allBlockIds.contains(it.parentId) 
-        }.sortedBy { it.position }
+        }.sortedWith(compareByDescending<Block> { it.position }.thenByDescending { it.id })
 
         val result = mutableListOf<Block>()
+        val visited = mutableSetOf<Long>()
+        // Stack stores pair of (Block, ActualLevel) to repair levels during traversal
+        val stack = mutableListOf<Pair<Block, Int>>()
         
-        fun appendBlockAndChildren(block: Block) {
-            result.add(block)
-            val children = childrenByParent[block.id]?.sortedBy { it.position } ?: emptyList()
-            children.forEach { appendBlockAndChildren(it) }
+        roots.forEach { stack.add(it to 0) }
+        
+        while (stack.isNotEmpty()) {
+            val (block, actualLevel) = stack.removeAt(stack.size - 1)
+            if (visited.contains(block.id)) continue
+            
+            visited.add(block.id)
+            
+            // Repair the level if it doesn't match the actual depth in the hierarchy
+            val repairedBlock = if (block.level != actualLevel) {
+                block.copy(level = actualLevel)
+            } else {
+                block
+            }
+            result.add(repairedBlock)
+            
+            // Push children in reverse order so the first child is popped first
+            val children = childrenByParent[block.id]
+                ?.sortedWith(compareByDescending<Block> { it.position }.thenByDescending { it.id }) 
+                ?: emptyList()
+            
+            children.forEach { stack.add(it to actualLevel + 1) }
         }
 
-        roots.forEach { appendBlockAndChildren(it) }
-
-        // Sanity check: If we missed any blocks (e.g. cycles or detached orphans), add them at the end
-        // This prevents data loss in UI, though order might be weird
+        // Sanity check: If we missed any blocks (e.g. cycles), add them at the end
         if (result.size < blocks.size) {
-            val processedIds = result.map { it.id }.toSet()
-            val remaining = blocks.filter { !processedIds.contains(it.id) }
-            println("BlockSorter WARNING: ${remaining.size} orphaned blocks found (orphaned from hierarchy). Appending to end.")
+            val remaining = blocks.filter { !visited.contains(it.id) }
+            println("BlockSorter WARNING: ${remaining.size} orphaned blocks found (orphaned from hierarchy or cycle). Appending to end.")
             remaining.forEach { println(" - Orphan: ${it.content} (Parent: ${it.parentId})") }
             result.addAll(remaining)
         }

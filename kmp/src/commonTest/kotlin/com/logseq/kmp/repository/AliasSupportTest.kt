@@ -13,13 +13,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class AliasSupportTest {
-    private lateinit var pageRepository: InMemorySimplePageRepository
+    private lateinit var pageRepository: InMemoryPageRepository
     private lateinit var searchRepository: InMemorySearchRepository
     
     @BeforeTest
     fun setup() {
-        pageRepository = InMemorySimplePageRepository()
-        searchRepository = InMemorySearchRepository(pageRepository, null)
+        pageRepository = InMemoryPageRepository()
+        searchRepository = InMemorySearchRepository(pageRepository = pageRepository)
     }
     
     @Test

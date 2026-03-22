@@ -5,7 +5,7 @@ import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.repository.BlockReferences
 import com.logseq.kmp.repository.BlockWithDepth
 import com.logseq.kmp.repository.BlockWithReferenceCount
@@ -46,16 +46,8 @@ class JournalsViewModelTest {
         override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
-        override fun searchBlocksByContent(query: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         
-        // Remove methods not in BlockRepository interface (based on build failure)
-        // override fun getAllReferences(...)
-        // override fun getOrphanedBlocks(...) 
-        // override fun getMostConnectedBlocks(...)
-        // override fun addReference(...)
-        // override fun removeReference(...)
-        // override fun clear()
-
         override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
         override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
         override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = Result.success(Unit)
@@ -65,15 +57,16 @@ class JournalsViewModelTest {
         override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockUp(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
+        override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> = Result.success(Unit)
+        override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> = Result.failure(NotImplementedError())
         override suspend fun clear() {}
     }
 
-    class FakePageRepository : SimplePageRepository {
+    class FakePageRepository : PageRepository {
         val pages = mutableListOf<Page>()
 
         override fun getAllPages(): Flow<Result<List<Page>>> = flowOf(Result.success(pages))
         override fun getRecentPages(limit: Int): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
-        override fun getFavoritePages(): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
         
         override fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
             val journals = pages
@@ -84,9 +77,10 @@ class JournalsViewModelTest {
             return flowOf(Result.success(journals))
         }
 
-        override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(null))
+        override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
+        override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.uuid == uuid }))
         override fun getPageById(id: Long): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.id == id }))
-        override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(null))
+        override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.name == name }))
         override suspend fun savePage(page: Page): Result<Unit> {
             pages.add(page)
             return Result.success(Unit)
@@ -94,6 +88,7 @@ class JournalsViewModelTest {
         override suspend fun deletePage(pageUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> = Result.success(Unit)
         override suspend fun toggleFavorite(pageUuid: String): Result<Unit> = Result.success(Unit)
+        override fun countPages(): Flow<Result<Long>> = flowOf(Result.success(pages.size.toLong()))
         override suspend fun clear() { pages.clear() }
     }
 

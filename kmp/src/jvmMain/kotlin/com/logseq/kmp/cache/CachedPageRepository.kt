@@ -15,6 +15,10 @@ class CachedPageRepository(
     private val cache: PageCache
 ) : PageRepository {
 
+    override fun getPageById(id: Long): Flow<Result<Page?>> {
+        return delegate.getPageById(id)
+    }
+
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return cache.getPageByUuid(uuid)
     }
@@ -35,8 +39,18 @@ class CachedPageRepository(
         return cache.getRecentPages(limit)
     }
 
-    override suspend fun savePage(page: Page): Result<Unit> {
+    override fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return delegate.getJournalPages(limit, offset)
+    }
+
+    override suspend fun savePage(page: Page): Result<Long> {
         return cache.savePage(page)
+    }
+
+    override suspend fun toggleFavorite(pageUuid: String): Result<Unit> {
+        return delegate.toggleFavorite(pageUuid).also {
+            cache.invalidatePage(pageUuid)
+        }
     }
 
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
@@ -45,6 +59,15 @@ class CachedPageRepository(
 
     override suspend fun deletePage(pageUuid: String): Result<Unit> {
         return cache.deletePage(pageUuid)
+    }
+
+    override fun countPages(): Flow<Result<Long>> {
+        return delegate.countPages()
+    }
+
+    override suspend fun clear() {
+        delegate.clear()
+        cache.clear()
     }
 
     /**

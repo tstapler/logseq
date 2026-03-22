@@ -10,7 +10,7 @@ import com.logseq.kmp.platform.PlatformSettings
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.SearchRepository
 import com.logseq.kmp.repository.SearchRequest
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.ui.i18n.Language
 import com.logseq.kmp.ui.theme.LogseqThemeMode
 import com.logseq.kmp.editor.commands.CommandContext
@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 
 class LogseqViewModel(
     private val fileSystem: PlatformFileSystem,
-    private val pageRepository: SimplePageRepository,
+    private val pageRepository: PageRepository,
     private val blockRepository: BlockRepository,
     private val searchRepository: SearchRepository,
     private val graphLoader: GraphLoader,
@@ -122,6 +122,26 @@ class LogseqViewModel(
         updateUiStateWithPages(cachedAllPages)
     }
 
+    fun triggerReindex() {
+        val path = _uiState.value.currentGraphPath
+        if (path.isEmpty()) return
+        
+        scope.launch {
+            logger.info("Manually triggering re-index for $path")
+            _uiState.update { it.copy(statusMessage = "Clearing database...") }
+            
+            // Clear repositories
+            pageRepository.clear()
+            blockRepository.clear()
+            
+            // Clear cached path to force GraphLoader to do a full scan
+            platformSettings.putString("cached_graph_path", "")
+            
+            // Reload
+            loadGraph(path)
+        }
+    }
+
     fun setGraphPath(path: String) {
         platformSettings.putString("lastGraphPath", path)
         _uiState.update { it.copy(currentGraphPath = path) }
@@ -143,14 +163,20 @@ class LogseqViewModel(
                 }
 
                 if (graphExists) {
-                    _uiState.update { it.copy(statusMessage = "Loading journals...") }
-                    logger.info("Loading graph progressively from: $path")
+                    _uiState.update { it.copy(statusMessage = "Checking database...") }
                     
-                    // Persistence Strategy:
-                    // Only clear the cache if we are switching to a DIFFERENT graph.
-                    // If we are reloading the same graph (e.g. startup), keep the DB to allow GraphLoader
-                    // to skip unchanged files (Startup Performance).
-                    val cachedPath = platformSettings.getString("cached_graph_path", "")
+                    val pageCountResult = pageRepository.countPages().first()
+                    val pageCount = pageCountResult.getOrNull() ?: 0L
+                    
+                    logger.info("Loading graph progressively from: $path (Page count: $pageCount)")
+                    
+                    var cachedPath = platformSettings.getString("cached_graph_path", "")
+                    
+                    // If DB is empty, force a re-scan by clearing the cached path
+                    if (pageCount == 0L) {
+                        logger.info("Database is empty - forcing full re-index")
+                        cachedPath = ""
+                    }
                     
                     if (path != cachedPath) {
                         logger.info("Switching graph from '$cachedPath' to '$path' - Clearing persistent cache")
@@ -169,12 +195,10 @@ class LogseqViewModel(
                                 _uiState.update { it.copy(statusMessage = status) }
                             },
                             onPhase1Complete = {
-                                // UI becomes interactive after loading immediate journals
                                 logger.info("Phase 1 complete - UI is now interactive")
                                 _uiState.update { it.copy(isLoading = false, statusMessage = "Ready") }
                             },
                             onFullyLoaded = {
-                                // All background loading is complete
                                 logger.info("Graph fully loaded")
                                 _uiState.update { it.copy(isFullyLoaded = true, statusMessage = "Graph loaded completely.") }
                             }
@@ -210,6 +234,20 @@ class LogseqViewModel(
             pageRepository.toggleFavorite(page.uuid)
             _uiState.update { it.copy(statusMessage = "Toggled favorite: ${page.name}") }
             refreshCurrentPage()
+        }
+    }
+
+    fun toggleFavorite(pageUuid: String) {
+        scope.launch {
+            pageRepository.toggleFavorite(pageUuid)
+            refreshCurrentPage()
+        }
+    }
+
+    fun clear() {
+        scope.launch {
+            pageRepository.clear()
+            blockRepository.clear()
         }
     }
 
@@ -324,48 +362,9 @@ class LogseqViewModel(
 
     fun splitBlock(blockUuid: String, cursorPosition: Int) {
         scope.launch {
-            val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
-            val currentBlock = currentBlockResult.getOrNull() ?: return@launch
-
-            val fullContent = currentBlock.content
-            val safeSplitIndex = cursorPosition.coerceIn(0, fullContent.length)
-
-            val contentForCurrentBlock = fullContent.substring(0, safeSplitIndex)
-            val contentForNewBlock = fullContent.substring(safeSplitIndex)
-
-            // Update current block
-            val updatedCurrentBlock = currentBlock.copy(content = contentForCurrentBlock)
-            blockRepository.saveBlock(updatedCurrentBlock)
-
-            val siblingsResult = blockRepository.getBlockSiblings(blockUuid).first()
-            val siblings = siblingsResult.getOrNull() ?: emptyList()
-
-            val newPosition = currentBlock.position + 1
-
-            // Shift siblings
-            val siblingsToShift = siblings.filter { it.position >= newPosition }
-            val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
-
-            val now = kotlinx.datetime.Clock.System.now()
-            val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = currentBlock.pageId,
-                parentId = currentBlock.parentId,
-                leftId = currentBlock.id,
-                content = contentForNewBlock,
-                level = currentBlock.level,
-                position = newPosition,
-                createdAt = now,
-                updatedAt = now,
-                properties = emptyMap(),
-                isLoaded = true
-            )
-
-            val blocksToSave = updatedSiblings + newBlock
-            blockRepository.saveBlocks(blocksToSave)
-
-            requestEditBlock(newBlock.uuid)
+            blockRepository.splitBlock(blockUuid, cursorPosition).onSuccess { newBlock ->
+                requestEditBlock(newBlock.uuid)
+            }
         }
     }
 
@@ -385,27 +384,9 @@ class LogseqViewModel(
 
             if (currentIndex > 0) {
                 val prevBlock = siblings[currentIndex - 1]
-                val newContent = prevBlock.content + currentBlock.content
-                val mergePoint = prevBlock.content.length
-
-                val updatedPrevBlock = prevBlock.copy(content = newContent)
-                blockRepository.saveBlock(updatedPrevBlock)
-
-                blockRepository.deleteBlock(blockUuid)
-
-                // Update subsequent siblings
-                val subsequentSiblings = siblings.drop(currentIndex + 1)
-                if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = currentIndex + idx,
-                            leftId = if (idx == 0) prevBlock.id else subsequentSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedSubsequent)
+                blockRepository.mergeBlocks(prevBlock.uuid, blockUuid, "").onSuccess {
+                    requestEditBlock(prevBlock.uuid, prevBlock.content.length)
                 }
-
-                requestEditBlock(prevBlock.uuid, mergePoint)
             }
         }
     }
@@ -426,51 +407,16 @@ class LogseqViewModel(
             if (currentIndex > 0) {
                 val previousBlock = siblings[currentIndex - 1]
                 blockRepository.deleteBlock(blockUuid)
-
-                val subsequentSiblings = siblings.drop(currentIndex + 1)
-                if (subsequentSiblings.isNotEmpty()) {
-                    val updatedSubsequent = subsequentSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = currentIndex + idx,
-                            leftId = if (idx == 0) previousBlock.id else subsequentSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedSubsequent)
-                }
-
                 requestEditBlock(previousBlock.uuid, previousBlock.content.length)
-
             } else if (currentBlock.parentId != null) {
                 val parent = allBlocks.find { it.id == currentBlock.parentId }
                 blockRepository.deleteBlock(blockUuid)
-
-                val remainingSiblings = siblings.drop(1)
-                if (remainingSiblings.isNotEmpty()) {
-                    val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
-                        block.copy(
-                            position = idx,
-                            leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
-                        )
-                    }
-                    blockRepository.saveBlocks(updatedRemaining)
-                }
-
                 if (parent != null) {
                     requestEditBlock(parent.uuid, parent.content.length)
                 }
             } else if (siblings.size > 1) {
                 val nextBlock = siblings[1]
                 blockRepository.deleteBlock(blockUuid)
-
-                val remainingSiblings = siblings.drop(1)
-                val updatedRemaining = remainingSiblings.mapIndexed { idx, block ->
-                    block.copy(
-                        position = idx,
-                        leftId = if (idx == 0) null else remainingSiblings[idx - 1].id
-                    )
-                }
-                blockRepository.saveBlocks(updatedRemaining)
-
                 requestEditBlock(nextBlock.uuid, 0)
             }
         }
@@ -699,8 +645,6 @@ class LogseqViewModel(
     private var blockIdCounter = Clock.System.now().toEpochMilliseconds()
     private fun generateBlockId(): Long = blockIdCounter++
 
-    // requestEditBlock and addNewBlock were duplicated here - removing the second definitions
-    
     /**
      * Get the content of a block by its UUID
      */
@@ -723,7 +667,7 @@ class LogseqViewModel(
                     return@debounce
                 }
 
-                // 2. Update the block with new content and version
+                // 2. Update the block with new content
                 val updatedBlock = block.copy(content = newContent, version = version)
                 blockRepository.saveBlock(updatedBlock)
 
@@ -872,31 +816,13 @@ class LogseqViewModel(
             val searchResult = it.getOrNull()
             if (searchResult != null) {
                 val items = mutableListOf<SearchResultItem>()
-                // Add Pages and Aliases
-                searchResult.pages.forEach { page ->
-                    // Check if it's a name match
-                    if (page.name.contains(query, ignoreCase = true)) {
-                        items.add(SearchResultItem.PageItem(page))
-                    }
-                    
-                    // Check for alias matches
-                    val aliases = page.properties["alias"]?.split(",")?.map { it.trim() } ?: emptyList()
-                    aliases.forEach { alias ->
-                        if (alias.contains(query, ignoreCase = true) && !alias.equals(page.name, ignoreCase = true)) {
-                            // Only add alias if it's not the same as the page name (to avoid duplicates)
-                            // and if it hasn't been added already for this page
-                            if (items.none { it is SearchResultItem.AliasItem && it.page.id == page.id && it.alias.equals(alias, ignoreCase = true) }) {
-                                items.add(SearchResultItem.AliasItem(page, alias))
-                            }
-                        }
-                    }
+                // Add Pages
+                if (searchResult.pages.isNotEmpty()) {
+                    items.addAll(searchResult.pages.map { SearchResultItem.PageItem(it) })
                 }
                 
                 // Add "Create Page" option if no exact match
-                val exactMatch = items.any { 
-                    (it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true)) ||
-                    (it is SearchResultItem.AliasItem && it.alias.equals(query, ignoreCase = true))
-                }
+                val exactMatch = items.any { it is SearchResultItem.PageItem && it.page.name.equals(query, ignoreCase = true) }
                 if (!exactMatch && query.isNotBlank()) {
                     items.add(SearchResultItem.CreatePageItem(query))
                 }
@@ -905,5 +831,9 @@ class LogseqViewModel(
                 emptyList()
             }
         }
+    }
+
+    fun savePendingChanges() {
+        // Implement if needed
     }
 }

@@ -42,7 +42,7 @@ fun SearchDialog(
 
     LaunchedEffect(visible) {
         if (visible) {
-            focusRequester.requestFocus()
+            try { focusRequester.requestFocus() } catch (_: IllegalStateException) {}
             viewModel.onQueryChange("") // Reset query
         }
     }

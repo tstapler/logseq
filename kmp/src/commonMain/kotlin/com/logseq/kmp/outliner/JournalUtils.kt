@@ -10,7 +10,7 @@ import kotlinx.datetime.format.char
  * Internal format is usually "YYYY_MM_DD".
  */
 object JournalUtils {
-    private val JOURNAL_NAME_REGEX = Regex("^(\\d{4})_(\\d{2})_(\\d{2})$")
+    private val JOURNAL_NAME_REGEX = Regex("^(\\d{4})[-_](\\d{2})[-_](\\d{2})$")
 
     fun isJournalName(name: String): Boolean {
         return JOURNAL_NAME_REGEX.matches(name)

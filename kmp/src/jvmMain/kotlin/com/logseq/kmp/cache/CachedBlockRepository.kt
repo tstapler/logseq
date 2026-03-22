@@ -46,6 +46,10 @@ class CachedBlockRepository(
         return delegate.getBlocksForPage(pageId)
     }
 
+    override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        return delegate.searchBlocksByContent(query, limit, offset)
+    }
+
     override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> {
         // Naive implementation looping saveBlock to avoid changing BlockCache interface for now
         // In a real implementation, BlockCache should also support batch operations
@@ -93,16 +97,27 @@ class CachedBlockRepository(
         }
     }
 
+    override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> {
+        return delegate.mergeBlocks(blockUuid, nextBlockUuid, separator).also {
+            cache.invalidateBlock(blockUuid)
+            cache.invalidateBlock(nextBlockUuid)
+            cache.invalidateSiblings(blockUuid)
+        }
+    }
+
+    override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> {
+        return delegate.splitBlock(blockUuid, cursorPosition).also {
+            cache.invalidateBlock(blockUuid)
+            cache.invalidateSiblings(blockUuid)
+        }
+    }
+
     override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         return delegate.getLinkedReferences(pageName)
     }
 
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         return delegate.getUnlinkedReferences(pageName)
-    }
-
-    override fun searchBlocksByContent(query: String): Flow<Result<List<Block>>> {
-        return delegate.searchBlocksByContent(query)
     }
 
     /**

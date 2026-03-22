@@ -99,7 +99,15 @@ fun RichTextEditor(
             
             if (match != null) {
                 val query = match.groupValues[1]
-                val rect = textLayoutResult?.getCursorRect(cursor)
+                val safeCursor = cursor.coerceIn(0, textLayoutResult?.layoutInput?.text?.length ?: 0)
+                val rect = if (textLayoutResult != null && safeCursor <= textLayoutResult!!.layoutInput.text.length) {
+                    try {
+                        textLayoutResult?.getCursorRect(safeCursor)
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else null
+                
                 onTriggerDetected(query, rect)
             } else {
                 onTriggerDetected("", null)

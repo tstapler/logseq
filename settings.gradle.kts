@@ -11,6 +11,7 @@ pluginManagement {
         id("com.android.library") version "8.7.2"
         id("org.jetbrains.compose") version "1.7.1"
         id("app.cash.sqldelight") version "2.0.2"
+        id("io.github.takahirom.roborazzi") version "1.59.0"
     }
 }
 

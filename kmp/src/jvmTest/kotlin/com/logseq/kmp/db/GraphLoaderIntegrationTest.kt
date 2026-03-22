@@ -4,8 +4,8 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.InMemoryPageRepository
+import com.logseq.kmp.repository.PageRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -32,7 +32,7 @@ class GraphLoaderIntegrationTest {
         override fun getLastModifiedTime(path: String): Long? = null
     }
 
-    private val pageRepository = InMemorySimplePageRepository()
+    private val pageRepository = InMemoryPageRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
 

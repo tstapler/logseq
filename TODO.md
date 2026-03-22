@@ -74,8 +74,18 @@ kmp/
 
 ## Active Development
 
+### 🚨 POST-REVIEW REMEDIATION (MARCH 2026)
+- [ ] **Critical: Fix Schema Bug (left_id CASCADE)** - Prevent accidental page wipes on block deletion (High Priority)
+- [ ] **Critical: Implement Undo/Redo Logic** - Replace current log-only stubs with full command-pattern implementation
+- [ ] **High: Optimize Hierarchy Traversal** - Replace N+1 queries in `getBlockHierarchy` with recursive CTE
+- [ ] **High: Database Performance** - Add index on `left_id` to stabilize hierarchy repair operations
+- [ ] **High: Architecture - Decouple UI from Editor Core** - Remove `androidx.compose` dependencies from `editor` module
+- [ ] **High: Architecture - Decompose BlockRenderer** - Split 800+ line God Object into smaller, single-responsibility components
+- [ ] **High: Testing - Fix Flaky Sync** - Replace `delay(50)` in ViewModel tests with proper coroutine test dispatchers
+
 ### 🚨 URGENT REPAIRS
 - [ ] **Fix Android Build (BUG-007)** - [View Plan](docs/tasks/fix-build-2026-02-22.md)
+- [ ] **Persistent Versioning** - [View Plan](docs/tasks/persistent-versioning.md)
 
 ### 🎯 FEATURE PARITY IMPLEMENTATION
 

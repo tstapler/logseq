@@ -1,0 +1,121 @@
+package com.logseq.kmp.repository
+
+import com.logseq.kmp.db.LogseqDatabase
+import com.logseq.kmp.model.Block
+import com.logseq.kmp.coroutines.PlatformDispatcher
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.datetime.Instant
+import kotlin.Result.Companion.success
+
+/**
+ * SQLDelight implementation of ReferenceRepository.
+ */
+class SqlDelightReferenceRepository(
+    private val database: LogseqDatabase
+) : ReferenceRepository {
+
+    private val queries = database.logseqDatabaseQueries
+
+    override fun getOutgoingReferences(blockUuid: String): Flow<Result<List<Block>>> = flow {
+        try {
+            val results = queries.selectOutgoingReferences(blockUuid).executeAsList().map { it.toBlockModel() }
+            emit(success(results))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    override fun getIncomingReferences(blockUuid: String): Flow<Result<List<Block>>> = flow {
+        try {
+            val results = queries.selectIncomingReferences(blockUuid).executeAsList().map { it.toBlockModel() }
+            emit(success(results))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    override fun getAllReferences(blockUuid: String): Flow<Result<BlockReferences>> = flow {
+        try {
+            val outgoing = queries.selectOutgoingReferences(blockUuid).executeAsList().map { it.toBlockModel() }
+            val incoming = queries.selectIncomingReferences(blockUuid).executeAsList().map { it.toBlockModel() }
+            emit(success(BlockReferences(outgoing, incoming)))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    override suspend fun addReference(fromBlockUuid: String, toBlockUuid: String): Result<Unit> {
+        return try {
+            queries.insertBlockReference(fromBlockUuid, toBlockUuid, System.currentTimeMillis())
+            success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun removeReference(fromBlockUuid: String, toBlockUuid: String): Result<Unit> {
+        return try {
+            queries.deleteBlockReference(fromBlockUuid, toBlockUuid)
+            success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override fun getOrphanedBlocks(): Flow<Result<List<Block>>> = flow {
+        try {
+            val results = queries.selectOrphanedBlocks().executeAsList().map { it.toBlockModel() }
+            emit(success(results))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    override fun getMostConnectedBlocks(limit: Int): Flow<Result<List<BlockWithReferenceCount>>> = flow {
+        try {
+            val results = queries.selectMostConnectedBlocks(limit.toLong()).executeAsList().map {
+                BlockWithReferenceCount(it.toBlockModel(), it.reference_count.toInt())
+            }
+            emit(success(results))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
+        return Block(
+            id = this.id,
+            uuid = this.uuid,
+            pageId = this.page_id,
+            parentId = this.parent_id,
+            leftId = this.left_id,
+            content = this.content,
+            level = this.level.toInt(),
+            position = this.position.toInt(),
+            createdAt = Instant.fromEpochMilliseconds(this.created_at),
+            updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
+            version = this.version,
+            properties = emptyMap()
+        )
+    }
+    
+    // Explicit mapping for join result
+    private fun com.logseq.kmp.db.SelectMostConnectedBlocks.toBlockModel(): Block {
+        return Block(
+            id = this.id,
+            uuid = this.uuid,
+            pageId = this.page_id,
+            parentId = this.parent_id,
+            leftId = this.left_id,
+            content = this.content,
+            level = this.level.toInt(),
+            position = this.position.toInt(),
+            createdAt = Instant.fromEpochMilliseconds(this.created_at),
+            updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
+            version = this.version,
+            properties = emptyMap()
+        )
+    }
+}

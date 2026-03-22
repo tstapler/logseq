@@ -8,7 +8,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.BlockReferences
 import com.logseq.kmp.repository.BlockWithDepth
 import com.logseq.kmp.repository.BlockWithReferenceCount
-import com.logseq.kmp.repository.SimplePageRepository
+import com.logseq.kmp.repository.PageRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -125,7 +125,7 @@ class JournalsViewModelEditorTest {
         override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> =
             flowOf(Result.success(emptyList()))
 
-        override fun searchBlocksByContent(query: String): Flow<Result<List<Block>>> =
+        override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> =
             flowOf(Result.success(emptyList()))
 
         override suspend fun saveBlock(block: Block): Result<Unit> {
@@ -172,18 +172,63 @@ class JournalsViewModelEditorTest {
         override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockUp(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
+
+        override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> {
+            val currentMap = blocks.value.toMutableMap()
+            val blockA = currentMap[blockUuid] ?: return Result.success(Unit)
+            val blockB = currentMap[nextBlockUuid] ?: return Result.success(Unit)
+            
+            currentMap[blockUuid] = blockA.copy(content = blockA.content + separator + blockB.content)
+            currentMap.remove(nextBlockUuid)
+            blocks.value = currentMap
+            return Result.success(Unit)
+        }
+
+        override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> {
+            val currentMap = blocks.value.toMutableMap()
+            val block = currentMap[blockUuid] ?: return Result.failure(Exception("Block not found"))
+            
+            val fullContent = block.content
+            val safeSplitIndex = cursorPosition.coerceIn(0, fullContent.length)
+            
+            val firstPart = fullContent.substring(0, safeSplitIndex).trim()
+            val secondPart = fullContent.substring(safeSplitIndex).trim()
+            
+            val updatedBlock = block.copy(content = firstPart)
+            val newPosition = block.position + 1
+            
+            // Shift siblings
+            val siblingsToShift = currentMap.values.filter { 
+                it.pageId == block.pageId && it.parentId == block.parentId && it.position >= newPosition 
+            }
+            siblingsToShift.forEach { sibling ->
+                currentMap[sibling.uuid] = sibling.copy(position = sibling.position + 1)
+            }
+            
+            val newBlock = block.copy(
+                uuid = java.util.UUID.randomUUID().toString(),
+                id = (currentMap.values.maxOfOrNull { it.id } ?: 0L) + 1,
+                content = secondPart,
+                position = newPosition
+            )
+            
+            currentMap[blockUuid] = updatedBlock
+            currentMap[newBlock.uuid] = newBlock
+            blocks.value = currentMap
+            return Result.success(newBlock)
+        }
+
         override suspend fun clear() { blocks.value = emptyMap() }
     }
 
-    class FakePageRepository : SimplePageRepository {
+    class FakePageRepository : PageRepository {
         private val pages = mutableListOf<Page>()
 
         fun addPage(page: Page) { pages.add(page) }
 
         override fun getAllPages(): Flow<Result<List<Page>>> = flowOf(Result.success(pages.toList()))
         override fun getRecentPages(limit: Int): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
-        override fun getFavoritePages(): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
-
+        
         override fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
             val journals = pages.filter { it.isJournal }
                 .sortedByDescending { it.journalDate }
@@ -191,6 +236,9 @@ class JournalsViewModelEditorTest {
                 .take(limit)
             return flowOf(Result.success(journals))
         }
+
+        override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = 
+            flowOf(Result.success(pages.filter { it.namespace == namespace }))
 
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> =
             flowOf(Result.success(pages.find { it.uuid == uuid }))
@@ -214,6 +262,7 @@ class JournalsViewModelEditorTest {
 
         override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> = Result.success(Unit)
         override suspend fun toggleFavorite(pageUuid: String): Result<Unit> = Result.success(Unit)
+        override fun countPages(): Flow<Result<Long>> = flowOf(Result.success(pages.size.toLong()))
         override suspend fun clear() { pages.clear() }
     }
 

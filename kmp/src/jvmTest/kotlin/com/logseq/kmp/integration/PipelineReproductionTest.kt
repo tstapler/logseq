@@ -6,7 +6,7 @@ import com.logseq.kmp.parsing.LogseqParser
 import com.logseq.kmp.parser.MarkdownParser
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
+import com.logseq.kmp.repository.InMemoryPageRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -36,7 +36,7 @@ class PipelineReproductionTest {
         override fun getLastModifiedTime(path: String): Long? = null
     }
 
-    private val pageRepository = InMemorySimplePageRepository()
+    private val pageRepository = InMemoryPageRepository()
     private val blockRepository = InMemoryBlockRepository()
     private val graphLoader = GraphLoader(fileSystem, pageRepository, blockRepository)
 

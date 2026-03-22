@@ -106,6 +106,16 @@ interface BlockRepository {
     suspend fun moveBlockDown(blockUuid: String): Result<Unit>
 
     /**
+     * Merge two blocks atomically
+     */
+    suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit>
+
+    /**
+     * Split a block into two atomically at the given cursor position
+     */
+    suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block>
+
+    /**
      * Find all blocks that contain a wiki link to the given page name
      * (i.e., blocks containing [[Page Name]])
      */
@@ -120,7 +130,7 @@ interface BlockRepository {
     /**
      * Search blocks by content
      */
-    fun searchBlocksByContent(query: String): Flow<Result<List<Block>>>
+    fun searchBlocksByContent(query: String, limit: Int = 50, offset: Int = 0): Flow<Result<List<Block>>>
 }
 
 /**
@@ -128,6 +138,11 @@ interface BlockRepository {
  * Pages are special blocks that serve as roots of block hierarchies.
  */
 interface PageRepository {
+    /**
+     * Get a page by its ID
+     */
+    fun getPageById(id: Long): Flow<Result<Page?>>
+
     /**
      * Get a page by its UUID
      */
@@ -149,14 +164,25 @@ interface PageRepository {
     fun getAllPages(): Flow<Result<List<Page>>>
 
     /**
+     * Get journal pages with pagination
+     */
+    fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>>
+
+    /**
      * Get recently modified pages
      */
     fun getRecentPages(limit: Int = 50): Flow<Result<List<Page>>>
 
     /**
      * Save a new or updated page
+     * @return The database ID of the page
      */
-    suspend fun savePage(page: Page): Result<Unit>
+    suspend fun savePage(page: Page): Result<Long>
+
+    /**
+     * Toggle favorite status for a page
+     */
+    suspend fun toggleFavorite(pageUuid: String): Result<Unit>
 
     /**
      * Rename a page
@@ -168,6 +194,16 @@ interface PageRepository {
      * Delete a page
      */
     suspend fun deletePage(pageUuid: String): Result<Unit>
+
+    /**
+     * Get total number of pages in the repository
+     */
+    fun countPages(): Flow<Result<Long>>
+
+    /**
+     * Clear all pages from the repository
+     */
+    suspend fun clear()
 }
 
 /**

@@ -1,5 +1,6 @@
 package com.logseq.kmp
 
+import com.logseq.kmp.db.DriverFactory
 import com.logseq.kmp.repository.*
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -58,7 +59,7 @@ class DatabaseIntegrationTest {
         println("==============================")
 
         // Test that repository factory creates correct implementations
-        val factory = RepositoryFactoryImpl()
+        val factory = RepositoryFactoryImpl(DriverFactory(), "jdbc:sqlite::memory:")
 
         // Test in-memory repositories (these should work)
         val inMemoryBlockRepo = factory.createBlockRepository(GraphBackend.IN_MEMORY)

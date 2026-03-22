@@ -18,14 +18,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.*
-import com.logseq.kmp.repository.DatascriptBlockRepository
-import com.logseq.kmp.repository.InMemorySimplePageRepository
-import com.logseq.kmp.repository.InMemorySearchRepository
+import com.logseq.kmp.db.DriverFactory
+import com.logseq.kmp.repository.*
 import com.logseq.kmp.ui.components.*
 import com.logseq.kmp.ui.i18n.I18n
 import com.logseq.kmp.ui.i18n.LocalI18n
@@ -43,9 +45,17 @@ fun LogseqApp(
     encryptionManager: EncryptionManager = remember { DefaultEncryptionManager() }
 ) {
     val platformSettings = remember { PlatformSettings() }
-    val pageRepository = remember { InMemorySimplePageRepository() }
-    val blockRepository = remember { DatascriptBlockRepository() }
-    val searchRepository = remember { InMemorySearchRepository(pageRepository, blockRepository) }
+    
+    // Initialize global repositories if not already
+    remember {
+        Repositories.initialize(DriverFactory(), com.logseq.kmp.db.defaultDatabaseUrl)
+        true
+    }
+
+    val pageRepository = remember { Repositories.page(GraphBackend.SQLDELIGHT) }
+    val blockRepository = remember { Repositories.block(GraphBackend.SQLDELIGHT) }
+    val searchRepository = remember { Repositories.search(GraphBackend.SQLDELIGHT) }
+    
     val graphWriter = remember { GraphWriter(fileSystem) }
     val graphLoader = remember { com.logseq.kmp.db.GraphLoader(fileSystem, pageRepository, blockRepository) }
     val scope = rememberCoroutineScope()
@@ -63,6 +73,20 @@ fun LogseqApp(
             scope
         ).also {
             it.startAutoSave()
+        }
+    }
+    
+    // Lifecycle observer for Android/Mobile to force save on pause
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                viewModel.savePendingChanges()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
     
@@ -353,7 +377,11 @@ fun LogseqApp(
                         currentTheme = appState.themeMode,
                         onThemeChange = { viewModel.setThemeMode(it) },
                         currentLanguage = appState.language,
-                        onLanguageChange = { viewModel.setLanguage(it) }
+                        onLanguageChange = { viewModel.setLanguage(it) },
+                        onReindex = {
+                            viewModel.triggerReindex()
+                            viewModel.setSettingsVisible(false)
+                        }
                     )
 
                     NotificationOverlay(

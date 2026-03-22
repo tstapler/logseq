@@ -140,6 +140,7 @@ fun JournalsView(
             onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
             onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
             onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
+            onAddBlock = { blockId -> scope.launch { viewModel.addNewBlock(blockId) } },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .imePadding()

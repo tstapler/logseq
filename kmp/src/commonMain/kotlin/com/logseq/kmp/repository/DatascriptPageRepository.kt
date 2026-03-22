@@ -1,7 +1,6 @@
 package com.logseq.kmp.repository
 
 import com.logseq.kmp.model.Page
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -23,6 +22,12 @@ class DatascriptPageRepository : PageRepository {
     private val byUuid = MutableStateFlow<Map<String, Page>>(emptyMap())
     private val byName = MutableStateFlow<Map<String, Page>>(emptyMap())
     private val byNamespace = MutableStateFlow<Map<String, List<Page>>>(emptyMap())
+
+    override fun getPageById(id: Long): Flow<Result<Page?>> {
+        return byUuid.map { map ->
+            Result.success(map.values.find { it.id == id })
+        }
+    }
 
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return pages.map { map ->
@@ -48,37 +53,42 @@ class DatascriptPageRepository : PageRepository {
         }
     }
 
+    override fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return pages.map { map ->
+            val journals = map.values
+                .filter { it.isJournal && it.journalDate != null }
+                .sortedByDescending { it.journalDate }
+                .drop(offset)
+                .take(limit)
+            success(journals)
+        }
+    }
+
     override fun getRecentPages(limit: Int): Flow<Result<List<Page>>> {
         return pages.map { map ->
             success(map.values.sortedByDescending { it.updatedAt }.take(limit))
         }
     }
 
-    override suspend fun savePage(page: Page): Result<Unit> {
+    override suspend fun savePage(page: Page): Result<Long> {
         return try {
             val current = pages.value.toMutableMap()
             current[page.uuid] = page
             pages.value = current
 
             // Update indexes
-            val uuidIndex = byUuid.value.toMutableMap()
-            uuidIndex[page.uuid] = page
-            byUuid.value = uuidIndex
+            refreshIndexes(current)
+            success(page.id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
-            val nameIndex = byName.value.toMutableMap()
-            nameIndex[page.name] = page
-            byName.value = nameIndex
-
-            val namespaceIndex = byNamespace.value.toMutableMap()
-            if (page.namespace != null) {
-                val existing = namespaceIndex[page.namespace]?.toMutableList() ?: mutableListOf()
-                existing.removeAll { it.uuid == page.uuid }
-                existing.add(page)
-                namespaceIndex[page.namespace] = existing
-            }
-            byNamespace.value = namespaceIndex
-
-            success(Unit)
+    override suspend fun toggleFavorite(pageUuid: String): Result<Unit> {
+        return try {
+            val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
+            val newPage = page.copy(isFavorite = !page.isFavorite)
+            savePage(newPage).map { Unit }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -87,27 +97,8 @@ class DatascriptPageRepository : PageRepository {
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
         return try {
             val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
-            val newPage = page.copy(name = newName)
-            
-            // Update main storage
-            val current = pages.value.toMutableMap()
-            current[pageUuid] = newPage
-            pages.value = current
-
-            // Update indexes
-            val uuidIndex = byUuid.value.toMutableMap()
-            uuidIndex[pageUuid] = newPage
-            byUuid.value = uuidIndex
-
-            val nameIndex = byName.value.toMutableMap()
-            nameIndex.remove(page.name)
-            nameIndex[newName] = newPage
-            byName.value = nameIndex
-
-            // Note: Namespace update logic is handled by Service layer or savePage
-            // Here we just update the name in the index
-            
-            success(Unit)
+            val newPage = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
+            savePage(newPage).map { Unit }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -115,32 +106,29 @@ class DatascriptPageRepository : PageRepository {
 
     override suspend fun deletePage(pageUuid: String): Result<Unit> {
         return try {
-            val page = pages.value[pageUuid] ?: return success(Unit)
-
             val current = pages.value.toMutableMap()
             current.remove(pageUuid)
             pages.value = current
-
-            // Remove from indexes
-            val uuidIndex = byUuid.value.toMutableMap()
-            uuidIndex.remove(pageUuid)
-            byUuid.value = uuidIndex
-
-            val nameIndex = byName.value.toMutableMap()
-            nameIndex.remove(page.name)
-            byName.value = nameIndex
-
-            val namespaceIndex = byNamespace.value.toMutableMap()
-            page.namespace?.let { ns ->
-                namespaceIndex[ns]?.let { list ->
-                    namespaceIndex[ns] = list.filter { it.uuid != pageUuid }
-                }
-            }
-            byNamespace.value = namespaceIndex
-
+            refreshIndexes(current)
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    override fun countPages(): Flow<Result<Long>> {
+        return pages.map { success(it.size.toLong()) }
+    }
+
+    override suspend fun clear() {
+        pages.value = emptyMap()
+        refreshIndexes(emptyMap())
+    }
+
+    private fun refreshIndexes(currentPages: Map<String, Page>) {
+        val allPages = currentPages.values
+        byUuid.value = currentPages
+        byName.value = allPages.associateBy { it.name }
+        byNamespace.value = allPages.filter { it.namespace != null }.groupBy { it.namespace!! }
     }
 }

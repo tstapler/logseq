@@ -120,15 +120,7 @@ class EncryptedPageRepository(
     private val graphId: String
 ) : PageRepository by delegate {
 
-    override suspend fun savePage(page: Page): Result<Unit> {
-        // Pages might not have encryptable content in the MVP, but if they have properties or names we want to hide...
-        // For now, let's assume page names are NOT encrypted to keep linking simple, 
-        // or we encrypt them if we want full privacy.
-        // Let's encrypt the properties if Page had them (it currently doesn't in the model shown in previous reads, 
-        // but typically pages have properties).
-        // Checking Page model... not visible in recent reads, but usually it has name/journalDay.
-        // If Page has no content/properties to encrypt, we just delegate.
-        // But for signature compatibility and future proofing:
+    override suspend fun savePage(page: Page): Result<Long> {
         return delegate.savePage(page)
     }
     

@@ -1,5 +1,6 @@
 package com.logseq.kmp.benchmark
 
+import com.logseq.kmp.db.DriverFactory
 import com.logseq.kmp.repository.RepositoryFactoryImpl
 import com.logseq.kmp.repository.GraphBackend
 import kotlinx.coroutines.runBlocking
@@ -14,7 +15,7 @@ class RepositoryBenchmarkRunnerTest {
         println("🚀 REPOSITORY BENCHMARK EXECUTION")
         println("=".repeat(60))
 
-        val factory = RepositoryFactoryImpl()
+        val factory = RepositoryFactoryImpl(DriverFactory(), "jdbc:sqlite::memory:")
         val blockRepo = factory.createBlockRepository(GraphBackend.IN_MEMORY)
         val pageRepo = factory.createPageRepository(GraphBackend.IN_MEMORY)
 
