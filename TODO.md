@@ -56,6 +56,11 @@ kmp/
 ### P1: FEATURE COMPLETION
 - [ ] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are currently stubs.
 - [ ] **[FTS-001] Native Search Optimization** - Migrate search logic from Kotlin-filtering to native SQLite FTS5 using `searchBlocksByContentFts`.
+- [ ] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases. **Plan**: [`docs/tasks/multi-graph-support.md`](docs/tasks/multi-graph-support.md)
+  - [ ] Phase 1: Foundation (hashing, GraphInfo model, canonicalizePath, databaseUrlForGraph)
+  - [ ] Phase 2: Repository lifecycle (GraphManager, driver close/open, StateFlow<RepositorySet>)
+  - [ ] Phase 3: ViewModel + UI integration (graph switcher, key-scoped ViewModels)
+  - [ ] Phase 4: Migration + polish (single-DB migration, remove graph, status bar)
 
 ---
 
@@ -96,6 +101,7 @@ kmp/
 | DB-001 | High | Integer PKs incompatible with replication/merge | Planned ([plan](docs/tasks/uuid-native-block-storage.md)) |
 | - | Low | ClickableText deprecated API | Warning only |
 | - | Low | expect/actual beta warnings | Cosmetic |
+| MG-001 | Medium | Single-graph hardcoded; no multi-graph support | Planned ([plan](docs/tasks/multi-graph-support.md)) |
 
 ---
 
