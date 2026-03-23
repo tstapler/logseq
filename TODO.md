@@ -2,17 +2,17 @@
 
 ## Current Status
 - **Migration State**: Feature Implementation Phase - Core features complete!
-- **Technology Stack**: Kotlin 2.0.21, Compose Desktop 1.7.1, SQLDelight 2.0.2
-- **Recent Activity**: Completed Story 10: Page Alias Support!
-- **Last Updated**: February 22, 2026
-- **Current Focus**: Graph View
+- **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.0.2 (Persistent)**
+- **Recent Activity**: Migrated to SQLDelight, fixed hierarchy data integrity bugs, extracted MarkdownEngine.
+- **Last Updated**: March 22, 2026
+- **Current Focus**: Editing System Remediation
 
 ## Build Status
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| JVM/Desktop | ✅ PASSING | Stable |
-| Android | ✅ PASSING | BUG-007 resolved |
+| JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent |
+| Android | ✅ PASSING | Stable, SQLDelight persistent |
 | JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
 | iOS | ⏸️ Disabled | Ivy repository issues |
 
@@ -26,30 +26,51 @@ kmp/
     │   └── kotlin/com/logseq/kmp/
     │       ├── platform/          # expect classes
     │       ├── model/             # Page, Block, Property
-    │       ├── repository/        # Repository interfaces
-    │       ├── db/                # GraphLoader, GraphWriter
-    │       ├── editor/            # Editor components
+    │       ├── repository/        # SQLDelight implementations
+    │       ├── db/                # GraphLoader, DriverFactory
+    │       ├── editor/            # Editor core logic
     │       └── ui/                # Compose UI components
     ├── jvmMain/                   # JVM/Desktop implementations
-    ├── androidMain/               # Android implementations
-    ├── iosMain/                   # iOS implementations (disabled)
-    └── jsMain/                    # JS implementations (disabled)
+    └── androidMain/               # Android implementations
 ```
+
+---
+
+## Active Remediation (Post-Review March 2026)
+
+### P0: ARCHITECTURE & MAINTAINABILITY
+- [ ] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into Gutter, Editor, and Viewer components.
+- [ ] **[ED-001] Implement Undo/Redo Command Pattern** - Replace log-only stubs with full command-pattern implementation for all operations.
+- [ ] **[ED-002] Decouple UI from Editor Core** - Remove `androidx.compose` dependencies from `editor` and `model` packages.
+- [ ] **[TEST-001] Fix Flaky Test Sync** - Replace `delay(50)` in ViewModel tests with proper coroutine test dispatchers.
+
+### P0: DATA ARCHITECTURE (Replication & Merge Readiness)
+- [ ] **[DB-001] UUID-Native Block Storage** - Migrate from INTEGER AUTOINCREMENT PKs to UUID TEXT PKs across all tables. Enables cross-device merge, content deduplication, and replication support. **Plan**: [`docs/tasks/uuid-native-block-storage.md`](docs/tasks/uuid-native-block-storage.md)
+  - [ ] Phase 1: Schema migration (UUID PKs, FTS5 compat, query rewrites, migration script)
+  - [ ] Phase 2: Model & repository layer (remove `id: Long`, UUID-only identity)
+  - [ ] Phase 3: GraphLoader UUID-native loading (remove epoch-ms IDs, populate `left_uuid`, content hashing)
+  - [ ] Phase 4: Content deduplication queries
+  - [ ] Phase 5: CRDT-ready infrastructure (device ID, HLC timestamps, soft deletes)
+  - [ ] Phase 6: Test suite & migration validation
+
+### P1: FEATURE COMPLETION
+- [ ] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are currently stubs.
+- [ ] **[FTS-001] Native Search Optimization** - Migrate search logic from Kotlin-filtering to native SQLite FTS5 using `searchBlocksByContentFts`.
 
 ---
 
 ## Completed Work
 
-### ✅ Build Stabilization (January 2026)
-- [x] JVM target compiles and runs
-- [x] Android target compiles successfully
-- [x] Progressive startup loading (journals-first, ~500ms to interactive)
-- [x] Java 17+ compatibility resolved
+### ✅ Build & Persistence (March 2026)
+- [x] **SQLDelight Migration**: Replaced In-Memory/DataScript with persistent SQLite backend.
+- [x] **Atomic Hierarchy Sync**: `left_id` sibling chain correctly maintained in DB.
+- [x] **Reactive DB Flows**: UI updates automatically via SQLDelight observers.
+- [x] **Markdown Engine**: Extracted regex parsing into standalone `MarkdownEngine`.
 
 ### ✅ Core Infrastructure
 - [x] PlatformFileSystem with all file operations
 - [x] GraphLoader with progressive loading
-- [x] Block and Page repositories (in-memory)
+- [x] Block and Page repositories (SQLDelight)
 - [x] Performance monitoring infrastructure
 
 ### ✅ UI Framework
@@ -57,173 +78,13 @@ kmp/
 - [x] Theme toggle (Light/Dark/System)
 - [x] Left sidebar with navigation
 - [x] Right sidebar (expandable)
-- [x] Status bar with encryption indicator
-- [x] Command palette infrastructure
+- [x] **Re-index Graph** button in Advanced Settings
 
-### ✅ Content Display (January 21, 2026)
-- [x] Block content loading from repository
-- [x] Text state initialization for blocks
-- [x] JournalsView with scrollable multi-journal display
-- [x] BlockRenderer with wiki link support `[[Page Name]]`
-- [x] Edit vs View mode for blocks
-- [x] Click-to-edit functionality
-- [x] Wiki link navigation to pages
-- [x] Linked and Unlinked References Panel
-
----
-
-## Active Development
-
-### 🚨 POST-REVIEW REMEDIATION (MARCH 2026)
-- [ ] **Critical: Fix Schema Bug (left_id CASCADE)** - Prevent accidental page wipes on block deletion (High Priority)
-- [ ] **Critical: Implement Undo/Redo Logic** - Replace current log-only stubs with full command-pattern implementation
-- [ ] **High: Optimize Hierarchy Traversal** - Replace N+1 queries in `getBlockHierarchy` with recursive CTE
-- [ ] **High: Database Performance** - Add index on `left_id` to stabilize hierarchy repair operations
-- [ ] **High: Architecture - Decouple UI from Editor Core** - Remove `androidx.compose` dependencies from `editor` module
-- [ ] **High: Architecture - Decompose BlockRenderer** - Split 800+ line God Object into smaller, single-responsibility components
-- [ ] **High: Testing - Fix Flaky Sync** - Replace `delay(50)` in ViewModel tests with proper coroutine test dispatchers
-
-### 🚨 URGENT REPAIRS
-- [ ] **Fix Android Build (BUG-007)** - [View Plan](docs/tasks/fix-build-2026-02-22.md)
-- [ ] **Persistent Versioning** - [View Plan](docs/tasks/persistent-versioning.md)
-
-### 🎯 FEATURE PARITY IMPLEMENTATION
-
-#### Story 1: Block Editing ✅ Complete
-- [x] Task 1.1: Persist block edits to disk (2h)
-- [x] Task 1.2: Auto-save with debouncing (1h)
-- [x] Task 1.3: Undo/redo support (2h) - Ctrl+Z / Ctrl+Shift+Z
-- [x] Task 1.4: Block editing enhancements - Enter, Backspace, Split, Merge
-
-#### Story 2: Block Hierarchy & Outliner ✅ Complete - [View Plan](docs/tasks/block-hierarchy.md)
-- [x] Task 2.1: Tree structure visualization (2h) - Vertical guide lines
-- [x] Task 2.2: Indent/outdent blocks (2h) - Tab / Shift+Tab
-- [x] Task 2.3: Collapse/expand blocks (1h)
-- [x] Task 2.4: Drag-and-drop reordering (3h) - Basic drag implemented
-- [x] Task 2.5: Mobile Block Toolbar (2h)
-- [x] Task 2.6: Focus Navigation - Arrow keys between blocks
-
-#### Story 3: Page Management ✅ Complete - [View Plan](docs/tasks/page-management.md)
-- [x] Task 3.1: Create new page from wiki link (1h)
-- [x] Task 3.2: Delete page with confirmation (1h)
-- [x] Task 3.3: Rename page with reference updates (2h) - Updates all [[wiki links]]
-- [x] Task 3.4: Page properties panel (2h) - Collapsible metadata panel
-- [x] Task 3.5: Explicit Page Creation UI (2h) - Via search dialog (Ctrl+K)
-
-#### Story 4: Search & Query System ✅ Complete - [View Plan](docs/tasks/search-system.md)
-- [x] Task 4.1: Search Repository Implementation (2h) - InMemory + SQLDelight FTS5
-- [x] Task 4.2: Search UI & Command Palette (3h) - Ctrl+K search dialog
-- [x] Task 4.3: Query Result Rendering (2h) - Pages, blocks, create new page
-- [x] Task 4.4: Relevance Scoring (1h) - Title match, content match weights
-
-#### Story 5: Progressive Data Loading ✅ Complete - [View Plan](docs/tasks/progressive-loading.md)
-- [x] Task 5.1: Paginated Repository Methods (2h)
-- [x] Task 5.2: UI Infinite Scroll Integration (3h)
-- [x] Task 5.3: Lazy Reference Loading (2h)
-- [x] Task 5.4: Metadata-Only Initial Graph Load (3h)
-
-#### Story 6: Android Readiness ✅ Complete - [View Plan](docs/tasks/android-readiness.md)
-- [x] Task 6.1: Mobile Block Toolbar (2h) - Shows above keyboard when editing
-- [x] Task 6.2: Touch-Friendly Drag & Drop (2h) - Drag handle with gesture
-- [x] Task 6.3: Quick Capture / New Page UI (2h) - Floating action button
-
-#### Story 7: Block References ✅ Complete - [View Plan](docs/tasks/block-references.md)
-- [x] Task 7.1: Parser Support for ((uuid)) (1h)
-- [x] Task 7.2: Repository Lookup by UUID (1h)
-- [x] Task 7.3: UI Rendering of References (2h)
-
-#### Story 8: Tags Support ✅ Complete - [View Plan](docs/tasks/tags-support.md)
-- [x] Task 8.1: Parser Hardening for #tag (1h)
-- [x] Task 8.2: UI Rendering and Interaction (1h)
-
-#### Story 9: Wiki Link Autocomplete ✅ Complete - [View Plan](docs/tasks/wiki-link-autocomplete.md)
-- [x] Task 9.0: Fix Android Build (2h)
-- [x] Task 9.1: Trigger Detection in RichTextEditor (1h)
-- [x] Task 9.2: Autocomplete UI Component (2h)
-- [x] Task 9.3: Integration and Wiring (1h)
-
-#### Story 10: Page Aliases ✅ Complete - [View Plan](docs/tasks/page-aliases.md)
-- [x] Task 10.1: Update Page Repository to handle aliases (1h)
-- [x] Task 10.2: Update Search Repository to index aliases (1h)
-- [x] Task 10.3: Autocomplete support for aliases (1h)
-- [x] Task 10.4: Navigation support for aliased pages (1h)
-
-### 🎯 COMPLETED TASKS
-- [x] **Feat: Tags Support (#tag)** (Feb 1, 2026)
-  - Parser: Hardened `InlineParser` to strict #tag validation
-  - UI: Added regex rendering for tags in `BlockRenderer`
-  - Interaction: Tags are clickable and navigate to the page
-- [x] **Fix: Editor Cursor Jumping** (Feb 1, 2026)
-  - Fixed issue where typing would reset cursor to beginning
-  - Improved state synchronization in `BlockRenderer` to handle external updates gracefully
-- [x] **Fix: Clicking Outside Edit Box** (Feb 1, 2026)
-  - Added global tap handler to clear focus when clicking empty space
-  - Ensures edit mode is exited correctly
-- [x] **Feat: Block References** (Feb 1, 2026)
-  - Parser: Added `((uuid))` syntax support (Token, Lexer, InlineParser)
-  - Data: Verified `getBlockByUuid` repository support
-  - UI: Added `((uuid))` regex rendering with transclusion (fetches and displays referenced content)
-  - Styling: Distinct italic/underline style for references
-- [x] **Feat: Quick Capture FAB** (Jan 25, 2026)
-  - Floating action button in bottom-right corner
-  - Quick add to today's journal
-  - New page creation shortcut
-- [x] **Feat: Search & Query System** (Jan 25, 2026)
-  - InMemorySearchRepository with relevance scoring
-  - SearchDialog with page/block results
-  - Create new page from search
-  - Ctrl+K keyboard shortcut
-- [x] **Feat: Page Properties Panel** (Jan 25, 2026)
-  - Collapsible properties panel in PageView
-  - Shows page metadata, dates, file path
-  - User-defined properties from frontmatter
-- [x] **Feat: Rename Page** (Jan 25, 2026)
-  - Rename dialog with validation
-  - Updates all [[wiki link]] references
-  - File rename on disk
-- [x] **Feat: Undo/Redo Support** (Jan 25, 2026)
-  - Added Ctrl+Z / Ctrl+Shift+Z keyboard shortcuts
-  - UndoManager with command pattern for all block operations
-  - Automatic UI refresh after undo/redo
-- [x] **Feat: Delete Page** (Jan 25, 2026)
-  - Delete button with confirmation dialog in PageView
-  - Removes file, blocks, and repository entry
-  - Navigates away after deletion
-- [x] **Feat: Tree Visualization** (Jan 25, 2026)
-  - Added vertical guide lines for nested blocks
-  - Visual hierarchy indicator
-- [x] **Feat: Focus Navigation** (Jan 24, 2026)
-  - Arrow Up/Down to move between blocks
-  - Proper cursor positioning at line boundaries
-- [x] **Feat: Block Editing Enhancements** (Jan 24, 2026)
-  - Enter to create new block or split at cursor
-  - Backspace to merge/delete blocks
-  - Robust handling of edge cases
-- [x] **Fix: GraphWriter Hierarchy Corruption (BUG-004)** (Jan 23, 2026)
-  - Fixed sorting bug that corrupted block order on save
-  - Implemented tree traversal instead of flat sorting
-- [x] **Feat: Metadata-Only Initial Graph Load** (Jan 22, 2026)
-  - Implemented Two-Phase Loading Strategy (Skeleton -> Full Content)
-  - Added ParseMode to LogseqParser/MarkdownParser
-  - Refactored GraphLoader to support progressive background loading
-  - Updated UI to show "Loading..." placeholders for unloaded blocks
-  - Fixed race conditions with file-level mutex
-- [x] **Feat: Native KMP Graph Parser** (Jan 22, 2026)
-  - Implemented high-performance, zero-copy Lexer and Parser in Kotlin
-  - Replaced legacy `mldoc` (C++/WASM) dependency
-  - Achieved feature parity for Logseq syntax (Indentation, Properties, Timestamps, Links)
-  - Fixed block hierarchy and sorting issues
-- [x] **Feat: Deterministic UUID Generation** (Jan 22, 2026)
-  - Implemented stable UUIDs based on file path and content
-  - Fixed duplicate block issues on reload
-- [x] **Feat: Debug Mode** (Jan 22, 2026)
-  - Added "Show Debug Info" toggle in View menu
-  - Visualized block levels and structure for troubleshooting
-
-### ⏸️ Platform Re-enablement (Blocked)
-*See [BUG-003](docs/bugs/open/003-android-js-targets-disabled.md)*
-- [ ] JS Target: Fix OutOfMemoryError and Node.js resolution
-- [ ] iOS Target: Fix Ivy repository issues
+### ✅ Content Display & Editing
+- [x] JournalsView with reactive multi-journal display
+- [x] BlockRenderer with wiki link, block ref, and tag support
+- [x] **Atomic Merge/Split**: Backspace and Enter handle hierarchy correctly in DB.
+- [x] Page Alias support indexed in SQL.
 
 ---
 
@@ -232,35 +93,9 @@ kmp/
 | ID | Severity | Description | Status |
 |----|----------|-------------|--------|
 | BUG-003 | Medium | JS/iOS targets disabled | Open |
-| BUG-004 | Critical | GraphWriter corrupts block order | ✅ Fixed (Jan 23) |
-| BUG-007 | High | Editor Content Replay / Typing Wiped | ✅ Fixed (Feb 24) |
+| DB-001 | High | Integer PKs incompatible with replication/merge | Planned ([plan](docs/tasks/uuid-native-block-storage.md)) |
 | - | Low | ClickableText deprecated API | Warning only |
 | - | Low | expect/actual beta warnings | Cosmetic |
-
----
-
-## Feature Gap Analysis (vs Logseq)
-
-### High Priority (Core Functionality) - ALL COMPLETE ✅
-- [x] Block editing persistence ✅
-- [x] Block hierarchy/outliner display ✅
-- [x] Create page from wiki link ✅
-- [x] Backlinks panel ✅
-- [x] Search functionality ✅
-
-### Medium Priority (User Experience)
-- [x] Keyboard shortcuts (Ctrl+Z, Tab, Enter, Backspace, Ctrl+K, etc.) ✅
-- [x] Block references `((block-id))` ✅
-- [ ] Tags `#tag` support
-- [ ] Page aliases
-- [ ] Graph view
-
-### Low Priority (Advanced Features)
-- [ ] Flashcards/spaced repetition
-- [ ] PDF annotation
-- [ ] Whiteboards
-- [ ] Plugins system
-- [ ] Sync/collaboration
 
 ---
 
@@ -273,35 +108,6 @@ kmp/
 # Compile JVM code
 ./gradlew :kmp:compileKotlinJvm
 
-# Compile Android code
-./gradlew :kmp:compileDebugKotlinAndroid
-
 # Run tests
 ./gradlew :kmp:jvmTest
 ```
-
----
-
-## Architecture Notes
-
-### Data Flow
-```
-Markdown Files → GraphLoader → Repositories (In-Memory) → UI Components
-                                    ↓
-                              GraphWriter → Markdown Files
-```
-
-### Key Components
-- **GraphLoader**: Reads markdown files, parses content, populates repositories
-- **GraphWriter**: Persists changes back to markdown files
-- **BlockRepository**: In-memory storage for blocks with reactive Flow
-- **PageRepository**: In-memory storage for pages
-- **BlockRenderer**: Renders blocks with wiki links and edit mode
-- **JournalsView**: Displays multiple journals in scrollable list
-
----
-
-*Last Updated: January 25, 2026*
-*Framework: Kotlin Multiplatform 2.0.21 with Compose Desktop 1.7.1*
-
-- [x] [KMP Markdown Parser Parity Plan](docs/tasks/kmp-markdown-parity.md)
