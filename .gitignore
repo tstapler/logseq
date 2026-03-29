@@ -33,6 +33,7 @@ strings.csv
 .calva
 resources/electron.js
 .lsp/.cache
+.clj-kondo/
 .clj-kondo/.cache
 .clj-kondo/babashka
 .clj-kondo/http-kit
