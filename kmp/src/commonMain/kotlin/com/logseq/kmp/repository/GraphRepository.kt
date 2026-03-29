@@ -53,12 +53,12 @@ interface BlockRepository {
     /**
      * Get all blocks for a specific page
      */
-    fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>>
+    fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>>
 
     /**
      * Delete all blocks associated with a specific page
      */
-    suspend fun deleteBlocksForPage(pageId: Long): Result<Unit>
+    suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit>
 
     /**
      * Clear all blocks from the repository
@@ -131,6 +131,19 @@ interface BlockRepository {
      * Search blocks by content
      */
     fun searchBlocksByContent(query: String, limit: Int = 50, offset: Int = 0): Flow<Result<List<Block>>>
+
+    /**
+     * Find groups of blocks whose content is identical (potential duplicates).
+     *
+     * The implementation first queries by content_hash (fast index scan) and then
+     * performs a second pass comparing the actual content strings directly. This
+     * guards against the astronomically rare but theoretically possible SHA-256
+     * collision where two different content strings produce the same hash — such
+     * blocks would NOT be reported as duplicates.
+     *
+     * @param limit maximum number of distinct hash groups to inspect
+     */
+    fun findDuplicateBlocks(limit: Int = 50): Flow<Result<List<DuplicateGroup>>>
 }
 
 /**
@@ -138,11 +151,6 @@ interface BlockRepository {
  * Pages are special blocks that serve as roots of block hierarchies.
  */
 interface PageRepository {
-    /**
-     * Get a page by its ID
-     */
-    fun getPageById(id: Long): Flow<Result<Page?>>
-
     /**
      * Get a page by its UUID
      */
@@ -175,9 +183,8 @@ interface PageRepository {
 
     /**
      * Save a new or updated page
-     * @return The database ID of the page
      */
-    suspend fun savePage(page: Page): Result<Long>
+    suspend fun savePage(page: Page): Result<Unit>
 
     /**
      * Toggle favorite status for a page
@@ -316,6 +323,17 @@ interface SearchRepository {
 // ===== DATA STRUCTURES =====
 
 /**
+ * A group of blocks that share identical content (confirmed by both hash and direct comparison).
+ */
+data class DuplicateGroup(
+    /** The SHA-256 hex digest that all blocks in this group share. */
+    val contentHash: String,
+    /** Blocks whose content strings are byte-for-byte identical. */
+    val blocks: List<Block>,
+    val count: Int
+)
+
+/**
  * Represents a block with its depth in a hierarchy
  */
 data class BlockWithDepth(
@@ -388,9 +406,20 @@ enum class GraphBackend {
  * Factory for creating repository instances based on backend type
  */
 interface RepositoryFactory {
-    fun createBlockRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): BlockRepository
-    fun createPageRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): PageRepository
-    fun createPropertyRepository(backend: GraphBackend, encryptionManager: EncryptionManager? = null): PropertyRepository
+    fun createBlockRepository(backend: GraphBackend): BlockRepository
+    fun createPageRepository(backend: GraphBackend): PageRepository
+    fun createPropertyRepository(backend: GraphBackend): PropertyRepository
     fun createReferenceRepository(backend: GraphBackend): ReferenceRepository
     fun createSearchRepository(backend: GraphBackend): SearchRepository
 }
+
+/**
+ * A complete set of repositories for a single graph database.
+ */
+data class RepositorySet(
+    val blockRepository: BlockRepository,
+    val pageRepository: PageRepository,
+    val propertyRepository: PropertyRepository,
+    val referenceRepository: ReferenceRepository,
+    val searchRepository: SearchRepository
+)

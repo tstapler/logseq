@@ -4,8 +4,8 @@
 - **Migration State**: Feature Implementation Phase - Core features complete!
 - **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.0.2 (Persistent)**
 - **Recent Activity**: Migrated to SQLDelight, fixed hierarchy data integrity bugs, extracted MarkdownEngine.
-- **Last Updated**: March 22, 2026
-- **Current Focus**: Editing System Remediation
+- **Last Updated**: March 28, 2026
+- **Current Focus**: Multi-Graph Support Foundation Complete - Ready for Phase 2
 
 ## Build Status
 
@@ -39,25 +39,27 @@ kmp/
 ## Active Remediation (Post-Review March 2026)
 
 ### P0: ARCHITECTURE & MAINTAINABILITY
-- [ ] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into Gutter, Editor, and Viewer components.
-- [ ] **[ED-001] Implement Undo/Redo Command Pattern** - Replace log-only stubs with full command-pattern implementation for all operations.
-- [ ] **[ED-002] Decouple UI from Editor Core** - Remove `androidx.compose` dependencies from `editor` and `model` packages.
-- [ ] **[TEST-001] Fix Flaky Test Sync** - Replace `delay(50)` in ViewModel tests with proper coroutine test dispatchers.
+- [x] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into BlockGutter, BlockEditor, BlockViewer, BlockItem, BlockList components.
+- [x] **[ED-001] Implement Undo/Redo Command Pattern** - Undo/redo stack in JournalsViewModel: lightweight content edits + full page snapshots for structural ops. Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y wired in App.kt.
+- [x] **[ED-002] Decouple UI from Editor Core** - Moved `AutocompleteMenu` from `editor.components` to `ui.components`; removed cross-package Compose dependency.
+- [x] **[TEST-001] Fix Flaky Test Sync** - Replace `delay(50)` with `UnconfinedTestDispatcher(testScheduler)` + `backgroundScope` for deterministic, non-hanging tests.
 
 ### P0: DATA ARCHITECTURE (Replication & Merge Readiness)
-- [ ] **[DB-001] UUID-Native Block Storage** - Migrate from INTEGER AUTOINCREMENT PKs to UUID TEXT PKs across all tables. Enables cross-device merge, content deduplication, and replication support. **Plan**: [`docs/tasks/uuid-native-block-storage.md`](docs/tasks/uuid-native-block-storage.md)
-  - [ ] Phase 1: Schema migration (UUID PKs, FTS5 compat, query rewrites, migration script)
-  - [ ] Phase 2: Model & repository layer (remove `id: Long`, UUID-only identity)
-  - [ ] Phase 3: GraphLoader UUID-native loading (remove epoch-ms IDs, populate `left_uuid`, content hashing)
-  - [ ] Phase 4: Content deduplication queries
-  - [ ] Phase 5: CRDT-ready infrastructure (device ID, HLC timestamps, soft deletes)
-  - [ ] Phase 6: Test suite & migration validation
+- [x] **[DB-001] UUID-Native Block Storage** - Moved from numeric IDs to UUID-native storage across the entire application (Schema, Models, Repositories, GraphLoader, ViewModels). Enables cross-device merge, content deduplication, and replication support.
+  - [x] Phase 1: Schema migration (UUID PKs, FTS5 compat, query rewrites)
+  - [x] Phase 2: Model & repository layer (remove `id: Long`, UUID-only identity)
+  - [x] Phase 3: GraphLoader UUID-native loading (populate `left_uuid`, content hashing)
+  - [x] Phase 4: Test refactor (all 130+ tests updated to UUIDs)
+  - [x] Phase 5: Extra: Removed Encryption logic (EncryptedRepositories.kt) as per user request
+  - [x] Phase 6: Extra: Implemented file system watcher in GraphLoader for auto-reload from disk
+  - [x] Extra: Added `generateTodayJournal()` in JournalsViewModel
+  - [x] Extra: Implemented large-scale deletion safety check in GraphWriter
 
 ### P1: FEATURE COMPLETION
-- [ ] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are currently stubs.
-- [ ] **[FTS-001] Native Search Optimization** - Migrate search logic from Kotlin-filtering to native SQLite FTS5 using `searchBlocksByContentFts`.
-- [ ] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases. **Plan**: [`docs/tasks/multi-graph-support.md`](docs/tasks/multi-graph-support.md)
-  - [ ] Phase 1: Foundation (hashing, GraphInfo model, canonicalizePath, databaseUrlForGraph)
+- [x] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are implemented in `BlockTreeOperations.kt` and delegated to from `BlockOperations.kt`. `moveBlockEnhanced` is also implemented with positioning support and sibling shifting.
+- [x] **[FTS-001] Native Search Optimization** - `searchWithFilters` and `searchBlocksByContent` now use FTS5 instead of loading all blocks into memory; FTS query sanitized to prevent syntax errors.
+- [x] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases.
+  - [x] Phase 1: Foundation (hashing, GraphInfo model, canonicalizePath, databaseUrlForGraph) - COMPLETED
   - [ ] Phase 2: Repository lifecycle (GraphManager, driver close/open, StateFlow<RepositorySet>)
   - [ ] Phase 3: ViewModel + UI integration (graph switcher, key-scoped ViewModels)
   - [ ] Phase 4: Migration + polish (single-DB migration, remove graph, status bar)
