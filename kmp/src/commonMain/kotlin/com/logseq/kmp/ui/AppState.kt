@@ -1,5 +1,6 @@
 package com.logseq.kmp.ui
 
+import com.logseq.kmp.model.GraphInfo
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.ui.theme.LogseqThemeMode
 import com.logseq.kmp.ui.i18n.Language
@@ -41,7 +42,12 @@ data class AppState(
     val editingBlockId: String? = null,
     val editingCursorIndex: Int? = null,
     // Debug settings
-    val isDebugMode: Boolean = false
+    val isDebugMode: Boolean = false,
+    // Multi-graph support
+    val currentGraphId: String? = null,
+    val currentGraphName: String = "",
+    val availableGraphs: List<GraphInfo> = emptyList(),
+    val isGraphSwitching: Boolean = false
 ) {
     val canGoBack: Boolean get() = historyIndex > 0
     val canGoForward: Boolean get() = historyIndex < navigationHistory.size - 1

@@ -5,16 +5,19 @@ import com.logseq.kmp.model.GraphRegistry
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.platform.PlatformSettings
 import com.logseq.kmp.repository.GraphBackend
+import com.logseq.kmp.repository.RepositorySet
+import com.logseq.kmp.util.ContentHasher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import java.security.MessageDigest
 
 /**
  * Manages multiple graphs and their respective database connections.
@@ -27,8 +30,16 @@ class GraphManager(
     private val coroutineScope: CoroutineScope
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val mutex = Mutex()
+    
     private val _graphRegistry = MutableStateFlow(GraphRegistry())
     val graphRegistry: StateFlow<GraphRegistry> = _graphRegistry.asStateFlow()
+    
+    private val _activeRepositorySet = MutableStateFlow<RepositorySet?>(null)
+    val activeRepositorySet: StateFlow<RepositorySet?> = _activeRepositorySet.asStateFlow()
+    
+    // Track current driver for lifecycle management
+    private var currentFactory: com.logseq.kmp.repository.RepositoryFactoryImpl? = null
     
     // Track active coroutines for cleanup during graph switches
     private val activeGraphJobs = mutableMapOf<String, CoroutineScope>()
@@ -57,7 +68,7 @@ class GraphManager(
     }
     
     fun graphIdFromPath(path: String): String = 
-        sha256Hex(path).take(16)
+        ContentHasher.sha256(path).take(16)
     
     fun addGraph(path: String): String {
         // Use expanded path for consistent ID generation
@@ -102,6 +113,24 @@ class GraphManager(
         return true
     }
     
+    fun renameGraph(id: String, newName: String): Boolean {
+        val registry = _graphRegistry.value
+        val graphIndex = registry.graphs.indexOfFirst { it.id == id }
+        if (graphIndex == -1) return false
+        
+        val updatedGraphs = registry.graphs.toMutableList()
+        updatedGraphs[graphIndex] = updatedGraphs[graphIndex].copy(displayName = newName)
+        
+        val updated = registry.copy(graphs = updatedGraphs)
+        _graphRegistry.value = updated
+        saveRegistry()
+        return true
+    }
+    
+    /**
+     * Switch to a different graph.
+     * Closes the current database connection and opens a new one for the target graph.
+     */
     fun switchGraph(id: String) {
         val registry = _graphRegistry.value
         val graphInfo = registry.graphs.firstOrNull { it.id == id }
@@ -110,6 +139,17 @@ class GraphManager(
         // Cancel any existing coroutines for the previous graph
         val currentGraphId = registry.activeGraphId
         currentGraphId?.let { activeGraphJobs.remove(it)?.cancel() }
+        
+        // Close current driver/factory
+        currentFactory = null
+        _activeRepositorySet.value = null
+        
+        // Create new database for this graph
+        val dbUrl = databaseUrlForGraph(id)
+        val factory = com.logseq.kmp.repository.RepositoryFactoryImpl(driverFactory, dbUrl)
+        currentFactory = factory
+        val repoSet = factory.createRepositorySet(GraphBackend.SQLDELIGHT)
+        _activeRepositorySet.value = repoSet
         
         // Update active graph
         val updatedRegistry = registry.copy(activeGraphId = id)
@@ -137,6 +177,8 @@ class GraphManager(
     fun getGraphIds(): Set<String> = 
         _graphRegistry.value.graphs.map { it.id }.toSet()
     
+    fun getActiveRepositorySet(): RepositorySet? = _activeRepositorySet.value
+    
     /**
      * Clean up all resources when shutting down
      */
@@ -144,10 +186,35 @@ class GraphManager(
         // Cancel all graph-specific coroutines
         activeGraphJobs.values.forEach { it.cancel() }
         activeGraphJobs.clear()
+        
+        // Clear repository set
+        _activeRepositorySet.value = null
+        currentFactory = null
     }
     
-    private fun sha256Hex(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
+    companion object {
+        /**
+         * Compute the database URL for a given graph ID.
+         * Each graph gets its own SQLite file: logseq-graph-{id}.db
+         */
+        fun databaseUrlForGraph(graphId: String): String {
+            val os = System.getProperty("os.name").lowercase()
+            val userHome = System.getProperty("user.home")
+
+            val basePath = when {
+                os.contains("win") -> {
+                    val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
+                    "$appData\\Logseq"
+                }
+                os.contains("mac") -> {
+                    "$userHome/Library/Application Support/Logseq"
+                }
+                else -> { // Linux and others
+                    val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
+                    "$xdgData/logseq"
+                }
+            }
+            return "jdbc:sqlite:$basePath/logseq-graph-$graphId.db"
+        }
     }
 }

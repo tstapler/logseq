@@ -24,10 +24,15 @@ import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.ui.LogseqViewModel
 import com.logseq.kmp.ui.components.BlockList
 import com.logseq.kmp.ui.components.MobileBlockToolbar
+import com.logseq.kmp.ui.components.ReferencesPanel
 import com.logseq.kmp.ui.i18n.t
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Page view screen.
+ * Updated to use UUID-native storage.
+ */
 @Composable
 fun PageView(
     page: Page,
@@ -46,23 +51,24 @@ fun PageView(
     val focusManager = LocalFocusManager.current
 
     // Local state for editing
-    var editingBlockId by remember { mutableStateOf<String?>(null) }
+    var editingBlockUuid by remember { mutableStateOf<String?>(null) }
     var editingCursorIndex by remember { mutableStateOf<Int?>(null) }
-    var collapsedBlockIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var collapsedBlockUuids by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // Load blocks for this page
     var blocks by remember { mutableStateOf<List<Block>>(emptyList()) }
 
-    // Trigger full load if page content hasn't been loaded yet
-    LaunchedEffect(page.id, page.isContentLoaded) {
-        if (!page.isContentLoaded) {
+    // Trigger full load if page content hasn't been loaded yet OR if blocks have unloaded content
+    LaunchedEffect(page.uuid, page.isContentLoaded, blocks) {
+        val hasUnloadedBlocks = blocks.isNotEmpty() && blocks.any { !it.isLoaded }
+        if (!page.isContentLoaded || hasUnloadedBlocks) {
             graphLoader.loadFullPage(page.uuid)
         }
     }
 
     // Collect blocks from repository
-    LaunchedEffect(page.id) {
-        blockRepository.getBlocksForPage(page.id).collect { result ->
+    LaunchedEffect(page.uuid) {
+        blockRepository.getBlocksForPage(page.uuid).collect { result ->
             result.onSuccess { loadedBlocks ->
                 blocks = loadedBlocks
             }
@@ -138,13 +144,13 @@ fun PageView(
                     BlockList(
                         blocks = sortedBlocks,
                         isDebugMode = isDebugMode,
-                        editingBlockId = editingBlockId,
+                        editingBlockUuid = editingBlockUuid,
                         editingCursorIndex = editingCursorIndex,
-                        collapsedBlocks = collapsedBlockIds,
-                        onStartEditing = { blockId -> editingBlockId = blockId },
-                        onStopEditing = { editingBlockId = null },
-                        onContentChange = { blockId, newContent, version ->
-                            viewModel.saveBlockContent(blockId, newContent, version, page)
+                        collapsedBlocks = collapsedBlockUuids,
+                        onStartEditing = { uuid -> editingBlockUuid = uuid },
+                        onStopEditing = { editingBlockUuid = null },
+                        onContentChange = { blockUuid, newContent, version ->
+                            viewModel.saveBlockContent(blockUuid, newContent, version, page)
                         },
                         onLinkClick = onLinkClick,
                         onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
@@ -154,14 +160,14 @@ fun PageView(
                         onOutdent = { blockUuid -> viewModel.outdentBlock(blockUuid) },
                         onMoveUp = { blockUuid -> viewModel.moveBlockUp(blockUuid) },
                         onMoveDown = { blockUuid -> viewModel.moveBlockDown(blockUuid) },
-                        onLoadContent = { _ -> scope.launch { graphLoader.loadFullPage(page.uuid) } },
+                        onLoadContent = { pageUuid -> scope.launch { graphLoader.loadFullPage(pageUuid) } },
 
                         onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
-                        onToggleCollapse = { blockId ->
-                            collapsedBlockIds = if (collapsedBlockIds.contains(blockId)) {
-                                collapsedBlockIds - blockId
+                        onToggleCollapse = { blockUuid ->
+                            collapsedBlockUuids = if (collapsedBlockUuids.contains(blockUuid)) {
+                                collapsedBlockUuids - blockUuid
                             } else {
-                                collapsedBlockIds + blockId
+                                collapsedBlockUuids + blockUuid
                             }
                         },
                         onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
@@ -179,15 +185,28 @@ fun PageView(
                     )
                 }
             }
+
+            // References section
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+                ReferencesPanel(
+                    page = page,
+                    blockRepository = blockRepository,
+                    pageRepository = pageRepository,
+                    onLinkClick = onLinkClick
+                )
+            }
         }
 
         MobileBlockToolbar(
-            editingBlockId = editingBlockId,
-            onIndent = { blockId -> scope.launch { viewModel.indentBlock(blockId) } },
-            onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
-            onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
-            onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
-            onAddBlock = { blockId -> scope.launch { viewModel.addNewBlock(blockId) } },
+            editingBlockId = editingBlockUuid,
+            onIndent = { blockUuid -> scope.launch { viewModel.indentBlock(blockUuid) } },
+            onOutdent = { blockUuid -> scope.launch { viewModel.outdentBlock(blockUuid) } },
+            onMoveUp = { blockUuid -> scope.launch { viewModel.moveBlockUp(blockUuid) } },
+            onMoveDown = { blockUuid -> scope.launch { viewModel.moveBlockDown(blockUuid) } },
+            onAddBlock = { blockUuid -> scope.launch { viewModel.addNewBlock(blockUuid) } },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .imePadding()
