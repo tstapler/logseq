@@ -157,6 +157,7 @@ fun GraphSwitcher(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var graphToRemove by remember { mutableStateOf<GraphInfo?>(null) }
     
     Column(modifier = modifier) {
         // Current graph button
@@ -212,7 +213,7 @@ fun GraphSwitcher(
                             expanded = false
                         },
                         onRemove = if (availableGraphs.size > 1) {
-                            { onRemoveGraph(graph.id) }
+                            { graphToRemove = graph }
                         } else null
                     )
                 }
@@ -250,6 +251,30 @@ fun GraphSwitcher(
                 }
             }
         }
+    }
+    
+    // Confirmation dialog for removing a graph
+    if (graphToRemove != null) {
+        AlertDialog(
+            onDismissRequest = { graphToRemove = null },
+            title = { Text("Remove Graph") },
+            text = { Text("Remove \"${graphToRemove?.displayName}\" from the graph list?\n\nThe graph files will not be deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        graphToRemove?.let { onRemoveGraph(it.id) }
+                        graphToRemove = null
+                    }
+                ) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { graphToRemove = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

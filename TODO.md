@@ -4,8 +4,8 @@
 - **Migration State**: Feature Implementation Phase - Core features complete!
 - **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.0.2 (Persistent)**
 - **Recent Activity**: Migrated to SQLDelight, fixed hierarchy data integrity bugs, extracted MarkdownEngine.
-- **Last Updated**: March 28, 2026
-- **Current Focus**: Multi-Graph Support Foundation Complete - Ready for Phase 2
+- **Last Updated**: March 31, 2026
+- **Current Focus**: Multi-Graph Support Complete - Ready for testing
 
 ## Build Status
 
@@ -60,9 +60,9 @@ kmp/
 - [x] **[FTS-001] Native Search Optimization** - `searchWithFilters` and `searchBlocksByContent` now use FTS5 instead of loading all blocks into memory; FTS query sanitized to prevent syntax errors.
 - [x] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases.
   - [x] Phase 1: Foundation (hashing, GraphInfo model, canonicalizePath, databaseUrlForGraph) - COMPLETED
-  - [ ] Phase 2: Repository lifecycle (GraphManager, driver close/open, StateFlow<RepositorySet>)
-  - [ ] Phase 3: ViewModel + UI integration (graph switcher, key-scoped ViewModels)
-  - [ ] Phase 4: Migration + polish (single-DB migration, remove graph, status bar)
+  - [x] Phase 2: Repository lifecycle (GraphManager, driver close/open, StateFlow<RepositorySet>) - COMPLETED
+  - [x] Phase 3: ViewModel + UI integration (graph switcher, key-scoped ViewModels) - COMPLETED
+  - [x] Phase 4: Migration + polish (single-DB migration, remove graph, status bar) - COMPLETED
 
 ---
 
