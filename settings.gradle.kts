@@ -8,6 +8,7 @@ pluginManagement {
     plugins {
         kotlin("multiplatform") version "2.0.21"
         kotlin("plugin.compose") version "2.0.21"
+        kotlin("plugin.serialization") version "2.0.21"
         id("com.android.library") version "8.7.2"
         id("org.jetbrains.compose") version "1.7.1"
         id("app.cash.sqldelight") version "2.0.2"
