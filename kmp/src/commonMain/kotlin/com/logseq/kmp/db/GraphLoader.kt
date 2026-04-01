@@ -204,6 +204,8 @@ class GraphLoader(
                 // Verify blocks are actually loaded (handle inconsistency)
                 val blocksResult = blockRepository.getBlocksForPage(page.id).first()
                 val blocks = blocksResult.getOrNull() ?: emptyList()
+                // A page is only fully up-to-date if blocks are present (or the file is empty) 
+                // and all blocks are loaded.
                 val allBlocksLoaded = blocks.isNotEmpty() && blocks.all { it.isLoaded }
 
                 if (fileModTime != null && 
@@ -214,7 +216,7 @@ class GraphLoader(
                 }
                 
                 if (!allBlocksLoaded) {
-                     logger.warn("Force reloading page ${page.name} because blocks are not loaded (inconsistency detected)")
+                     logger.warn("Force reloading page ${page.name} because blocks are not fully loaded (inconsistency detected)")
                 }
             }
 
@@ -433,7 +435,7 @@ class GraphLoader(
                                 
                                 // OPTIMIZATION: Skip unchanged files using modification time checking
                                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
-                                val fileNameOnly = fileName.removeSuffix(".md")
+                                val fileNameOnly = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
                                 val isJournalFile = path.endsWith("/journals")
                                 val existingPage = if (isJournalFile) {
                                     // For journals, we need to find page by checking if it exists
@@ -444,11 +446,20 @@ class GraphLoader(
                                 } else {
                                     pageRepository.getPageByName(fileNameOnly).first().getOrNull()
                                 }
+                                
+                                // Check if blocks exist for this page to handle partially loaded/failed states
+                                val hasBlocks = if (existingPage != null) {
+                                    val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
+                                    val blocks = blocksResult.getOrNull() ?: emptyList()
+                                    blocks.isNotEmpty()
+                                } else false
+
                                 val shouldSkip = existingPage != null && fileModTime != null && 
-                                    existingPage.updatedAt.toEpochMilliseconds() >= fileModTime
+                                    existingPage.updatedAt.toEpochMilliseconds() >= fileModTime &&
+                                    hasBlocks
                                 
                                 if (shouldSkip) {
-                                    logger.debug("Skipping unchanged file: $filePath (file: $fileModTime, db: ${existingPage.updatedAt.toEpochMilliseconds()})")
+                                    logger.debug("Skipping unchanged file: $filePath (file: $fileModTime, db: ${existingPage!!.updatedAt.toEpochMilliseconds()})")
                                     return@count true  // Count as processed but skip actual parsing
                                 }
 
@@ -569,11 +580,13 @@ class GraphLoader(
      */
     private suspend fun parsePageWithoutSaving(filePath: String, content: String, mode: ParseMode = ParseMode.FULL): ParseResult {
         val fileName = filePath.replace("\\", "/").substringAfterLast("/")
-        val name = fileName.removeSuffix(".md")
+        val name = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
         val isJournal = filePath.contains("/journals/")
         val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
         
-        val now = Clock.System.now()
+        // Use file modification time if available
+        val fileModTime = fileSystem.getLastModifiedTime(filePath)
+        val updatedAt = fileModTime?.let { Instant.fromEpochMilliseconds(it) } ?: Clock.System.now()
         
         // Check if page already exists to preserve ID and UUID
         val existingPageResult = pageRepository.getPageByName(name).first()
@@ -581,7 +594,7 @@ class GraphLoader(
         
         val pageId = existingPage?.id ?: generateId()
         val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
-        val createdAt = existingPage?.createdAt ?: now
+        val createdAt = existingPage?.createdAt ?: updatedAt
         val currentVersion = existingPage?.version ?: 0L
         
         if (pageId <= 0) {
@@ -591,6 +604,26 @@ class GraphLoader(
         
         // Parse markdown content
         val parsedPage = markdownParser.parsePage(content)
+        
+        // Extract page properties
+        var firstBlockSkipped = false
+        var properties = parsedPage.properties
+        if (parsedPage.blocks.isNotEmpty()) {
+            val firstBlock = parsedPage.blocks.first()
+            if (firstBlock.content.trim().isEmpty() && firstBlock.properties.isNotEmpty()) {
+                properties = firstBlock.properties
+                firstBlockSkipped = true
+            }
+        }
+
+        // Only mark as fully loaded if we actually got some blocks, 
+        // OR if the content is truly empty (whitespace only)
+        val isLoaded = if (mode == ParseMode.FULL && parsedPage.blocks.isEmpty() && content.trim().isNotEmpty()) {
+            false
+        } else {
+            mode == ParseMode.FULL
+        }
+
         val pageWithMetadata = Page(
             id = pageId,
             uuid = pageUuid,
@@ -598,13 +631,13 @@ class GraphLoader(
             namespace = null,
             filePath = filePath,
             createdAt = createdAt,
-            updatedAt = now,
+            updatedAt = updatedAt,
             version = currentVersion,
-            properties = parsedPage.properties,
+            properties = properties,
             isFavorite = false,
             isJournal = isJournal,
             journalDate = journalDate,
-            isContentLoaded = mode == ParseMode.FULL
+            isContentLoaded = isLoaded
         )
         
         // Fetch existing blocks to preserve versions
@@ -614,32 +647,16 @@ class GraphLoader(
         val existingContent = existingBlocks.associate { it.uuid to it.content }
 
         // Process blocks based on mode
-        val blocks = when (mode) {
-            ParseMode.METADATA_ONLY -> {
-                // Only extract root-level block structure for metadata
-                // Root blocks have level 0 (from BlockParser which starts at level 0)
-                val rootBlocks = parsedPage.blocks.filter { it.level == 0 }
-                val blocksList = mutableListOf<Block>()
-                processParsedBlocks(
-                    rootBlocks, filePath, pageId, null, 0, now,
-                    blocksList, ParseMode.METADATA_ONLY,
-                    existingVersions, existingContent
-                )
-                blocksList
-            }
-            ParseMode.FULL -> {
-                // Process all blocks fully
-                val blocksList = mutableListOf<Block>()
-                processParsedBlocks(
-                    parsedPage.blocks, filePath, pageId, null, 0, now,
-                    blocksList, ParseMode.FULL,
-                    existingVersions, existingContent
-                )
-                blocksList
-            }
-        }
+        val rootBlocks = if (firstBlockSkipped) parsedPage.blocks.drop(1) else parsedPage.blocks
+        val blocksList = mutableListOf<Block>()
+
+        processParsedBlocks(
+            rootBlocks, filePath, pageId, null, 0, updatedAt,
+            blocksList, mode,
+            existingVersions, existingContent
+        )
         
-        return ParseResult(page = pageWithMetadata, blocks = blocks)
+        return ParseResult(page = pageWithMetadata, blocks = blocksList)
     }
     
     private suspend fun parseAndSavePage(filePath: String, content: String, mode: ParseMode = ParseMode.FULL) {
@@ -663,7 +680,7 @@ class GraphLoader(
             PerformanceMonitor.startTrace("parseAndSavePage")
             try {
                 val fileName = filePath.replace("\\", "/").substringAfterLast("/")
-                val name = fileName.removeSuffix(".md")
+                val name = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
                 val journalDate = JournalUtils.parseJournalDate(name)
                 val isJournal = journalDate != null || filePath.contains("/journals/")
                 
@@ -685,7 +702,9 @@ class GraphLoader(
                      
                      val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
                      val blocks = blocksResult.getOrNull() ?: emptyList()
-                     val allBlocksLoaded = blocks.all { it.isLoaded }
+                     // A page is only fully up-to-date if blocks are present (or the file is empty) 
+                     // and all blocks are loaded.
+                     val allBlocksLoaded = blocks.isNotEmpty() && blocks.all { it.isLoaded }
 
                      if (fileModTime != null && 
                          existingPage.updatedAt.toEpochMilliseconds() >= fileModTime &&
@@ -703,6 +722,10 @@ class GraphLoader(
                     logger.error("Generated invalid pageId: $pageId for $filePath")
                     throw IllegalArgumentException("Generated invalid pageId: $pageId")
                 }
+
+                // Get file modification time for updatedAt to stay in sync with disk
+                val fileModTime = fileSystem.getLastModifiedTime(filePath)
+                val updatedAt = fileModTime?.let { Instant.fromEpochMilliseconds(it) } ?: now
                 
                 // Initial Page object
                 var page = Page(
@@ -710,7 +733,7 @@ class GraphLoader(
                     uuid = pageUuid,
                     name = name,
                     createdAt = createdAt,
-                    updatedAt = now,
+                    updatedAt = updatedAt,
                     version = existingPage?.version ?: 0L,
                     properties = emptyMap(),
                     isFavorite = existingPage?.isFavorite ?: false,
@@ -741,6 +764,13 @@ class GraphLoader(
                     }
                 }
                 
+                // Only consider it fully loaded if we actually got some blocks, 
+                // OR if the content is truly empty (whitespace only)
+                if (mode == ParseMode.FULL && parsedPage.blocks.isEmpty() && content.trim().isNotEmpty()) {
+                    logger.warn("Parsed 0 blocks for non-empty file: $filePath. Marking as NOT loaded to allow retry.")
+                    page = page.copy(isContentLoaded = false)
+                }
+
                 val saveResult = pageRepository.savePage(page)
                 val actualPageId = saveResult.getOrNull() ?: pageId
                 
@@ -759,15 +789,24 @@ class GraphLoader(
                     pageId = actualPageId,
                     parentId = null,
                     baseLevel = 0,
-                    now = now,
+                    now = updatedAt,
                     destinationList = blocksToSave,
                     mode = mode,
                     existingVersions = existingVersions,
                     existingContent = existingContent
                 )
                 
-                if (blocksToSave.isNotEmpty()) {
-                    // Clear existing blocks for this page to prevent duplicates/ordering issues on reload
+                // ALWAYS clear and update blocks if mode is FULL, even if blocksToSave is empty
+                // (This reflects the actual state of the file on disk)
+                if (mode == ParseMode.FULL) {
+                    blockRepository.deleteBlocksForPage(actualPageId)
+                    if (blocksToSave.isNotEmpty()) {
+                        blockRepository.saveBlocks(blocksToSave)
+                    }
+                } else if (blocksToSave.isNotEmpty()) {
+                    // For METADATA_ONLY, we only update if we found something (don't overwrite full blocks with partial ones)
+                    // Wait, actually we should be careful here too.
+                    // If we are in METADATA_ONLY, we should only save if isContentLoaded was false.
                     blockRepository.deleteBlocksForPage(actualPageId)
                     blockRepository.saveBlocks(blocksToSave)
                 }
