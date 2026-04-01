@@ -198,26 +198,21 @@ class GraphLoader(
             }
 
             // OPTIMIZATION: If page is already loaded and file hasn't changed, skip reload
-            if (page.isContentLoaded) {
+            val blocksResult = blockRepository.getBlocksForPage(page.id).first()
+            val blocks = blocksResult.getOrNull() ?: emptyList()
+            // A page is fully loaded if all its blocks are loaded
+            val allBlocksLoaded = blocks.isNotEmpty() && blocks.all { it.isLoaded }
+
+            if (allBlocksLoaded) {
                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
                 
-                // Verify blocks are actually loaded (handle inconsistency)
-                val blocksResult = blockRepository.getBlocksForPage(page.id).first()
-                val blocks = blocksResult.getOrNull() ?: emptyList()
-                // A page is only fully up-to-date if blocks are present (or the file is empty) 
-                // and all blocks are loaded.
-                val allBlocksLoaded = blocks.isNotEmpty() && blocks.all { it.isLoaded }
-
                 if (fileModTime != null && 
-                    page.updatedAt.toEpochMilliseconds() >= fileModTime &&
-                    allBlocksLoaded) {
+                    page.updatedAt.toEpochMilliseconds() >= fileModTime) {
                     logger.debug("Skipping loadFullPage, already up to date: $filePath")
                     return
                 }
-                
-                if (!allBlocksLoaded) {
-                     logger.warn("Force reloading page ${page.name} because blocks are not fully loaded (inconsistency detected)")
-                }
+            } else if (blocks.isNotEmpty()) {
+                 logger.warn("Force reloading page ${page.name} because blocks are not fully loaded (inconsistency detected)")
             }
 
             // Mark this file as priority (and coalesce requests)
@@ -435,16 +430,17 @@ class GraphLoader(
                                 
                                 // OPTIMIZATION: Skip unchanged files using modification time checking
                                 val fileModTime = fileSystem.getLastModifiedTime(filePath)
-                                val fileNameOnly = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
+                                val title = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
+                                val name = title.lowercase()
                                 val isJournalFile = path.endsWith("/journals")
                                 val existingPage = if (isJournalFile) {
                                     // For journals, we need to find page by checking if it exists
                                     // Since there's no getPageByJournalDay, we'll use getAllPages and filter
-                                    val journalDate = JournalUtils.parseJournalDate(fileNameOnly)
+                                    val journalDate = JournalUtils.parseJournalDate(title)
                                     val allPagesResult = pageRepository.getAllPages().first()
                                     allPagesResult.getOrNull()?.find { it.journalDate == journalDate }
                                 } else {
-                                    pageRepository.getPageByName(fileNameOnly).first().getOrNull()
+                                    pageRepository.getPageByName(name).first().getOrNull()
                                 }
                                 
                                 // Check if blocks exist for this page to handle partially loaded/failed states
@@ -580,9 +576,10 @@ class GraphLoader(
      */
     private suspend fun parsePageWithoutSaving(filePath: String, content: String, mode: ParseMode = ParseMode.FULL): ParseResult {
         val fileName = filePath.replace("\\", "/").substringAfterLast("/")
-        val name = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
+        val title = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
+        val name = title.lowercase()
         val isJournal = filePath.contains("/journals/")
-        val journalDate = if (isJournal) JournalUtils.parseJournalDate(name) else null
+        val journalDate = if (isJournal) JournalUtils.parseJournalDate(title) else null
         
         // Use file modification time if available
         val fileModTime = fileSystem.getLastModifiedTime(filePath)
@@ -628,16 +625,14 @@ class GraphLoader(
             id = pageId,
             uuid = pageUuid,
             name = name,
+            title = title,
             namespace = null,
             filePath = filePath,
             createdAt = createdAt,
             updatedAt = updatedAt,
             version = currentVersion,
             properties = properties,
-            isFavorite = false,
-            isJournal = isJournal,
-            journalDate = journalDate,
-            isContentLoaded = isLoaded
+            journalDay = journalDate?.toEpochDays()?.toLong()
         )
         
         // Fetch existing blocks to preserve versions
@@ -680,8 +675,9 @@ class GraphLoader(
             PerformanceMonitor.startTrace("parseAndSavePage")
             try {
                 val fileName = filePath.replace("\\", "/").substringAfterLast("/")
-                val name = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
-                val journalDate = JournalUtils.parseJournalDate(name)
+                val title = FileUtils.decodeFileName(fileName.removeSuffix(".md"))
+                val name = title.lowercase()
+                val journalDate = JournalUtils.parseJournalDate(title)
                 val isJournal = journalDate != null || filePath.contains("/journals/")
                 
                 val now = Clock.System.now()
@@ -691,13 +687,15 @@ class GraphLoader(
                 val existingPage = existingPageResult.getOrNull()
 
                 // Skip METADATA_ONLY if page is already fully loaded (don't overwrite full content)
-                if (mode == ParseMode.METADATA_ONLY && existingPage?.isContentLoaded == true) {
-                    logger.debug("Skipping METADATA_ONLY for already-loaded page: $name")
+                if (mode == ParseMode.METADATA_ONLY && existingPage != null) {
+                    // Logic: If page is in DB, we already have metadata. 
+                    // METADATA_ONLY is usually for background scanner.
+                    // If it is already loaded, skip.
                     return
                 }
 
                 // OPTIMIZATION: If mode is FULL, but page is already loaded and fresh (checked inside lock), skip.
-                if (mode == ParseMode.FULL && existingPage?.isContentLoaded == true) {
+                if (mode == ParseMode.FULL && existingPage != null) {
                      val fileModTime = fileSystem.getLastModifiedTime(filePath)
                      
                      val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
@@ -732,15 +730,13 @@ class GraphLoader(
                     id = pageId,
                     uuid = pageUuid,
                     name = name,
+                    title = title,
                     createdAt = createdAt,
                     updatedAt = updatedAt,
                     version = existingPage?.version ?: 0L,
                     properties = emptyMap(),
-                    isFavorite = existingPage?.isFavorite ?: false,
-                    isJournal = isJournal,
-                    journalDate = journalDate,
-                    filePath = filePath,
-                    isContentLoaded = mode == ParseMode.FULL
+                    journalDay = journalDate?.toEpochDays()?.toLong(),
+                    filePath = filePath
                 )
                 
                 // Parse using MarkdownParser
@@ -764,12 +760,9 @@ class GraphLoader(
                     }
                 }
                 
-                // Only consider it fully loaded if we actually got some blocks, 
-                // OR if the content is truly empty (whitespace only)
-                if (mode == ParseMode.FULL && parsedPage.blocks.isEmpty() && content.trim().isNotEmpty()) {
-                    logger.warn("Parsed 0 blocks for non-empty file: $filePath. Marking as NOT loaded to allow retry.")
-                    page = page.copy(isContentLoaded = false)
-                }
+                // For KMP Page model, there's no direct isContentLoaded. 
+                // We rely on repository state or specific flags if needed.
+                // Assuming current model is correct.
 
                 val saveResult = pageRepository.savePage(page)
                 val actualPageId = saveResult.getOrNull() ?: pageId
