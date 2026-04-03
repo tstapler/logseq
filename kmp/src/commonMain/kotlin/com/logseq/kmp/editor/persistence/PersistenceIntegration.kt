@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.datetime.Clock
 
 /**
- * Factory for creating and integrating persistence components
+ * Factory for creating and integrating persistence components.
+ * Updated to use UUID-native storage.
  */
 object PersistenceFactory {
     
@@ -406,9 +407,8 @@ object PersistenceExample {
         
         // Example: Create and save a block
         val block = Block(
-            id = 1L,
             uuid = "test-block-uuid",
-            pageId = 1L,
+            pageUuid = "test-page-uuid",
             content = "This is a test block",
             level = 0,
             position = 0,

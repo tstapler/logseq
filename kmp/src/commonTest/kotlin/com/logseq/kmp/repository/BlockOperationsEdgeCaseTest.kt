@@ -30,25 +30,25 @@ class BlockOperationsEdgeCaseTest {
     }
 
     private fun createBlock(
-        id: Long,
-        pageId: Long = 1,
-        parentId: Long? = null,
+        uuidSuffix: Long,
+        pageUuidSuffix: Long = 1,
+        parentUuidSuffix: Long? = null,
         position: Int,
         level: Int = 0,
-        content: String = "Block $id"
+        content: String = "Block $uuidSuffix"
     ): Block {
-        val uuidSuffix = id.toString().padStart(12, '0')
-        val uuid = "00000000-0000-0000-0000-$uuidSuffix"
+        val uuid = "00000000-0000-0000-0000-${uuidSuffix.toString().padStart(12, '0')}"
+        val pageUuid = "00000000-0000-0000-0000-${pageUuidSuffix.toString().padStart(12, '0')}"
+        val parentUuid = parentUuidSuffix?.let { "00000000-0000-0000-0000-${it.toString().padStart(12, '0')}" }
 
         return Block(
-            id = id,
             uuid = uuid,
-            pageId = pageId,
+            pageUuid = pageUuid,
             content = content,
-            parentId = parentId,
+            parentUuid = parentUuid,
             position = position,
             level = level,
-            leftId = null,
+            leftUuid = null,
             createdAt = now,
             updatedAt = now
         )
@@ -56,18 +56,18 @@ class BlockOperationsEdgeCaseTest {
 
     // ============================================================
     // CROSS-PAGE ISOLATION TESTS
-    // Bug: Siblings were queried without pageId filter, mixing blocks from different pages
+    // Bug: Siblings were queried without pageUuid filter, mixing blocks from different pages
     // ============================================================
 
     @Test
     fun `indent should only consider siblings from same page`() = runTest {
         // Page 1: A, B (B should indent into A)
-        val page1BlockA = createBlock(1, pageId = 1, position = 0, content = "Page1-A")
-        val page1BlockB = createBlock(2, pageId = 1, position = 1, content = "Page1-B")
+        val page1BlockA = createBlock(1, pageUuidSuffix = 1, position = 0, content = "Page1-A")
+        val page1BlockB = createBlock(2, pageUuidSuffix = 1, position = 1, content = "Page1-B")
 
         // Page 2: X, Y (should NOT interfere with page 1 operations)
-        val page2BlockX = createBlock(3, pageId = 2, position = 0, content = "Page2-X")
-        val page2BlockY = createBlock(4, pageId = 2, position = 1, content = "Page2-Y")
+        val page2BlockX = createBlock(3, pageUuidSuffix = 2, position = 0, content = "Page2-X")
+        val page2BlockY = createBlock(4, pageUuidSuffix = 2, position = 1, content = "Page2-Y")
 
         repository.saveBlock(page1BlockA)
         repository.saveBlock(page1BlockB)
@@ -81,23 +81,24 @@ class BlockOperationsEdgeCaseTest {
         // Verify B is now child of A
         val blockB = repository.getBlockByUuid(page1BlockB.uuid).first().getOrNull()
         assertNotNull(blockB)
-        assertEquals(page1BlockA.id, blockB.parentId, "B should be child of A")
+        assertEquals(page1BlockA.uuid, blockB.parentUuid, "B should be child of A")
 
         // Verify page 2 blocks are unchanged
-        val page2Blocks = repository.getBlocksForPage(2).first().getOrNull() ?: emptyList()
+        val page2Uuid = "00000000-0000-0000-0000-000000000002"
+        val page2Blocks = repository.getBlocksForPage(page2Uuid).first().getOrNull() ?: emptyList()
         assertEquals(2, page2Blocks.size)
-        assertEquals(null, page2Blocks[0].parentId, "Page 2 blocks should be unchanged")
-        assertEquals(null, page2Blocks[1].parentId, "Page 2 blocks should be unchanged")
+        assertEquals(null, page2Blocks[0].parentUuid, "Page 2 blocks should be unchanged")
+        assertEquals(null, page2Blocks[1].parentUuid, "Page 2 blocks should be unchanged")
     }
 
     @Test
     fun `outdent should only consider siblings from same page`() = runTest {
         // Page 1: Parent -> Child (Child should outdent to root)
-        val parent = createBlock(1, pageId = 1, position = 0)
-        val child = createBlock(2, pageId = 1, parentId = 1, position = 0, level = 1)
+        val parent = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val child = createBlock(2, pageUuidSuffix = 1, parentUuidSuffix = 1, position = 0, level = 1)
 
         // Page 2: Another block at root (should NOT be considered as sibling)
-        val page2Root = createBlock(3, pageId = 2, position = 0)
+        val page2Root = createBlock(3, pageUuidSuffix = 2, position = 0)
 
         repository.saveBlock(parent)
         repository.saveBlock(child)
@@ -110,18 +111,19 @@ class BlockOperationsEdgeCaseTest {
         // Verify child is now at root level of page 1
         val outdentedChild = repository.getBlockByUuid(child.uuid).first().getOrNull()
         assertNotNull(outdentedChild)
-        assertEquals(null, outdentedChild.parentId, "Child should be at root after outdent")
-        assertEquals(1, outdentedChild.pageId, "Child should remain on page 1")
+        assertEquals(null, outdentedChild.parentUuid, "Child should be at root after outdent")
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        assertEquals(page1Uuid, outdentedChild.pageUuid, "Child should remain on page 1")
     }
 
     @Test
     fun `getBlockSiblings should only return siblings from same page`() = runTest {
         // Page 1: A, B
-        val page1A = createBlock(1, pageId = 1, position = 0)
-        val page1B = createBlock(2, pageId = 1, position = 1)
+        val page1A = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val page1B = createBlock(2, pageUuidSuffix = 1, position = 1)
 
-        // Page 2: X (same parentId=null, but different page)
-        val page2X = createBlock(3, pageId = 2, position = 0)
+        // Page 2: X (same parentUuid=null, but different page)
+        val page2X = createBlock(3, pageUuidSuffix = 2, position = 0)
 
         repository.saveBlock(page1A)
         repository.saveBlock(page1B)
@@ -134,16 +136,16 @@ class BlockOperationsEdgeCaseTest {
     }
 
     // ============================================================
-    // POSITION/LEFTID CONSISTENCY TESTS
-    // Bug: Operations updated leftId but not position, causing sort order issues
+    // POSITION/LEFTUUID CONSISTENCY TESTS
+    // Bug: Operations updated leftUuid but not position, causing sort order issues
     // ============================================================
 
     @Test
     fun `outdent should update positions for new siblings`() = runTest {
         // Setup: Parent -> [Child1, Child2]. Outdent Child1.
-        val parent = createBlock(1, pageId = 1, position = 0)
-        val child1 = createBlock(2, pageId = 1, parentId = 1, position = 0, level = 1)
-        val child2 = createBlock(3, pageId = 1, parentId = 1, position = 1, level = 1)
+        val parent = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val child1 = createBlock(2, pageUuidSuffix = 1, parentUuidSuffix = 1, position = 0, level = 1)
+        val child2 = createBlock(3, pageUuidSuffix = 1, parentUuidSuffix = 1, position = 1, level = 1)
 
         repository.saveBlock(parent)
         repository.saveBlock(child1)
@@ -153,8 +155,9 @@ class BlockOperationsEdgeCaseTest {
         repository.outdentBlock(child1.uuid)
 
         // Get all root blocks (should be: Parent, Child1)
-        val rootBlocks = repository.getBlocksForPage(1).first().getOrNull()
-            ?.filter { it.parentId == null }
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val rootBlocks = repository.getBlocksForPage(page1Uuid).first().getOrNull()
+            ?.filter { it.parentUuid == null }
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -167,9 +170,9 @@ class BlockOperationsEdgeCaseTest {
     @Test
     fun `indent should update positions for remaining siblings`() = runTest {
         // Setup: A, B, C. Indent B into A.
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
-        val blockC = createBlock(3, pageId = 1, position = 2)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
+        val blockC = createBlock(3, pageUuidSuffix = 1, position = 2)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -179,8 +182,9 @@ class BlockOperationsEdgeCaseTest {
         repository.indentBlock(blockB.uuid)
 
         // Get root blocks (should be: A, C)
-        val rootBlocks = repository.getBlocksForPage(1).first().getOrNull()
-            ?.filter { it.parentId == null }
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val rootBlocks = repository.getBlocksForPage(page1Uuid).first().getOrNull()
+            ?.filter { it.parentUuid == null }
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -197,9 +201,9 @@ class BlockOperationsEdgeCaseTest {
     @Test
     fun `delete block should maintain valid sibling chain`() = runTest {
         // Setup: A, B, C. Delete B.
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
-        val blockC = createBlock(3, pageId = 1, position = 2)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
+        val blockC = createBlock(3, pageUuidSuffix = 1, position = 2)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -209,7 +213,8 @@ class BlockOperationsEdgeCaseTest {
         repository.deleteBlock(blockB.uuid)
 
         // Verify remaining blocks
-        val remaining = repository.getBlocksForPage(1).first().getOrNull()
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val remaining = repository.getBlocksForPage(page1Uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -221,8 +226,8 @@ class BlockOperationsEdgeCaseTest {
     @Test
     fun `delete first block should work correctly`() = runTest {
         // Setup: A, B. Delete A.
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -231,7 +236,8 @@ class BlockOperationsEdgeCaseTest {
         repository.deleteBlock(blockA.uuid)
 
         // Verify B remains
-        val remaining = repository.getBlocksForPage(1).first().getOrNull() ?: emptyList()
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val remaining = repository.getBlocksForPage(page1Uuid).first().getOrNull() ?: emptyList()
         assertEquals(1, remaining.size)
         assertEquals(blockB.uuid, remaining[0].uuid)
     }
@@ -239,8 +245,8 @@ class BlockOperationsEdgeCaseTest {
     @Test
     fun `delete last block should work correctly`() = runTest {
         // Setup: A, B. Delete B.
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -249,7 +255,8 @@ class BlockOperationsEdgeCaseTest {
         repository.deleteBlock(blockB.uuid)
 
         // Verify A remains
-        val remaining = repository.getBlocksForPage(1).first().getOrNull() ?: emptyList()
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val remaining = repository.getBlocksForPage(page1Uuid).first().getOrNull() ?: emptyList()
         assertEquals(1, remaining.size)
         assertEquals(blockA.uuid, remaining[0].uuid)
     }
@@ -260,8 +267,8 @@ class BlockOperationsEdgeCaseTest {
 
     @Test
     fun `moveUp at top of list should be no-op`() = runTest {
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -271,7 +278,8 @@ class BlockOperationsEdgeCaseTest {
         assertTrue(result.isSuccess) // Should succeed but do nothing
 
         // Verify order unchanged
-        val blocks = repository.getBlocksForPage(1).first().getOrNull()
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val blocks = repository.getBlocksForPage(page1Uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -281,8 +289,8 @@ class BlockOperationsEdgeCaseTest {
 
     @Test
     fun `moveDown at bottom of list should be no-op`() = runTest {
-        val blockA = createBlock(1, pageId = 1, position = 0)
-        val blockB = createBlock(2, pageId = 1, position = 1)
+        val blockA = createBlock(1, pageUuidSuffix = 1, position = 0)
+        val blockB = createBlock(2, pageUuidSuffix = 1, position = 1)
 
         repository.saveBlock(blockA)
         repository.saveBlock(blockB)
@@ -292,7 +300,8 @@ class BlockOperationsEdgeCaseTest {
         assertTrue(result.isSuccess) // Should succeed but do nothing
 
         // Verify order unchanged
-        val blocks = repository.getBlocksForPage(1).first().getOrNull()
+        val page1Uuid = "00000000-0000-0000-0000-000000000001"
+        val blocks = repository.getBlocksForPage(page1Uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -306,8 +315,8 @@ class BlockOperationsEdgeCaseTest {
 
     @Test
     fun `indent should set correct level`() = runTest {
-        val parent = createBlock(1, pageId = 1, position = 0, level = 0)
-        val sibling = createBlock(2, pageId = 1, position = 1, level = 0)
+        val parent = createBlock(1, pageUuidSuffix = 1, position = 0, level = 0)
+        val sibling = createBlock(2, pageUuidSuffix = 1, position = 1, level = 0)
 
         repository.saveBlock(parent)
         repository.saveBlock(sibling)
@@ -322,8 +331,8 @@ class BlockOperationsEdgeCaseTest {
 
     @Test
     fun `outdent should set correct level`() = runTest {
-        val parent = createBlock(1, pageId = 1, position = 0, level = 0)
-        val child = createBlock(2, pageId = 1, parentId = 1, position = 0, level = 1)
+        val parent = createBlock(1, pageUuidSuffix = 1, position = 0, level = 0)
+        val child = createBlock(2, pageUuidSuffix = 1, parentUuidSuffix = 1, position = 0, level = 1)
 
         repository.saveBlock(parent)
         repository.saveBlock(child)

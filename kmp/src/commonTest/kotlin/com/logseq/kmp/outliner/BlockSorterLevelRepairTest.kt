@@ -7,13 +7,14 @@ import kotlin.test.assertEquals
 
 class BlockSorterLevelRepairTest {
 
-    private fun createBlock(id: Long, parentId: Long?, content: String, position: Int, level: Int): Block {
-        val uuid = "00000000-0000-0000-0000-${id.toString().padStart(12, '0')}"
+    private fun createBlock(uuidSuffix: Long, parentUuidSuffix: Long?, content: String, position: Int, level: Int): Block {
+        val uuid = "00000000-0000-0000-0000-${uuidSuffix.toString().padStart(12, '0')}"
+        val pageUuid = "00000000-0000-0000-0000-000000000001"
+        val parentUuid = parentUuidSuffix?.let { "00000000-0000-0000-0000-${it.toString().padStart(12, '0')}" }
         return Block(
-            id = id,
             uuid = uuid,
-            pageId = 1L,
-            parentId = parentId,
+            pageUuid = pageUuid,
+            parentUuid = parentUuid,
             content = content,
             level = level,
             position = position,
@@ -51,21 +52,21 @@ class BlockSorterLevelRepairTest {
 
     @Test
     fun `test stable sorting with duplicate positions`() {
-        // Blocks with same position should be sorted by ID descending to be stable
+        // Blocks with same position should be sorted by UUID descending to be stable
         val b1 = createBlock(1, null, "B1", 0, 0)
         val b2 = createBlock(2, null, "B2", 0, 0)
         val b3 = createBlock(3, null, "B3", 0, 0)
         
         val sorted = BlockSorter.sort(listOf(b1, b2, b3))
-        println("Sorted IDs: ${sorted.map { it.id }}")
+        println("Sorted UUIDs: ${sorted.map { it.uuid }}")
         
-        // roots.sortedWith(compareByDescending<Block> { it.position }.thenByDescending { it.id })
-        // stack order (bottom to top): ID 3, ID 2, ID 1
-        // pop order: ID 1, ID 2, ID 3
+        // roots.sortedWith(compareByDescending<Block> { it.position }.thenByDescending { it.uuid })
+        // stack order (bottom to top): UUID 3, UUID 2, UUID 1
+        // pop order: UUID 1, UUID 2, UUID 3
         
         assertEquals(3, sorted.size)
-        assertEquals(1L, sorted[0].id)
-        assertEquals(2L, sorted[1].id)
-        assertEquals(3L, sorted[2].id)
+        assertEquals("00000000-0000-0000-0000-000000000001", sorted[0].uuid)
+        assertEquals("00000000-0000-0000-0000-000000000002", sorted[1].uuid)
+        assertEquals("00000000-0000-0000-0000-000000000003", sorted[2].uuid)
     }
 }

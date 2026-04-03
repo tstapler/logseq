@@ -8,7 +8,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * Extension functions for converting SQLDelight cursors to domain models
+ * Extension functions for converting SQLDelight cursors to domain models.
+ * Updated to use UUID-native storage.
  */
 
 /**
@@ -16,17 +17,17 @@ import kotlinx.serialization.json.Json
  */
 fun SqlCursor.toBlock(): Block {
     return Block(
-        id = getLong(0) ?: 0L, // id
         uuid = getString(1) ?: "", // uuid
-        pageId = getLong(2) ?: 0L, // page_id
-        parentId = getLong(3), // parent_id
-        leftId = getLong(4), // left_id
+        pageUuid = getString(2) ?: "", // page_uuid
+        parentUuid = getString(3), // parent_uuid
+        leftUuid = getString(4), // left_uuid
         content = getString(5) ?: "", // content
         level = getLong(6)?.toInt() ?: 0, // level
         position = getLong(7)?.toInt() ?: 0, // position
         createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(8) ?: 0L), // created_at
         updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(9) ?: 0L), // updated_at
-        properties = getString(10)?.let { parseJsonProperties(it) } ?: emptyMap() // properties
+        properties = getString(10)?.let { parseJsonProperties(it) } ?: emptyMap(), // properties
+        contentHash = getString(12) // content_hash (nullable)
     )
 }
 
@@ -35,14 +36,13 @@ fun SqlCursor.toBlock(): Block {
  */
 fun SqlCursor.toPage(): Page {
     return Page(
-        id = getLong(0) ?: 0L, // id
-        uuid = getString(1) ?: "", // uuid
-        name = getString(2) ?: "", // name
-        namespace = getString(3), // namespace
-        filePath = getString(4), // file_path
-        createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(5) ?: 0L), // created_at
-        updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(6) ?: 0L), // updated_at
-        properties = getString(7)?.let { parseJsonProperties(it) } ?: emptyMap() // properties
+        uuid = getString(0) ?: "", // uuid
+        name = getString(1) ?: "", // name
+        namespace = getString(2), // namespace
+        filePath = getString(3), // file_path
+        createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(4) ?: 0L), // created_at
+        updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(5) ?: 0L), // updated_at
+        properties = getString(6)?.let { parseJsonProperties(it) } ?: emptyMap() // properties
     )
 }
 
@@ -51,8 +51,8 @@ fun SqlCursor.toPage(): Page {
  */
 fun SqlCursor.toProperty(): Property {
     return Property(
-        id = getLong(0) ?: 0L, // id
-        blockId = getLong(1) ?: 0L, // block_id
+        uuid = getString(0) ?: "", // uuid
+        blockUuid = getString(1) ?: "", // block_uuid
         key = getString(2) ?: "", // key
         value = getString(3) ?: "", // value
         createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(4) ?: 0L) // created_at

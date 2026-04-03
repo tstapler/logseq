@@ -33,16 +33,14 @@ class SearchViewModelTest {
         override fun searchWithFilters(searchRequest: SearchRequest): Flow<Result<SearchResult>> {
             if (searchRequest.query == "test") {
                 val page = Page(
-                    id = 1,
                     uuid = "uuid-1",
                     name = "Test Page",
                     createdAt = Clock.System.now(),
                     updatedAt = Clock.System.now()
                 )
                 val block = Block(
-                    id = 1,
                     uuid = "uuid-2",
-                    pageId = 1,
+                    pageUuid = "uuid-1",
                     content = "This is a test block",
                     position = 0,
                     createdAt = Clock.System.now(),

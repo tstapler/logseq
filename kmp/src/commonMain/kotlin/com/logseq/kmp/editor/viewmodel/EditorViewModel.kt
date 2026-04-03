@@ -25,6 +25,8 @@ import kotlin.random.Random
 /**
  * ViewModel for rich text editor that integrates with existing Logseq infrastructure.
  * Provides reactive state management, auto-save functionality, and comprehensive text editing capabilities.
+ * 
+ * Updated to use UUID-native storage.
  */
 @Stable
 class EditorViewModel(
@@ -113,9 +115,9 @@ class EditorViewModel(
         scope.launch {
             try {
                 val currentState = _editorState.value
-                val focusedBlockId = currentState.metadata["blockUuid"]
-                if (focusedBlockId != null) {
-                    currentTextOperations.insertText(focusedBlockId, text)
+                val focusedBlockUuid = currentState.metadata["blockUuid"]
+                if (focusedBlockUuid != null) {
+                    currentTextOperations.insertText(focusedBlockUuid, text)
                 }
                 logger.debug("Inserted text: '$text'")
             } catch (e: Exception) {
@@ -131,12 +133,12 @@ class EditorViewModel(
         scope.launch {
             try {
                 val currentState = _editorState.value
-                val focusedBlockId = currentState.metadata["blockUuid"]
-                if (focusedBlockId != null) {
+                val focusedBlockUuid = currentState.metadata["blockUuid"]
+                if (focusedBlockUuid != null) {
                     // For setContent, we need to replace the entire content
-                    val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
-                    currentTextOperations.deleteText(focusedBlockId, TextRange(0, currentContent.length))
-                    currentTextOperations.insertText(focusedBlockId, content)
+                    val currentContent = currentTextOperations.getText(focusedBlockUuid).getOrNull() ?: ""
+                    currentTextOperations.deleteText(focusedBlockUuid, TextRange(0, currentContent.length))
+                    currentTextOperations.insertText(focusedBlockUuid, content)
                 }
                 logger.debug("Set content length: ${content.length}")
             } catch (e: Exception) {
@@ -152,10 +154,10 @@ class EditorViewModel(
         scope.launch {
             try {
                 val currentState = _editorState.value
-                val focusedBlockId = currentState.metadata["blockUuid"]
-                if (focusedBlockId != null) {
-                    val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
-                    currentTextOperations.deleteText(focusedBlockId, TextRange(0, currentContent.length))
+                val focusedBlockUuid = currentState.metadata["blockUuid"]
+                if (focusedBlockUuid != null) {
+                    val currentContent = currentTextOperations.getText(focusedBlockUuid).getOrNull() ?: ""
+                    currentTextOperations.deleteText(focusedBlockUuid, TextRange(0, currentContent.length))
                 }
                 logger.debug("Cleared content")
             } catch (e: Exception) {
@@ -274,10 +276,10 @@ class EditorViewModel(
         scope.launch {
             try {
                 val currentState = _editorState.value
-                val focusedBlockId = currentState.metadata["blockUuid"] ?: return@launch
+                val focusedBlockUuid = currentState.metadata["blockUuid"] ?: return@launch
                 
                 // findNext implementation using regex search
-                val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
+                val currentContent = currentTextOperations.getText(focusedBlockUuid).getOrNull() ?: ""
                 val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
                 val regex = if (wholeWord) {
                     "\\b${Regex.escape(text)}\\b".toRegex(options)
@@ -306,9 +308,9 @@ class EditorViewModel(
         scope.launch {
             try {
                 val currentState = _editorState.value
-                val focusedBlockId = currentState.metadata["blockUuid"] ?: return@launch
+                val focusedBlockUuid = currentState.metadata["blockUuid"] ?: return@launch
                 
-                val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
+                val currentContent = currentTextOperations.getText(focusedBlockUuid).getOrNull() ?: ""
                 val options = if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE)
                 val regex = if (wholeWord) {
                     "\\b${Regex.escape(searchText)}\\b".toRegex(options)
@@ -318,8 +320,8 @@ class EditorViewModel(
                 val replacement = currentContent.replace(regex, replacementText)
                 
                 // Apply the replacement
-                currentTextOperations.deleteText(focusedBlockId, TextRange(0, currentContent.length))
-                currentTextOperations.insertText(focusedBlockId, replacement)
+                currentTextOperations.deleteText(focusedBlockUuid, TextRange(0, currentContent.length))
+                currentTextOperations.insertText(focusedBlockUuid, replacement)
                 
                 logger.debug("Replaced occurrences")
             } catch (e: Exception) {
@@ -338,8 +340,7 @@ class EditorViewModel(
             try {
                 val currentState = _editorState.value
                 // undo operations would need to be implemented via command pattern or similar
-                // For now, this is a no-op
-                logger.info("Undo operation not implemented")
+                logger.info("Undo operation not implemented in EditorViewModel")
                 logger.debug("Performed undo")
             } catch (e: Exception) {
                 handleError(EditorError.UndoRedoError("Failed to undo", e))
@@ -355,8 +356,7 @@ class EditorViewModel(
             try {
                 val currentState = _editorState.value
                 // redo operations would need to be implemented via command pattern or similar
-                // For now, this is a no-op
-                logger.info("Redo operation not implemented")
+                logger.info("Redo operation not implemented in EditorViewModel")
                 logger.debug("Performed redo")
             } catch (e: Exception) {
                 handleError(EditorError.UndoRedoError("Failed to redo", e))
@@ -376,22 +376,6 @@ class EditorViewModel(
                 
                 val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
                 blockResult.getOrNull()?.let { block ->
-                    // Set block content using text operations
-                    val focusedBlockId = _editorState.value.metadata["blockUuid"]
-                    if (focusedBlockId != null) {
-                        val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
-                        currentTextOperations.deleteText(focusedBlockId, TextRange(0, currentContent.length))
-                        currentTextOperations.insertText(focusedBlockId, block.content)
-                    } else {
-                        // If no block was focused, we are loading a new one.
-                        // We should probably set the text operations to use this block ID.
-                        // But TextOperations manages state by block ID.
-                        // So we just need to update metadata to point to this block.
-                        // And then populate it.
-                        // However, we can't update metadata inside this let block easily if we need it for textOperations.
-                        // Actually, we should update metadata FIRST, then populate.
-                    }
-                    
                     updateEditorState { 
                         it
                             .withDocumentInfo(
@@ -473,7 +457,7 @@ class EditorViewModel(
     /**
      * Create new block with current content.
      */
-    fun createNewBlock(pageId: Long) {
+    fun createNewBlock(pageUuid: String) {
         scope.launch {
             try {
                 val currentState = _editorState.value
@@ -485,9 +469,8 @@ class EditorViewModel(
                 val newUuid = generateUuid()
                 val now = Clock.System.now()
                 val newBlock = Block(
-                    id = now.toEpochMilliseconds(), // Temporary ID
                     uuid = newUuid,
-                    pageId = pageId,
+                    pageUuid = pageUuid,
                     content = content,
                     position = 0,
                     createdAt = now,
@@ -518,15 +501,7 @@ class EditorViewModel(
     }
     
     private fun generateUuid(): String {
-        val chars = "0123456789abcdef"
-        return (1..36).map { i ->
-            when (i) {
-                9, 14, 19, 24 -> '-'
-                15 -> '4'
-                20 -> chars[(0..3).random() + 8]
-                else -> chars.random()
-            }
-        }.joinToString("")
+        return com.logseq.kmp.util.UuidGenerator.generateV7()
     }
     
     // ===== ERROR HANDLING =====
@@ -803,7 +778,6 @@ data class EditorStatistics(
 
 // Extension function for i18n
 private fun t(key: String, vararg args: Any): String {
-    // TODO: Integrate with proper i18n system
     return when (key) {
         "editor.loading.block" -> "Loading block..."
         "editor.saving.block" -> "Saving block..."

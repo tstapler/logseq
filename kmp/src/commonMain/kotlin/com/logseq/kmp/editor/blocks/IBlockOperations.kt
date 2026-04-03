@@ -13,6 +13,8 @@ import kotlin.Result
  * 
  * This interface extends the basic BlockRepository with editor-specific
  * operations and enhanced functionality for rich text editing scenarios.
+ * 
+ * Updated to use UUID-native storage.
  */
 interface IBlockOperations : BlockRepository {
     
@@ -21,7 +23,7 @@ interface IBlockOperations : BlockRepository {
     /**
      * Create a new block with enhanced validation and positioning support.
      * 
-     * @param pageId The page where the block will be created
+     * @param pageId The page UUID where the block will be created
      * @param content The block content
      * @param parentId Optional parent block UUID for hierarchy
      * @param leftId Optional left sibling block UUID for positioning
@@ -32,7 +34,7 @@ interface IBlockOperations : BlockRepository {
      * @return Result containing the created block or error
      */
     suspend fun createBlock(
-        pageId: Long,
+        pageId: String,
         content: String,
         parentId: String? = null,
         leftId: String? = null,

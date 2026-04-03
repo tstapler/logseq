@@ -11,6 +11,7 @@ import kotlin.Result.Companion.success
 
 /**
  * SQLDelight implementation of ReferenceRepository.
+ * Updated to use UUID-native storage.
  */
 class SqlDelightReferenceRepository(
     private val database: LogseqDatabase
@@ -86,11 +87,10 @@ class SqlDelightReferenceRepository(
 
     private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),
@@ -104,11 +104,10 @@ class SqlDelightReferenceRepository(
     // Explicit mapping for join result
     private fun com.logseq.kmp.db.SelectMostConnectedBlocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),

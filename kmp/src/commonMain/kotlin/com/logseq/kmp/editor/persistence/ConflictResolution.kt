@@ -8,7 +8,8 @@ import kotlinx.serialization.Serializable
 
 
 /**
- * Utility class for detecting and resolving conflicts in block data
+ * Utility class for detecting and resolving conflicts in block data.
+ * Updated to use UUID-native storage.
  */
 class ConflictDetector {
     private val logger = Logger("ConflictDetector")
@@ -185,7 +186,7 @@ class ConflictDetector {
     ) {
         // Move conflicts if the block structure changed since last known state
         val expectedParent = change.metadata.moveTarget
-        val actualParent = existingBlock.parentId?.toString()
+        val actualParent = existingBlock.parentUuid
         
         if (expectedParent != null && expectedParent != actualParent) {
             conflicts.add(ConflictInfo(
@@ -361,7 +362,6 @@ data class ResolutionContext(
                 when (change.type) {
                     ChangeType.CONTENT -> {
                         // Update block content
-                        // Implementation depends on block repository API
                     }
                     ChangeType.PROPERTIES -> {
                         // Update block properties

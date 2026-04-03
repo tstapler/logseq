@@ -13,6 +13,7 @@ import kotlin.Result.Companion.success
 
 /**
  * SQLDelight implementation of PropertyRepository.
+ * Updated to use UUID-native storage.
  */
 class SqlDelightPropertyRepository(
     private val database: LogseqDatabase
@@ -26,7 +27,7 @@ class SqlDelightPropertyRepository(
             if (block == null) {
                 emit(success(emptyList()))
             } else {
-                val properties = parseProperties(block.id, block.properties)
+                val properties = parseProperties(block.uuid, block.properties)
                 emit(success(properties))
             }
         } catch (e: Exception) {
@@ -40,7 +41,7 @@ class SqlDelightPropertyRepository(
             if (block == null) {
                 emit(success(null))
             } else {
-                val property = parseProperties(block.id, block.properties).find { it.key == key }
+                val property = parseProperties(block.uuid, block.properties).find { it.key == key }
                 emit(success(property))
             }
         } catch (e: Exception) {
@@ -50,12 +51,12 @@ class SqlDelightPropertyRepository(
 
     override suspend fun saveProperty(property: Property): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            val block = queries.selectBlockById(property.blockId).executeAsOneOrNull()
+            val block = queries.selectBlockByUuid(property.blockUuid).executeAsOneOrNull()
             if (block != null) {
-                val existing = parseProperties(block.id, block.properties).associate { it.key to it.value }.toMutableMap()
+                val existing = parseProperties(block.uuid, block.properties).associate { it.key to it.value }.toMutableMap()
                 existing[property.key] = property.value
                 val updatedString = existing.entries.joinToString(",") { "${it.key}:${it.value}" }
-                queries.updateBlockProperties(updatedString, block.id)
+                queries.updateBlockProperties(updatedString, block.uuid)
             }
             success(Unit)
         } catch (e: Exception) {
@@ -67,10 +68,10 @@ class SqlDelightPropertyRepository(
         try {
             val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
             if (block != null) {
-                val existing = parseProperties(block.id, block.properties).associate { it.key to it.value }.toMutableMap()
+                val existing = parseProperties(block.uuid, block.properties).associate { it.key to it.value }.toMutableMap()
                 existing.remove(key)
                 val updatedString = existing.entries.joinToString(",") { "${it.key}:${it.value}" }
-                queries.updateBlockProperties(updatedString, block.id)
+                queries.updateBlockProperties(updatedString, block.uuid)
             }
             success(Unit)
         } catch (e: Exception) {
@@ -100,22 +101,27 @@ class SqlDelightPropertyRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
-    private fun parseProperties(blockId: Long, propertiesString: String?): List<Property> {
+    private fun parseProperties(blockUuid: String, propertiesString: String?): List<Property> {
         return propertiesString?.split(",")?.mapNotNull {
             val parts = it.split(":", limit = 2)
             if (parts.size == 2) {
-                Property(0L, blockId, parts[0], parts[1], kotlinx.datetime.Clock.System.now())
+                Property(
+                    uuid = com.logseq.kmp.util.UuidGenerator.generateDeterministic("$blockUuid:${parts[0]}"),
+                    blockUuid = blockUuid,
+                    key = parts[0],
+                    value = parts[1],
+                    createdAt = kotlinx.datetime.Clock.System.now()
+                )
             } else null
         } ?: emptyList()
     }
 
     private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),

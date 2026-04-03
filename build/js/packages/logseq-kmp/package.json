@@ -1,0 +1,13 @@
+{
+  "name": "logseq-kmp",
+  "version": "0.0.0-unspecified",
+  "main": "kotlin/logseq-kmp.js",
+  "devDependencies": {},
+  "dependencies": {
+    "@js-joda/core": "3.2.0",
+    "format-util": "^1.0.5"
+  },
+  "peerDependencies": {},
+  "optionalDependencies": {},
+  "bundledDependencies": []
+}

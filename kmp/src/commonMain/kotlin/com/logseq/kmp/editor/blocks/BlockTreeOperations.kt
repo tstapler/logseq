@@ -3,9 +3,11 @@ package com.logseq.kmp.editor.blocks
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockWithDepth
 import com.logseq.kmp.repository.BlockRepository
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import kotlinx.datetime.Clock
 import kotlin.Result
 import kotlin.Result.Companion.success
 
@@ -21,6 +23,8 @@ import com.logseq.kmp.editor.blocks.HistoricalOperation
 /**
  * Enhanced block operations with tree traversal and manipulation capabilities.
  * Provides efficient algorithms for hierarchical block structures.
+ * 
+ * Updated to use UUID-native storage.
  */
 class BlockTreeOperations(
     private val blockOperations: IBlockOperations
@@ -50,15 +54,15 @@ class BlockTreeOperations(
      * Get all visible blocks in a page (respecting collapsed states).
      */
     suspend fun getVisibleBlocks(
-        pageId: Long,
+        pageUuid: String,
         includeCollapsed: Boolean = false
     ): Result<List<BlockWithDepth>> {
         return try {
             // Get current blocks snapshot
-            val pageBlocksResult = blockOperations.getBlocksForPage(pageId).first()
+            val pageBlocksResult = blockOperations.getBlocksForPage(pageUuid).first()
             val pageBlocks = pageBlocksResult.getOrNull() ?: emptyList()
             
-            val rootBlocks = pageBlocks.filter { it.parentId == null }
+            val rootBlocks = pageBlocks.filter { it.parentUuid == null }
             val visibleBlocks = mutableListOf<BlockWithDepth>()
             
             rootBlocks.forEach { rootBlock ->
@@ -137,9 +141,9 @@ class BlockTreeOperations(
     /**
      * Get all collapsed blocks in a page.
      */
-    suspend fun getCollapsedBlocks(pageId: Long): Result<List<String>> {
+    suspend fun getCollapsedBlocks(pageUuid: String): Result<List<String>> {
         return try {
-            val pageBlocksResult = blockOperations.getBlocksForPage(pageId).first()
+            val pageBlocksResult = blockOperations.getBlocksForPage(pageUuid).first()
             val pageBlocks = pageBlocksResult.getOrNull() ?: emptyList()
             
             val collapsed = pageBlocks.filter { block ->
@@ -170,10 +174,6 @@ class BlockTreeOperations(
                 }
             }
             
-            // This requires updateBlock/saveBlock which is in BlockRepository but we need to modify the block
-            // BlockRepository has saveBlock(block).
-            // BlockTreeOperations only has blockOperations: BlockRepository.
-            // So we can do:
             val updatedBlock = block.copy(properties = newProperties)
             blockOperations.saveBlock(updatedBlock)
         } catch (e: Exception) {
@@ -183,6 +183,73 @@ class BlockTreeOperations(
     
     // ===== ADVANCED MANIPULATION OPERATIONS =====
     
+    /**
+     * Duplicate a subtree starting from the specified root block.
+     * Returns the root of the new subtree.
+     */
+    suspend fun duplicateSubtree(
+        rootBlockUuid: String,
+        targetParentUuid: String? = null,
+        targetPosition: PositioningMode = PositioningMode.END
+    ): Result<Block> {
+        return try {
+            // 1. Get entire subtree
+            val subtree = getSubtree(rootBlockUuid).getOrNull()
+                ?: return Result.failure(Exception("Subtree not found: $rootBlockUuid"))
+            
+            // 2. Prepare mapping and new blocks list
+            val oldToNewUuid = mutableMapOf<String, String>()
+            val newBlocks = mutableListOf<Block>()
+            
+            // Generate all new UUIDs first
+            subtree.forEach { 
+                oldToNewUuid[it.block.uuid] = UuidGenerator.generateV7()
+            }
+            
+            // 3. Resolve target root level
+            val targetLevel = if (targetParentUuid == null) {
+                0
+            } else {
+                val targetParent = blockOperations.getBlockByUuid(targetParentUuid).first().getOrNull()
+                    ?: return Result.failure(Exception("Target parent not found"))
+                targetParent.level + 1
+            }
+            
+            // 4. Create new blocks with adjusted parent pointers and levels
+            subtree.forEach { item ->
+                val oldBlock = item.block
+                val newUuid = oldToNewUuid[oldBlock.uuid]!!
+                
+                val newParentUuid = if (oldBlock.uuid == rootBlockUuid) {
+                    targetParentUuid
+                } else {
+                    oldToNewUuid[oldBlock.parentUuid]
+                }
+                
+                val itemTargetLevel = targetLevel + item.depth
+                
+                val newBlock = oldBlock.copy(
+                    uuid = newUuid,
+                    pageUuid = oldBlock.pageUuid, // Remains on same page
+                    parentUuid = newParentUuid,
+                    level = itemTargetLevel,
+                    createdAt = Clock.System.now(),
+                    updatedAt = Clock.System.now(),
+                    version = 0L
+                )
+                newBlocks.add(newBlock)
+            }
+            
+            // 5. Batch save the new blocks
+            blockOperations.saveBlocks(newBlocks)
+            
+            // 6. Return the new root
+            Result.success(newBlocks.first { it.uuid == oldToNewUuid[rootBlockUuid] })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Move a subtree to a new location with comprehensive validation.
      */
@@ -204,10 +271,6 @@ class BlockTreeOperations(
             // Get all blocks in the subtree
             val subtree = getSubtree(rootUuid).getOrNull() ?: return Result.failure(Exception("Failed to get subtree"))
             
-            // Calculate level offset
-            val currentRootBlock = subtree.find { it.block.uuid == rootUuid }?.block
-                ?: return Result.failure(Exception("Root block not found in subtree"))
-            
             val targetLevel = if (targetParentUuid == null) {
                 0
             } else {
@@ -216,18 +279,18 @@ class BlockTreeOperations(
                 targetParent.level + 1
             }
             
-            val levelOffset = targetLevel - currentRootBlock.level
-            
             // Move the root block first
             blockOperations.moveBlockEnhanced(rootUuid, targetParentUuid, positioning, targetUuid)
                 .getOrNull() ?: return Result.failure(Exception("Failed to move root block"))
             
             // Update levels for all descendants
             val descendants = subtree.filter { it.block.uuid != rootUuid }
-            descendants.forEach { blockWithDepth ->
-                val newLevel = blockWithDepth.depth + levelOffset
-                // This would need a custom operation to update level directly
-                // For now, we'll rely on the existing moveBlock operation
+            val descendantsToUpdate = descendants.map { item ->
+                val newLevel = targetLevel + item.depth
+                item.block.copy(level = newLevel)
+            }
+            if (descendantsToUpdate.isNotEmpty()) {
+                blockOperations.saveBlocks(descendantsToUpdate)
             }
             
             success(Unit)
@@ -247,7 +310,7 @@ class BlockTreeOperations(
             val block = blockOperations.getBlockByUuid(rootUuid).first().getOrNull()
                 ?: return Result.failure(Exception("Block not found"))
             
-            if (block.parentId == null) {
+            if (block.parentUuid == null) {
                 return Result.failure(Exception("Cannot promote root-level block"))
             }
             

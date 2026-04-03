@@ -25,7 +25,16 @@ actual class DriverFactory actual constructor() {
         driver.execute(null, "PRAGMA journal_mode=WAL;", 0)
         driver.execute(null, "PRAGMA synchronous=NORMAL;", 0)
         driver.execute(null, "PRAGMA foreign_keys=ON;", 0)
-        
+
+        // Incremental migrations: add columns introduced after initial schema creation.
+        // ALTER TABLE ADD COLUMN is idempotent — we swallow the "duplicate column" error.
+        try {
+            driver.execute(null, "ALTER TABLE blocks ADD COLUMN content_hash TEXT;", 0)
+        } catch (_: Exception) { /* column already exists */ }
+        try {
+            driver.execute(null, "CREATE INDEX IF NOT EXISTS idx_blocks_content_hash ON blocks(content_hash);", 0)
+        } catch (_: Exception) { /* index already exists */ }
+
         return driver
     }
 }

@@ -2,8 +2,7 @@
 -- Core entities for note-taking application
 
 CREATE TABLE pages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    uuid TEXT NOT NULL UNIQUE,
+    uuid TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     namespace TEXT,
     file_path TEXT,
@@ -17,11 +16,11 @@ CREATE TABLE pages (
 );
 
 CREATE TABLE blocks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT, -- Hidden numeric ID for FTS5 internal use
     uuid TEXT NOT NULL UNIQUE,
-    page_id INTEGER NOT NULL,
-    parent_id INTEGER,
-    left_id INTEGER,
+    page_uuid TEXT NOT NULL,
+    parent_uuid TEXT,
+    left_uuid TEXT,
     content TEXT NOT NULL,
     level INTEGER NOT NULL DEFAULT 0,
     position INTEGER NOT NULL,
@@ -29,18 +28,19 @@ CREATE TABLE blocks (
     updated_at INTEGER NOT NULL,
     properties TEXT, -- JSON string for block properties
     version INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_id) REFERENCES blocks(id) ON DELETE CASCADE,
-    FOREIGN KEY (left_id) REFERENCES blocks(id) ON DELETE SET NULL
+    content_hash TEXT, -- SHA-256 hex digest of normalised content (used for deduplication)
+    FOREIGN KEY (page_uuid) REFERENCES pages(uuid) ON DELETE CASCADE,
+    FOREIGN KEY (parent_uuid) REFERENCES blocks(uuid) ON DELETE CASCADE,
+    FOREIGN KEY (left_uuid) REFERENCES blocks(uuid) ON DELETE SET NULL
 );
 
 CREATE TABLE properties (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    block_id INTEGER NOT NULL,
+    uuid TEXT NOT NULL PRIMARY KEY,
+    block_uuid TEXT NOT NULL,
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE
+    FOREIGN KEY (block_uuid) REFERENCES blocks(uuid) ON DELETE CASCADE
 );
 
 CREATE TABLE plugin_data (
@@ -69,11 +69,12 @@ CREATE INDEX idx_pages_uuid ON pages(uuid);
 CREATE INDEX idx_pages_name ON pages(name);
 CREATE INDEX idx_pages_namespace ON pages(namespace);
 CREATE INDEX idx_blocks_uuid ON blocks(uuid);
-CREATE INDEX idx_blocks_page_id ON blocks(page_id);
-CREATE INDEX idx_blocks_parent_id ON blocks(parent_id);
-CREATE INDEX idx_blocks_left_id ON blocks(left_id);
+CREATE INDEX idx_blocks_page_uuid ON blocks(page_uuid);
+CREATE INDEX idx_blocks_parent_uuid ON blocks(parent_uuid);
+CREATE INDEX idx_blocks_left_uuid ON blocks(left_uuid);
 CREATE INDEX idx_blocks_level ON blocks(level);
-CREATE INDEX idx_properties_block_id ON properties(block_id);
+CREATE INDEX idx_blocks_content_hash ON blocks(content_hash);
+CREATE INDEX idx_properties_block_uuid ON properties(block_uuid);
 CREATE INDEX idx_properties_key ON properties(key);
 CREATE INDEX idx_plugin_data_plugin_id ON plugin_data(plugin_id);
 CREATE INDEX idx_plugin_data_entity ON plugin_data(entity_type, entity_uuid);
@@ -111,121 +112,126 @@ END;
 -- Repository queries
 
 -- Block queries
-selectBlockById:
-SELECT * FROM blocks WHERE id = ?;
-
 selectBlockByUuid:
 SELECT * FROM blocks WHERE uuid = ?;
-
-existsBlockById:
-SELECT COUNT(*) FROM blocks WHERE id = ?;
 
 existsBlockByUuid:
 SELECT COUNT(*) FROM blocks WHERE uuid = ?;
 
 selectAllBlocks:
-SELECT * FROM blocks ORDER BY id;
+SELECT * FROM blocks ORDER BY uuid;
 
 selectAllBlocksPaginated:
-SELECT * FROM blocks ORDER BY id LIMIT ? OFFSET ?;
+SELECT * FROM blocks ORDER BY uuid LIMIT ? OFFSET ?;
 
 selectBlockChildren:
-SELECT * FROM blocks WHERE parent_id = ? ORDER BY position LIMIT ? OFFSET ?;
+SELECT * FROM blocks WHERE parent_uuid = ? ORDER BY position LIMIT ? OFFSET ?;
 
 countBlockChildren:
-SELECT COUNT(*) FROM blocks WHERE parent_id = ?;
+SELECT COUNT(*) FROM blocks WHERE parent_uuid = ?;
 
 selectBlockSiblings:
-SELECT * FROM blocks WHERE parent_id = (SELECT parent_id FROM blocks WHERE id = ?) AND id != ? ORDER BY position;
+SELECT * FROM blocks 
+WHERE parent_uuid IS (SELECT parent_uuid FROM blocks WHERE uuid = ?) 
+AND page_uuid = (SELECT page_uuid FROM blocks WHERE uuid = ?)
+AND uuid != ? 
+ORDER BY position;
 
 selectRootBlocks:
-SELECT * FROM blocks WHERE parent_id IS NULL AND page_id = ? ORDER BY position LIMIT ? OFFSET ?;
+SELECT * FROM blocks WHERE parent_uuid IS NULL AND page_uuid = ? ORDER BY position LIMIT ? OFFSET ?;
 
 countRootBlocks:
-SELECT COUNT(*) FROM blocks WHERE parent_id IS NULL AND page_id = ?;
+SELECT COUNT(*) FROM blocks WHERE parent_uuid IS NULL AND page_uuid = ?;
 
-selectBlocksByPageId:
-SELECT * FROM blocks WHERE page_id = ? ORDER BY position LIMIT ? OFFSET ?;
+selectBlocksByPageUuid:
+SELECT * FROM blocks WHERE page_uuid = ? ORDER BY position LIMIT ? OFFSET ?;
 
-selectBlocksByPageIdUnpaginated:
-SELECT * FROM blocks WHERE page_id = ? ORDER BY position;
+selectBlocksByPageUuidUnpaginated:
+SELECT * FROM blocks WHERE page_uuid = ? ORDER BY position;
 
 selectBlocksWithContentLike:
 SELECT * FROM blocks WHERE content LIKE ?;
 
-countBlocksByPageId:
-SELECT COUNT(*) FROM blocks WHERE page_id = ?;
+countBlocksByPageUuid:
+SELECT COUNT(*) FROM blocks WHERE page_uuid = ?;
 
 updateBlockParent:
-UPDATE blocks SET parent_id = ? WHERE id = ?;
+UPDATE blocks SET parent_uuid = ? WHERE uuid = ?;
 
-selectBlocksByParentIdOrdered:
-SELECT * FROM blocks WHERE parent_id = ? ORDER BY position;
+selectBlocksByParentUuidOrdered:
+SELECT * FROM blocks WHERE parent_uuid = ? ORDER BY position;
 
-selectBlocksByParentIds:
-SELECT * FROM blocks WHERE parent_id IN ? ORDER BY parent_id, position;
+selectBlocksByParentUuids:
+SELECT * FROM blocks WHERE parent_uuid IN ? ORDER BY parent_uuid, position;
 
-selectRootBlocksByPageIdOrdered:
-SELECT * FROM blocks WHERE parent_id IS NULL AND page_id = ? ORDER BY position;
+selectRootBlocksByPageUuidOrdered:
+SELECT * FROM blocks WHERE parent_uuid IS NULL AND page_uuid = ? ORDER BY position;
 
 updateBlockParentPositionAndLevel:
-UPDATE blocks SET parent_id = ?, position = ?, level = ? WHERE id = ?;
+UPDATE blocks SET parent_uuid = ?, position = ?, level = ? WHERE uuid = ?;
 
 updateBlockHierarchy:
-UPDATE blocks SET parent_id = ?, left_id = ?, position = ?, level = ? WHERE id = ?;
+UPDATE blocks SET parent_uuid = ?, left_uuid = ?, position = ?, level = ? WHERE uuid = ?;
 
 updateBlockPositionOnly:
-UPDATE blocks SET position = ? WHERE id = ?;
+UPDATE blocks SET position = ? WHERE uuid = ?;
 
 updateBlockContent:
-UPDATE blocks SET content = ?, updated_at = ?, version = version + 1 WHERE id = ?;
+UPDATE blocks SET content = ?, updated_at = ?, version = version + 1 WHERE uuid = ?;
 
 updateBlockLevelOnly:
-UPDATE blocks SET level = ? WHERE id = ?;
+UPDATE blocks SET level = ? WHERE uuid = ?;
 
-updateBlockLeftId:
-UPDATE blocks SET left_id = ? WHERE id = ?;
+updateBlockLeftUuid:
+UPDATE blocks SET left_uuid = ? WHERE uuid = ?;
 
-selectBlockByLeftId:
-SELECT * FROM blocks WHERE left_id = ?;
+selectBlockByLeftUuid:
+SELECT * FROM blocks WHERE left_uuid = ?;
 
 selectLastChild:
-SELECT * FROM blocks WHERE parent_id = ? ORDER BY position DESC LIMIT 1;
+SELECT * FROM blocks WHERE parent_uuid = ? ORDER BY position DESC LIMIT 1;
 
 updateBlockProperties:
-UPDATE blocks SET properties = ? WHERE id = ?;
+UPDATE blocks SET properties = ? WHERE uuid = ?;
 
 countBlocks:
 SELECT COUNT(*) FROM blocks;
 
-deleteBlockById:
-DELETE FROM blocks WHERE id = ?;
+deleteBlockByUuid:
+DELETE FROM blocks WHERE uuid = ?;
 
 deleteBlockChildren:
-DELETE FROM blocks WHERE parent_id = ?;
+DELETE FROM blocks WHERE parent_uuid = ?;
 
 deleteAllBlocks:
 DELETE FROM blocks;
 
-deleteBlocksByPageId:
-DELETE FROM blocks WHERE page_id = ?;
+deleteBlocksByPageUuid:
+DELETE FROM blocks WHERE page_uuid = ?;
 
 insertBlock:
-INSERT INTO blocks (uuid, page_id, parent_id, left_id, content, level, position, created_at, updated_at, properties, version)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO blocks (uuid, page_uuid, parent_uuid, left_uuid, content, level, position, created_at, updated_at, properties, version, content_hash)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Deduplication queries
+selectBlocksByContentHash:
+SELECT * FROM blocks WHERE content_hash = ? ORDER BY created_at;
+
+selectDuplicateBlockHashes:
+SELECT content_hash, COUNT(*) AS cnt
+FROM blocks
+WHERE content_hash IS NOT NULL
+GROUP BY content_hash
+HAVING COUNT(*) > 1
+ORDER BY cnt DESC
+LIMIT ?;
 
 -- Page queries
-selectPageById:
-SELECT * FROM pages WHERE id = ?;
-
 selectPageByUuid:
 SELECT * FROM pages WHERE uuid = ?;
 
 selectPageByName:
 SELECT * FROM pages WHERE name = ? LIMIT 1;
-
-existsPageById:
-SELECT COUNT(*) FROM pages WHERE id = ?;
 
 existsPageByUuid:
 SELECT COUNT(*) FROM pages WHERE uuid = ?;
@@ -234,10 +240,10 @@ existsPageByName:
 SELECT COUNT(*) FROM pages WHERE name = ?;
 
 selectAllPages:
-SELECT * FROM pages ORDER BY id;
+SELECT * FROM pages ORDER BY name;
 
 selectAllPagesPaginated:
-SELECT * FROM pages ORDER BY id LIMIT ? OFFSET ?;
+SELECT * FROM pages ORDER BY name LIMIT ? OFFSET ?;
 
 selectPagesByNamespace:
 SELECT * FROM pages WHERE namespace = ? ORDER BY name LIMIT ? OFFSET ?;
@@ -255,10 +261,10 @@ selectRecentlyCreatedPages:
 SELECT * FROM pages ORDER BY created_at DESC LIMIT ?;
 
 updatePageProperties:
-UPDATE pages SET properties = ? WHERE id = ?;
+UPDATE pages SET properties = ? WHERE uuid = ?;
 
 updatePageName:
-UPDATE pages SET name = ? WHERE id = ?;
+UPDATE pages SET name = ? WHERE uuid = ?;
 
 updatePage:
 UPDATE pages SET 
@@ -275,8 +281,8 @@ WHERE uuid = ?;
 countPages:
 SELECT COUNT(*) FROM pages;
 
-deletePageById:
-DELETE FROM pages WHERE id = ?;
+deletePageByUuid:
+DELETE FROM pages WHERE uuid = ?;
 
 insertPage:
 INSERT OR IGNORE INTO pages (uuid, name, namespace, file_path, created_at, updated_at, properties, version, is_favorite, is_journal, journal_date)
@@ -318,7 +324,7 @@ selectMostConnectedBlocks:
 SELECT b.*, COUNT(br.id) AS reference_count
 FROM blocks b
 LEFT JOIN block_references br ON b.uuid = br.to_block_uuid OR b.uuid = br.from_block_uuid
-GROUP BY b.id
+GROUP BY b.uuid
 ORDER BY reference_count DESC
 LIMIT ?;
 
@@ -379,11 +385,10 @@ SELECT COUNT(*) FROM plugin_data WHERE plugin_id = ? AND entity_type = ? AND ent
 -- FTS5 Full-Text Search queries
 searchBlocksByContentFts:
 SELECT
-    b.id,
     b.uuid,
-    b.page_id,
-    b.parent_id,
-    b.left_id,
+    b.page_uuid,
+    b.parent_uuid,
+    b.left_uuid,
     b.content,
     b.level,
     b.position,

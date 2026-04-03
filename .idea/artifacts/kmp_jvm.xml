@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="kmp-jvm">
+    <output-path>$PROJECT_DIR$/kmp/build/libs</output-path>
+    <root id="archive" name="kmp-jvm.jar">
+      <element id="module-output" name="logseq.kmp.jvmMain" />
+    </root>
+  </artifact>
+</component>

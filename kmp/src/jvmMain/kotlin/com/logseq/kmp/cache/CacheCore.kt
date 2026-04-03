@@ -223,11 +223,12 @@ class LRUCache<K, V>(
 
 /**
  * Cached block with computed children reference for fast hierarchy lookups.
+ * Updated to use UUID-native storage.
  */
 data class CachedBlock(
     val block: Block,
-    val childrenIds: List<Long> = emptyList(),
-    val parentId: Long? = block.parentId,
+    val childrenUuids: List<String> = emptyList(),
+    val parentId: String? = block.parentUuid,
     val timestamp: Long = System.currentTimeMillis()
 )
 

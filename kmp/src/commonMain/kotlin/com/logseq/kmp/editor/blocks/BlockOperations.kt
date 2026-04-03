@@ -12,7 +12,8 @@ import kotlinx.datetime.Instant
 import kotlin.Result
 
 /**
- * Implementation of block operations for Logseq KMP editor
+ * Implementation of block operations for Logseq KMP editor.
+ * Updated to use UUID-native storage.
  */
 class BlockOperations(
     private val blockRepository: BlockRepository,
@@ -20,21 +21,15 @@ class BlockOperations(
 ) : IBlockOperations, BlockRepository by blockRepository {
 
     private val operationMutex = Mutex()
-    private val _blockHierarchy = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    private val treeOps by lazy { BlockTreeOperations(this) }
     
     // Helper functions
     private fun generateBlockUuid(): String {
-        val chars = "0123456789abcdef"
-        fun randomHex(length: Int) = (1..length).map { chars.random() }.joinToString("")
-        return "${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}"
-    }
-
-    private suspend fun getBlockIdByUuid(uuid: String): Long? {
-        return blockRepository.getBlockByUuid(uuid).first().getOrNull()?.id
+        return com.logseq.kmp.util.UuidGenerator.generateV7()
     }
 
     override suspend fun createBlock(
-        pageId: Long,
+        pageId: String,
         content: String,
         parentId: String?,
         leftId: String?,
@@ -46,21 +41,14 @@ class BlockOperations(
         try {
             val traceId = PerformanceMonitor.startTrace("create-block")
             
-            // Resolve parent UUID to ID
-            val parentDbId = if (parentId != null) getBlockIdByUuid(parentId) else null
-            
-            // Resolve left sibling UUID to ID
-            val leftDbId = if (leftId != null) getBlockIdByUuid(leftId) else null
-
             val newBlock = Block(
-                id = 0L, // Repository should assign ID
                 uuid = uuid ?: generateBlockUuid(),
                 content = content,
-                pageId = pageId,
-                parentId = parentDbId,
-                leftId = leftDbId,
-                position = position ?: 0, // Should be calculated if not provided, but simplified for now
-                level = 0, // Should be calculated
+                pageUuid = pageId,
+                parentUuid = parentId,
+                leftUuid = leftId,
+                position = position ?: 0,
+                level = 0, // Level should be determined based on parent, but keeping it simple for now
                 createdAt = createdAt ?: kotlinx.datetime.Clock.System.now(),
                 updatedAt = kotlinx.datetime.Clock.System.now(),
                 properties = properties
@@ -132,9 +120,6 @@ class BlockOperations(
         blockUuid: String,
         deleteStrategy: DeleteStrategy
     ): Result<Unit> = operationMutex.withLock {
-        // Delegate to repository, assuming it handles children deletion logic if supported
-        // or we implement manual strategy here.
-        // For now, mapping DELETE_CHILDREN to deleteChildren=true
         val deleteChildren = deleteStrategy == DeleteStrategy.DELETE_CHILDREN
         blockRepository.deleteBlock(blockUuid, deleteChildren)
     }
@@ -146,14 +131,48 @@ class BlockOperations(
         targetUuid: String?
     ): Result<Unit> = operationMutex.withLock {
         try {
-            // This requires complex logic to determine new position index based on PositioningMode
-            // For MVP, we delegate to simple moveBlock if possible, or fail
-            // blockRepository.moveBlock takes (uuid, parentUuid, position)
+            val block = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
+                ?: return@withLock Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            // We need to calculate 'position' (int) based on targetUuid and mode
-            // This is complex without querying siblings.
-            // Stubbing for now.
-            Result.failure(NotImplementedError("moveBlockEnhanced not fully implemented"))
+            // 1. Determine siblings and their positions
+            val siblingsResult = if (targetParentUuid == null) {
+                blockRepository.getBlocksForPage(block.pageUuid).first()
+            } else {
+                blockRepository.getBlockChildren(targetParentUuid).first()
+            }
+            
+            val siblings = siblingsResult.getOrNull()
+                ?.let { if (targetParentUuid == null) it.filter { b -> b.parentUuid == null } else it }
+                ?.sortedBy { it.position }
+                ?: emptyList()
+            
+            // 2. Calculate new position
+            val newPosition = when (positioning) {
+                PositioningMode.START -> 0
+                PositioningMode.END -> (siblings.maxOfOrNull { it.position } ?: -1) + 1
+                PositioningMode.BEFORE -> {
+                    val targetBlock = siblings.find { it.uuid == targetUuid }
+                    targetBlock?.position ?: ((siblings.maxOfOrNull { it.position } ?: -1) + 1)
+                }
+                PositioningMode.AFTER -> {
+                    val targetBlock = siblings.find { it.uuid == targetUuid }
+                    (targetBlock?.position ?: (siblings.maxOfOrNull { it.position } ?: -1)) + 1
+                }
+                PositioningMode.REPLACE -> {
+                    val targetBlock = siblings.find { it.uuid == targetUuid }
+                    targetBlock?.position ?: ((siblings.maxOfOrNull { it.position } ?: -1) + 1)
+                }
+            }
+            
+            // 3. Shift siblings if inserting in between
+            val siblingsToShift = siblings.filter { it.position >= newPosition && it.uuid != blockUuid }
+            if (siblingsToShift.isNotEmpty()) {
+                val shifted = siblingsToShift.map { it.copy(position = it.position + 1) }
+                blockRepository.saveBlocks(shifted)
+            }
+            
+            // 4. Perform the move
+            blockRepository.moveBlock(blockUuid, targetParentUuid, newPosition)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -163,7 +182,6 @@ class BlockOperations(
         blockUuid: String,
         indentMode: IndentMode
     ): Result<Unit> = operationMutex.withLock {
-        // Delegate to simple indent
         blockRepository.indentBlock(blockUuid)
     }
 
@@ -185,11 +203,11 @@ class BlockOperations(
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
             val duplicate = originalBlock.copy(
-                id = 0L,
                 uuid = generateBlockUuid(),
                 content = originalBlock.content + " (copy)",
                 createdAt = kotlinx.datetime.Clock.System.now(),
-                updatedAt = kotlinx.datetime.Clock.System.now()
+                updatedAt = kotlinx.datetime.Clock.System.now(),
+                version = 0L
             )
             
             val result = blockRepository.saveBlock(duplicate)
@@ -204,16 +222,13 @@ class BlockOperations(
         rootBlockUuid: String,
         targetParentUuid: String?,
         targetPosition: PositioningMode
-    ): Result<Block> {
-        return Result.failure(NotImplementedError("duplicateSubtree not implemented"))
-    }
+    ): Result<Block> = treeOps.duplicateSubtree(rootBlockUuid, targetParentUuid, targetPosition)
 
     override suspend fun splitBlock(
         blockUuid: String,
         cursorPosition: Int,
         keepContentInOriginal: Boolean
     ): Result<Block> = operationMutex.withLock {
-        // Delegate to atomic repository method
         blockRepository.splitBlock(blockUuid, cursorPosition)
     }
 
@@ -225,8 +240,8 @@ class BlockOperations(
             val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            val siblings = if (currentBlock.parentId == null) {
-                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            val siblings = if (currentBlock.parentUuid == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageUuid).first().getOrNull()?.filter { it.parentUuid == null } ?: emptyList()
             } else {
                 blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
             }
@@ -240,7 +255,6 @@ class BlockOperations(
             val mergeResult = blockRepository.mergeBlocks(blockUuid, nextBlock.uuid, separator)
             
             if (mergeResult.isSuccess) {
-                // Return updated block (repository should have updated the content in DB)
                 blockRepository.getBlockByUuid(blockUuid).first()
                     .map { it ?: throw IllegalStateException("Block disappeared after merge") }
             } else {
@@ -259,8 +273,8 @@ class BlockOperations(
             val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            val siblings = if (currentBlock.parentId == null) {
-                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            val siblings = if (currentBlock.parentUuid == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageUuid).first().getOrNull()?.filter { it.parentUuid == null } ?: emptyList()
             } else {
                 blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
             }
@@ -286,8 +300,8 @@ class BlockOperations(
 
     override suspend fun collapseSubtree(blockUuid: String, recursive: Boolean): Result<Unit> = Result.success(Unit)
     override suspend fun expandSubtree(blockUuid: String, recursive: Boolean): Result<Unit> = Result.success(Unit)
-    override suspend fun promoteSubtree(blockUuid: String, levels: Int): Result<Unit> = Result.success(Unit)
-    override suspend fun demoteSubtree(blockUuid: String, levels: Int): Result<Unit> = Result.success(Unit)
+    override suspend fun promoteSubtree(blockUuid: String, levels: Int): Result<Unit> = treeOps.promoteSubtree(blockUuid, levels)
+    override suspend fun demoteSubtree(blockUuid: String, levels: Int): Result<Unit> = treeOps.demoteSubtree(blockUuid, levels)
     
     override suspend fun applyBulkOperations(operations: List<BulkOperation>): Result<Unit> = Result.success(Unit)
     override suspend fun reorderBlocks(blockUuids: List<String>): Result<Unit> = Result.success(Unit)

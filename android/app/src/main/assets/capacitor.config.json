@@ -1,0 +1,43 @@
+{
+	"appId": "com.logseq.app",
+	"appName": "Logseq",
+	"webDir": "static/mobile",
+	"loggingBehavior": "production",
+	"server": {
+		"androidScheme": "http"
+	},
+	"plugins": {
+		"StatusBar": {
+			"overlaysWebView": true,
+			"style": "Light",
+			"backgroundColor": "#ffffffff"
+		},
+		"SplashScreen": {
+			"launchShowDuration": 500,
+			"launchAutoHide": false,
+			"androidScaleType": "CENTER_CROP",
+			"splashImmersive": false,
+			"backgroundColor": "#002b36"
+		},
+		"Keyboard": {
+			"resize": "none",
+			"resizeOnFullScreen": true
+		},
+		"SafeArea": {
+			"enabled": true,
+			"customColorsForSystemBars": true,
+			"statusBarColor": "#000000",
+			"statusBarContent": "light",
+			"navigationBarColor": "#000000",
+			"navigationBarContent": "light",
+			"offset": 0
+		}
+	},
+	"android": {
+		"appendUserAgent": "Logseq/0.0.1 (Android)"
+	},
+	"ios": {
+		"scheme": "Logseq",
+		"appendUserAgent": "Logseq/0.0.1 (iOS)"
+	}
+}

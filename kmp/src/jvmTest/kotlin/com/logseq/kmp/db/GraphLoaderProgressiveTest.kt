@@ -73,7 +73,7 @@ class GraphLoaderProgressiveTest {
         // Check a recent journal (Phase 1)
         val recentPage = pageRepository.getPageByName("2026_01_15").first().getOrNull()
         assertTrue(recentPage != null, "Recent journal should be loaded")
-        val recentBlocks = blockRepository.getBlocksForPage(recentPage!!.id).first().getOrNull()!!
+        val recentBlocks = blockRepository.getBlocksForPage(recentPage!!.uuid).first().getOrNull()!!
         assertTrue(recentBlocks.isNotEmpty())
         assertTrue(recentBlocks[0].isLoaded, "Phase 1 blocks should be fully loaded")
         
@@ -82,7 +82,7 @@ class GraphLoaderProgressiveTest {
         val oldPage = pageRepository.getPageByName("2026_01_01").first().getOrNull()
         assertTrue(oldPage != null, "Background journal should be loaded")
         
-        val oldBlocks = blockRepository.getBlocksForPage(oldPage!!.id).first().getOrNull()!!
+        val oldBlocks = blockRepository.getBlocksForPage(oldPage!!.uuid).first().getOrNull()!!
         assertTrue(oldBlocks.isNotEmpty())
         // Note: GraphLoader.loadRemainingJournals currently uses METADATA_ONLY?
         // Let's check the code.
@@ -93,7 +93,7 @@ class GraphLoaderProgressiveTest {
         graphLoader.loadFullPage(oldPage.uuid)
         testScheduler.advanceUntilIdle()
         
-        val reloadedBlocks = blockRepository.getBlocksForPage(oldPage.id).first().getOrNull()!!
+        val reloadedBlocks = blockRepository.getBlocksForPage(oldPage.uuid).first().getOrNull()!!
         assertTrue(reloadedBlocks[0].isLoaded, "Block should be fully loaded after loadFullPage")
     }
 }

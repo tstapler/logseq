@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.logseq.kmp.parsing.ParsingPropertyTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-03-29T06:28:09" hostname="onyx" time="0.072">
+  <properties/>
+  <testcase name="lexerShouldNotCrashOnAnyString[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.024"/>
+  <testcase name="inlineParserShouldNotCrashOnAnyString[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.02"/>
+  <testcase name="inlineParserShouldHandleDeeplyNestedEmphasis[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.004"/>
+  <testcase name="lexerShouldHandleSpecialCharacters[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.0"/>
+  <testcase name="inlineParserShouldHandleVariousDelimiters[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.0"/>
+  <testcase name="blockParserShouldHandleVariousInputs[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.001"/>
+  <testcase name="inlineParserShouldHandleUnclosedBrackets[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.0"/>
+  <testcase name="logseqParserShouldNotCrashOnArbitraryMarkdown[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.021"/>
+  <testcase name="logseqParserShouldHandleEdgeCaseMarkdown[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.001"/>
+  <testcase name="inlineParserShouldHandleBlockRefEdgeCases[jvm]" classname="com.logseq.kmp.parsing.ParsingPropertyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

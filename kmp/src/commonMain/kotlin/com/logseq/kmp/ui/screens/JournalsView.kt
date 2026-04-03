@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
 /**
  * Journals view that displays multiple journal entries with their content
  * in a scrollable list, similar to Logseq's journals page.
+ * 
+ * Updated to use UUID-native storage.
  */
 @Composable
 fun JournalsView(
@@ -35,14 +37,12 @@ fun JournalsView(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val editingBlockId = uiState.editingBlockId
+    val editingBlockUuid = uiState.editingBlockUuid
     val editingCursorIndex = uiState.editingCursorIndex
-    val collapsedBlockIds = uiState.collapsedBlockIds
+    val collapsedBlockUuids = uiState.collapsedBlockUuids
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope() // For repository calls
+    val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
-
-    // Infinite scroll detection
 
     // Infinite scroll detection
     val shouldLoadMore = remember {
@@ -78,21 +78,21 @@ fun JournalsView(
         ) {
             items(
                 items = uiState.pages,
-                key = { page -> page.id }
+                key = { page -> page.uuid }
             ) { page ->
-                val blockList = uiState.blocks[page.id] ?: emptyList()
+                val blockList = uiState.blocks[page.uuid] ?: emptyList()
                 
                 JournalEntry(
                     page = page,
                     blocks = blockList,
                     isDebugMode = isDebugMode,
-                    editingBlockId = editingBlockId,
+                    editingBlockUuid = editingBlockUuid,
                     editingCursorIndex = editingCursorIndex,
-                    collapsedBlocks = collapsedBlockIds,
-                    onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
+                    collapsedBlocks = collapsedBlockUuids,
+                    onStartEditing = { blockUuid -> viewModel.requestEditBlock(blockUuid) },
                     onStopEditing = { viewModel.requestEditBlock(null) },
-                    onContentChange = { blockId, newContent, version ->
-                        viewModel.updateBlockContent(blockId, newContent, version)
+                    onContentChange = { blockUuid, newContent, version ->
+                        viewModel.updateBlockContent(blockUuid, newContent, version)
                     },
                     onLinkClick = onLinkClick,
                     onNewBlock = { uuid -> viewModel.addNewBlock(uuid) },
@@ -110,10 +110,10 @@ fun JournalsView(
                     onMoveDown = { blockUuid ->
                         viewModel.moveBlockDown(blockUuid)
                     },
-                    onLoadContent = { pageId -> viewModel.loadPageContent(pageId) },
+                    onLoadContent = { pageUuid -> viewModel.loadPageContent(pageUuid) },
                     onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
                     onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) },
-                    onToggleCollapse = { blockId -> viewModel.toggleBlockCollapse(blockId) },
+                    onToggleCollapse = { blockUuid -> viewModel.toggleBlockCollapse(blockUuid) },
                     onFocusUp = { blockUuid -> viewModel.focusPreviousBlock(blockUuid) },
                     onFocusDown = { blockUuid -> viewModel.focusNextBlock(blockUuid) },
                     onSearchPages = onSearchPages
@@ -129,18 +129,18 @@ fun JournalsView(
             // Loading indicator at the bottom
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    // We could show a spinner here if we exposed isLoading from ViewModel
+                    // Placeholder for loading spinner
                 }
             }
         }
 
         MobileBlockToolbar(
-            editingBlockId = editingBlockId,
-            onIndent = { blockId -> scope.launch { viewModel.indentBlock(blockId) } },
-            onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
-            onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
-            onMoveDown = { blockId -> scope.launch { viewModel.moveBlockDown(blockId) } },
-            onAddBlock = { blockId -> scope.launch { viewModel.addNewBlock(blockId) } },
+            editingBlockId = editingBlockUuid,
+            onIndent = { blockUuid -> scope.launch { viewModel.indentBlock(blockUuid) } },
+            onOutdent = { blockUuid -> scope.launch { viewModel.outdentBlock(blockUuid) } },
+            onMoveUp = { blockUuid -> scope.launch { viewModel.moveBlockUp(blockUuid) } },
+            onMoveDown = { blockUuid -> scope.launch { viewModel.moveBlockDown(blockUuid) } },
+            onAddBlock = { blockUuid -> scope.launch { viewModel.addNewBlock(blockUuid) } },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .imePadding()
@@ -154,11 +154,11 @@ fun JournalsView(
 @Composable
 private fun JournalEntry(
     page: Page,
-    blocks: List<Block>, // Passed from ViewModel
+    blocks: List<Block>,
     isDebugMode: Boolean,
-    editingBlockId: String?,
+    editingBlockUuid: String?,
     editingCursorIndex: Int?,
-    collapsedBlocks: Set<Long>,
+    collapsedBlocks: Set<String>,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String, String, Long) -> Unit,
@@ -170,10 +170,10 @@ private fun JournalEntry(
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
-    onLoadContent: (Long) -> Unit,
+    onLoadContent: (String) -> Unit,
     onBackspace: (String) -> Unit,
     onAddBlockToPage: (String) -> Unit,
-    onToggleCollapse: (Long) -> Unit,
+    onToggleCollapse: (String) -> Unit,
     onFocusUp: (String) -> Unit,
     onFocusDown: (String) -> Unit,
     onSearchPages: (String) -> kotlinx.coroutines.flow.Flow<List<SearchResultItem>> = { kotlinx.coroutines.flow.emptyFlow() },
@@ -213,7 +213,7 @@ private fun JournalEntry(
             BlockList(
                 blocks = sortedBlocks,
                 isDebugMode = isDebugMode,
-                editingBlockId = editingBlockId,
+                editingBlockUuid = editingBlockUuid,
                 editingCursorIndex = editingCursorIndex,
                 collapsedBlocks = collapsedBlocks,
                 onStartEditing = onStartEditing,
@@ -239,7 +239,7 @@ private fun JournalEntry(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp) // Generous touch target
+                    .height(48.dp)
                     .clickable { onAddBlockToPage(page.uuid) }
             )
         }
@@ -252,6 +252,5 @@ private fun JournalEntry(
  * Output: "2026-01-21"
  */
 private fun formatJournalDate(pageName: String): String {
-    // Replace underscores with dashes for consistent formatting
     return pageName.replace("_", "-")
 }

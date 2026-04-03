@@ -3,6 +3,7 @@ package com.logseq.kmp.repository
 import com.logseq.kmp.db.LogseqDatabase
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.coroutines.PlatformDispatcher
+import com.logseq.kmp.util.ContentHasher
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
@@ -18,6 +19,8 @@ import kotlin.collections.mutableMapOf
  * SQLDelight implementation of BlockRepository.
  * Uses the generated LogseqDatabaseQueries for all operations.
  * Optimized with local caching for hierarchical queries to avoid N+1 problem.
+ * 
+ * Updated to use UUID-native storage for all references.
  */
 class SqlDelightBlockRepository(
     private val database: LogseqDatabase
@@ -25,8 +28,8 @@ class SqlDelightBlockRepository(
 
     private val queries = database.logseqDatabaseQueries
 
-    // Local cache for hierarchical queries to avoid N+1 problem
-    private val blockCache = mutableMapOf<Long, com.logseq.kmp.db.Blocks>()
+    // Local cache for objects by UUID to avoid N+1 problem
+    private val blockCache = mutableMapOf<String, com.logseq.kmp.db.Blocks>()
     private val hierarchyCache = mutableMapOf<String, List<BlockWithDepth>>()
     private val ancestorsCache = mutableMapOf<String, List<Block>>()
 
@@ -43,30 +46,17 @@ class SqlDelightBlockRepository(
                 success(block?.toBlockModel())
             }
 
-    override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> = flow {
-        // We still need a manual flow here because we need to resolve UUID to ID first,
-        // unless we join in the SQL. For now, let's keep it simple but reactive to the children table.
-        val rootBlock = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
-        if (rootBlock == null) {
-            emit(success(emptyList()))
-        } else {
-            queries.selectBlockChildren(rootBlock.id, Long.MAX_VALUE, 0L)
-                .asFlow()
-                .mapToList(PlatformDispatcher.IO)
-                .map { list -> 
-                    list.forEach { updateBlockCache(it) }
-                    success(list.map { it.toBlockModel() }) 
-                }
-                .collect { emit(it) }
-        }
-    }
+    override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> = 
+        queries.selectBlockChildren(blockUuid, Long.MAX_VALUE, 0L)
+            .asFlow()
+            .mapToList(PlatformDispatcher.IO)
+            .map { list -> 
+                list.forEach { updateBlockCache(it) }
+                success(list.map { it.toBlockModel() }) 
+            }
 
     override fun getBlockHierarchy(rootUuid: String): Flow<Result<List<BlockWithDepth>>> = flow {
-        // Hierarchy is complex to make fully reactive with SQLDelight's current tools 
-        // without a custom observer. For now, we'll keep it as a snapshot flow but 
-        // we should trigger it manually when needed.
         try {
-            // ... same logic as before ...
             // Check cache first
             val cached = hierarchyCache[rootUuid]
             if (cached != null && !isHierarchyCacheExpired(rootUuid)) {
@@ -79,33 +69,32 @@ class SqlDelightBlockRepository(
                 emit(success(emptyList()))
             } else {
                 // Optimized: BFS with batch child loading
-                val allBlocks = mutableListOf<BlockWithDepth>()
-                val visitedIds = mutableSetOf<Long>()
+                val visitedUuids = mutableSetOf<String>()
                 val resultList = mutableListOf<BlockWithDepth>()
                 
-                var currentLevelIds = listOf(rootBlock.id)
+                var currentLevelUuids = listOf(rootBlock.uuid)
                 var currentDepth = 0
                 
                 // Track which blocks belong to which depth
                 val blocksByDepth = mutableMapOf<Int, List<com.logseq.kmp.db.Blocks>>()
                 blocksByDepth[0] = listOf(rootBlock)
 
-                while (currentLevelIds.isNotEmpty()) {
+                while (currentLevelUuids.isNotEmpty()) {
                     val currentBlocks = blocksByDepth[currentDepth] ?: emptyList()
                     currentBlocks.forEach { block ->
-                        if (block.id !in visitedIds) {
-                            visitedIds.add(block.id)
+                        if (block.uuid !in visitedUuids) {
+                            visitedUuids.add(block.uuid)
                             updateBlockCache(block)
                             resultList.add(BlockWithDepth(block.toBlockModel(), currentDepth))
                         }
                     }
 
                     // Batch load children for all blocks in the current level
-                    val children = queries.selectBlocksByParentIds(currentLevelIds).executeAsList()
+                    val children = queries.selectBlocksByParentUuids(currentLevelUuids).executeAsList()
                     if (children.isEmpty()) break
                     
                     currentDepth++
-                    currentLevelIds = children.map { it.id }
+                    currentLevelUuids = children.map { it.uuid }
                     blocksByDepth[currentDepth] = children
                     
                     if (currentDepth > 100) break // Prevent infinite loops
@@ -116,6 +105,7 @@ class SqlDelightBlockRepository(
                     hierarchyCache.keys.take(100).forEach { hierarchyCache.remove(it) }
                 }
                 hierarchyCache[rootUuid] = resultList
+                hierarchyCacheTimestamps[rootUuid] = System.currentTimeMillis()
 
                 emit(success(resultList))
             }
@@ -138,16 +128,16 @@ class SqlDelightBlockRepository(
                 emit(success(emptyList()))
             } else {
                 val ancestors = mutableListOf<Block>()
-                var currentParentId: Long? = block.parent_id
+                var currentParentUuid: String? = block.parent_uuid
 
                 // Optimized: Walk up the tree using cached data when possible
-                while (currentParentId != null) {
-                    val cachedParent = blockCache[currentParentId]
-                    val parent = cachedParent ?: queries.selectBlockById(currentParentId).executeAsOneOrNull()
+                while (currentParentUuid != null) {
+                    val cachedParent = blockCache[currentParentUuid]
+                    val parent = cachedParent ?: queries.selectBlockByUuid(currentParentUuid).executeAsOneOrNull()
                     if (parent != null) {
                         updateBlockCache(parent)
                         ancestors.add(parent.toBlockModel())
-                        currentParentId = parent.parent_id
+                        currentParentUuid = parent.parent_uuid
                     } else {
                         break
                     }
@@ -157,9 +147,10 @@ class SqlDelightBlockRepository(
                 if (ancestorsCache.size >= maxCacheSize) {
                     ancestorsCache.keys.take(100).forEach { ancestorsCache.remove(it) }
                 }
-                ancestorsCache[blockUuid] = ancestors.reversed()
+                val result = ancestors.reversed()
+                ancestorsCache[blockUuid] = result
 
-                emit(success(ancestors.reversed()))
+                emit(success(result))
             }
         } catch (e: Exception) {
             emit(Result.failure(e))
@@ -169,10 +160,10 @@ class SqlDelightBlockRepository(
     override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> = flow {
         try {
             val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
-            if (block == null || block.parent_id == null) {
+            if (block == null || block.parent_uuid == null) {
                 emit(success(null))
             } else {
-                val parent = queries.selectBlockById(block.parent_id).executeAsOneOrNull()
+                val parent = queries.selectBlockByUuid(block.parent_uuid).executeAsOneOrNull()
                 emit(success(parent?.toBlockModel()))
             }
         } catch (e: Exception) {
@@ -186,7 +177,11 @@ class SqlDelightBlockRepository(
             if (block == null) {
                 emit(success(emptyList()))
             } else {
-                val siblings = queries.selectBlockSiblings(block.id, block.id)
+                val siblings = queries.selectBlockSiblings(
+                    uuid = block.uuid,
+                    uuid_ = block.uuid,
+                    uuid__ = block.uuid
+                )
                     .executeAsList()
                     .map { it.toBlockModel() }
                 emit(success(siblings))
@@ -196,8 +191,8 @@ class SqlDelightBlockRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = 
-        queries.selectBlocksByPageIdUnpaginated(pageId)
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> = 
+        queries.selectBlocksByPageUuidUnpaginated(pageUuid)
             .asFlow()
             .mapToList(PlatformDispatcher.IO)
             .map { list -> success(list.map { it.toBlockModel() }) }
@@ -208,16 +203,17 @@ class SqlDelightBlockRepository(
                 blocks.forEach { block ->
                     queries.insertBlock(
                         block.uuid,
-                        block.pageId,
-                        block.parentId,
-                        block.leftId,
+                        block.pageUuid,
+                        block.parentUuid,
+                        block.leftUuid,
                         block.content,
                         block.level.toLong(),
                         block.position.toLong(),
                         block.createdAt.toEpochMilliseconds(),
                         block.updatedAt.toEpochMilliseconds(),
                         block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
-                        block.version
+                        block.version,
+                        block.contentHash ?: ContentHasher.sha256ForContent(block.content)
                     )
                 }
             }
@@ -231,16 +227,17 @@ class SqlDelightBlockRepository(
         try {
             queries.insertBlock(
                 block.uuid,
-                block.pageId,
-                block.parentId,
-                block.leftId,
+                block.pageUuid,
+                block.parentUuid,
+                block.leftUuid,
                 block.content,
                 block.level.toLong(),
                 block.position.toLong(),
                 block.createdAt.toEpochMilliseconds(),
                 block.updatedAt.toEpochMilliseconds(),
                 block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
-                block.version
+                block.version,
+                block.contentHash ?: ContentHasher.sha256ForContent(block.content)
             )
             success(Unit)
         } catch (e: Exception) {
@@ -253,29 +250,29 @@ class SqlDelightBlockRepository(
             val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
             if (block != null) {
                 if (deleteChildren) {
-                    val idsToDelete = mutableListOf<Long>(block.id)
+                    val uuidsToDelete = mutableListOf<String>(block.uuid)
                     var index = 0
-                    while (index < idsToDelete.size) {
-                        val currentId = idsToDelete[index]
-                        val children = queries.selectBlockChildren(currentId, Long.MAX_VALUE, 0L).executeAsList()
-                        children.forEach { idsToDelete.add(it.id) }
+                    while (index < uuidsToDelete.size) {
+                        val currentUuid = uuidsToDelete[index]
+                        val children = queries.selectBlockChildren(currentUuid, Long.MAX_VALUE, 0L).executeAsList()
+                        children.forEach { uuidsToDelete.add(it.uuid) }
                         index++
                     }
 
                     // Chain repair before deletion
-                    val nextSibling = queries.selectBlockByLeftId(block.id).executeAsOneOrNull()
+                    val nextSibling = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
                     if (nextSibling != null) {
-                        queries.updateBlockLeftId(block.left_id, nextSibling.id)
+                        queries.updateBlockLeftUuid(block.left_uuid, nextSibling.uuid)
                     }
 
-                    idsToDelete.forEach { queries.deleteBlockById(it) }
+                    uuidsToDelete.forEach { queries.deleteBlockByUuid(it) }
                 } else {
                     // Chain repair before deletion
-                    val nextSibling = queries.selectBlockByLeftId(block.id).executeAsOneOrNull()
+                    val nextSibling = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
                     if (nextSibling != null) {
-                        queries.updateBlockLeftId(block.left_id, nextSibling.id)
+                        queries.updateBlockLeftUuid(block.left_uuid, nextSibling.uuid)
                     }
-                    queries.deleteBlockById(block.id)
+                    queries.deleteBlockByUuid(block.uuid)
                 }
 
             }
@@ -291,13 +288,58 @@ class SqlDelightBlockRepository(
         newPosition: Int
     ): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
-            if (block != null) {
-                val newParentId = newParentUuid?.let {
-                    queries.selectBlockByUuid(it).executeAsOneOrNull()?.id
+            queries.transaction {
+                val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull() ?: return@transaction
+                
+                // 1. Repair OLD chain: the block that followed us now follows our old left sibling
+                val blockFollowingOld = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
+                if (blockFollowingOld != null) {
+                    queries.updateBlockLeftUuid(block.left_uuid, blockFollowingOld.uuid)
                 }
-                queries.updateBlockParent(newParentId, block.id)
+                
+                // 2. Resolve NEW parent and level
+                val newParent = newParentUuid?.let { queries.selectBlockByUuid(it).executeAsOneOrNull() }
+                val newParentUuidResolved = newParent?.uuid
+                val newLevel = (newParent?.level ?: -1L) + 1L
+                
+                // 3. Find NEW left sibling (or parent)
+                val siblings = if (newParentUuidResolved == null) {
+                    queries.selectRootBlocksByPageUuidOrdered(block.page_uuid).executeAsList()
+                } else {
+                    queries.selectBlocksByParentUuidOrdered(newParentUuidResolved).executeAsList()
+                }
+                
+                // Exclude the block itself if it was already a sibling
+                val otherSiblings = siblings.filter { it.uuid != block.uuid }.sortedBy { it.position }
+                
+                val newLeftUuid = if (newPosition <= 0 || otherSiblings.isEmpty()) {
+                    newParentUuidResolved ?: block.page_uuid // Use parent or pageUuid (for root)
+                } else {
+                    val prevIdx = (newPosition - 1).coerceAtMost(otherSiblings.size - 1)
+                    otherSiblings[prevIdx].uuid
+                }
+                
+                // 4. Repair NEW chain: the block that will follow us now follows us
+                // If there's a block at the new position, its left_uuid should become ours
+                val targetBlockAtPosition = otherSiblings.getOrNull(newPosition)
+                if (targetBlockAtPosition != null) {
+                    queries.updateBlockLeftUuid(block.uuid, targetBlockAtPosition.uuid)
+                }
+                
+                // 5. Update block hierarchy
+                queries.updateBlockHierarchy(
+                    newParentUuidResolved,
+                    newLeftUuid,
+                    newPosition.toLong(),
+                    newLevel,
+                    block.uuid
+                )
             }
+            
+            // Invalidate caches
+            blockCache.remove(blockUuid)
+            hierarchyCache.clear()
+            ancestorsCache.clear()
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -311,28 +353,27 @@ class SqlDelightBlockRepository(
                     ?: return@transaction
                 
                 // 1. New parent is the previous sibling.
-                val prevSibling = block.left_id?.let { queries.selectBlockById(it).executeAsOneOrNull() }
-                if (prevSibling == null || prevSibling.parent_id != block.parent_id) {
+                val prevSibling = block.left_uuid?.let { queries.selectBlockByUuid(it).executeAsOneOrNull() }
+                if (prevSibling == null || prevSibling.parent_uuid != block.parent_uuid) {
                     return@transaction // No previous sibling at the same level, cannot indent
                 }
                 
                 // 3. Chain Repair: The block that was to the right of the moved block 
-                // must have its leftId updated to the moved block's old leftId.
-                val nextSibling = queries.selectBlockByLeftId(block.id).executeAsOneOrNull()
+                // must have its leftUuid updated to the moved block's old leftUuid.
+                val nextSibling = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
                 if (nextSibling != null) {
-                    queries.updateBlockLeftId(block.left_id, nextSibling.id)
-                    // No need to shift positions here as the block is being moved to a different parent
+                    queries.updateBlockLeftUuid(block.left_uuid, nextSibling.uuid)
                 }
                 
                 // 3. New hierarchy calculation
                 // New parent is prevSibling.
-                val lastChildOfNewParent = queries.selectLastChild(prevSibling.id).executeAsOneOrNull()
-                val newLeftId = lastChildOfNewParent?.id ?: prevSibling.id
+                val lastChildOfNewParent = queries.selectLastChild(prevSibling.uuid).executeAsOneOrNull()
+                val newLeftUuid = lastChildOfNewParent?.uuid ?: prevSibling.uuid
                 val newPosition = (lastChildOfNewParent?.position ?: -1L) + 1L
                 val newLevel = block.level + 1L
                 
                 // Update current block hierarchy in one shot
-                queries.updateBlockHierarchy(prevSibling.id, newLeftId, newPosition, newLevel, block.id)
+                queries.updateBlockHierarchy(prevSibling.uuid, newLeftUuid, newPosition, newLevel, block.uuid)
             }
 
             hierarchyCache.clear()
@@ -350,46 +391,46 @@ class SqlDelightBlockRepository(
                 val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
                     ?: return@transaction
                 
-                val currentParentId = block.parent_id ?: return@transaction // Already at root
-                val currentParent = queries.selectBlockById(currentParentId).executeAsOneOrNull()
+                val currentParentUuid = block.parent_uuid ?: return@transaction // Already at root
+                val currentParent = queries.selectBlockByUuid(currentParentUuid).executeAsOneOrNull()
                     ?: return@transaction
                 
                 // 1. New parent is the grandparent.
-                val grandparentId = currentParent.parent_id
+                val grandParentUuid = currentParent.parent_uuid
                 
                 // 3. Chain Repair: The block that was to the right of the moved block 
-                // must have its leftId updated to the moved block's old leftId.
-                val nextSibling = queries.selectBlockByLeftId(block.id).executeAsOneOrNull()
+                // must have its leftUuid updated to the moved block's old leftUuid.
+                val nextSibling = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
                 if (nextSibling != null) {
-                    queries.updateBlockLeftId(block.left_id, nextSibling.id)
+                    queries.updateBlockLeftUuid(block.left_uuid, nextSibling.uuid)
                 }
                 
-                // 3. New hierarchy calculation: New leftId is the old parent's ID.
-                val newLeftId = currentParent.id
+                // 3. New hierarchy calculation: New leftUuid is the old parent's UUID.
+                val newLeftUuid = currentParent.uuid
                 val newPosition = currentParent.position + 1L
                 val newLevel = block.level - 1L
                 
                 // Shift positions of siblings that come after the new position to make room
-                val siblingsToShift = if (grandparentId == null) {
-                    queries.selectRootBlocksByPageIdOrdered(block.page_id).executeAsList()
+                val siblingsToShift = if (grandParentUuid == null) {
+                    queries.selectRootBlocksByPageUuidOrdered(block.page_uuid).executeAsList()
                 } else {
-                    queries.selectBlocksByParentIdOrdered(grandparentId).executeAsList()
+                    queries.selectBlocksByParentUuidOrdered(grandParentUuid).executeAsList()
                 }
                 siblingsToShift.forEach { sibling ->
                     if (sibling.position >= newPosition) {
-                        queries.updateBlockPositionOnly(sibling.position + 1L, sibling.id)
+                        queries.updateBlockPositionOnly(sibling.position + 1L, sibling.uuid)
                     }
                 }
 
                 // Repair new sibling chain: Any block that followed currentParent at the grandparent level 
                 // now must follow the moved block.
-                val blockFollowingOldParent = queries.selectBlockByLeftId(currentParent.id).executeAsOneOrNull()
+                val blockFollowingOldParent = queries.selectBlockByLeftUuid(currentParent.uuid).executeAsOneOrNull()
                 if (blockFollowingOldParent != null) {
-                    queries.updateBlockLeftId(block.id, blockFollowingOldParent.id)
+                    queries.updateBlockLeftUuid(block.uuid, blockFollowingOldParent.uuid)
                 }
                 
                 // Update current block hierarchy in one shot
-                queries.updateBlockHierarchy(grandparentId, newLeftId, newPosition, newLevel, block.id)
+                queries.updateBlockHierarchy(grandParentUuid, newLeftUuid, newPosition, newLevel, block.uuid)
             }
 
             hierarchyCache.clear()
@@ -406,35 +447,35 @@ class SqlDelightBlockRepository(
             val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
                 ?: return@withContext success(Unit)
 
-            val siblings = if (block.parent_id == null) {
-                queries.selectRootBlocksByPageIdOrdered(block.page_id).executeAsList()
+            val siblings = if (block.parent_uuid == null) {
+                queries.selectRootBlocksByPageUuidOrdered(block.page_uuid).executeAsList()
             } else {
-                queries.selectBlocksByParentIdOrdered(block.parent_id).executeAsList()
+                queries.selectBlocksByParentUuidOrdered(block.parent_uuid).executeAsList()
             }
 
-            val blockIndex = siblings.indexOfFirst { it.id == block.id }
+            val blockIndex = siblings.indexOfFirst { it.uuid == block.uuid }
             if (blockIndex <= 0) return@withContext success(Unit) // Already first
 
             val prevSibling = siblings[blockIndex - 1]
             val nextSibling = siblings.getOrNull(blockIndex + 1)
 
             queries.transaction {
-                // Swap positions and leftIds
-                // Current block (B) takes previous sibling's (A) leftId and position
-                queries.updateBlockHierarchy(block.parent_id, prevSibling.left_id, prevSibling.position, block.level.toLong(), block.id)
+                // Swap positions and leftUuids
+                // Current block (B) takes previous sibling's (A) leftUuid and position
+                queries.updateBlockHierarchy(block.parent_uuid, prevSibling.left_uuid, prevSibling.position, block.level.toLong(), block.uuid)
                 
                 // Previous sibling (A) now follows current block (B)
-                queries.updateBlockHierarchy(prevSibling.parent_id, block.id, block.position, prevSibling.level.toLong(), prevSibling.id)
+                queries.updateBlockHierarchy(prevSibling.parent_uuid, block.uuid, block.position, prevSibling.level.toLong(), prevSibling.uuid)
                 
                 // If there was a next sibling (C) following B, it now follows A
                 if (nextSibling != null) {
-                    queries.updateBlockLeftId(prevSibling.id, nextSibling.id)
+                    queries.updateBlockLeftUuid(prevSibling.uuid, nextSibling.uuid)
                 }
             }
 
-            blockCache.remove(block.id)
-            blockCache.remove(prevSibling.id)
-            nextSibling?.let { blockCache.remove(it.id) }
+            blockCache.remove(block.uuid)
+            blockCache.remove(prevSibling.uuid)
+            nextSibling?.let { blockCache.remove(it.uuid) }
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -446,35 +487,35 @@ class SqlDelightBlockRepository(
             val block = queries.selectBlockByUuid(blockUuid).executeAsOneOrNull()
                 ?: return@withContext success(Unit)
 
-            val siblings = if (block.parent_id == null) {
-                queries.selectRootBlocksByPageIdOrdered(block.page_id).executeAsList()
+            val siblings = if (block.parent_uuid == null) {
+                queries.selectRootBlocksByPageUuidOrdered(block.page_uuid).executeAsList()
             } else {
-                queries.selectBlocksByParentIdOrdered(block.parent_id).executeAsList()
+                queries.selectBlocksByParentUuidOrdered(block.parent_uuid).executeAsList()
             }
 
-            val blockIndex = siblings.indexOfFirst { it.id == block.id }
+            val blockIndex = siblings.indexOfFirst { it.uuid == block.uuid }
             if (blockIndex >= siblings.size - 1) return@withContext success(Unit) // Already last
 
             val nextSibling = siblings[blockIndex + 1]
             val afterNextSibling = siblings.getOrNull(blockIndex + 2)
 
             queries.transaction {
-                // Swap positions and leftIds
-                // Next sibling (B) takes current block's (A) leftId and position
-                queries.updateBlockHierarchy(nextSibling.parent_id, block.left_id, block.position, nextSibling.level.toLong(), nextSibling.id)
+                // Swap positions and leftUuids
+                // Next sibling (B) takes current block's (A) leftUuid and position
+                queries.updateBlockHierarchy(nextSibling.parent_uuid, block.left_uuid, block.position, nextSibling.level.toLong(), nextSibling.uuid)
 
                 // Current block (A) now follows next sibling (B)
-                queries.updateBlockHierarchy(block.parent_id, nextSibling.id, nextSibling.position, block.level.toLong(), block.id)
+                queries.updateBlockHierarchy(block.parent_uuid, nextSibling.uuid, nextSibling.position, block.level.toLong(), block.uuid)
                 
                 // If there was a block (C) following B, it now follows A
                 if (afterNextSibling != null) {
-                    queries.updateBlockLeftId(block.id, afterNextSibling.id)
+                    queries.updateBlockLeftUuid(block.uuid, afterNextSibling.uuid)
                 }
             }
 
-            blockCache.remove(block.id)
-            blockCache.remove(nextSibling.id)
-            afterNextSibling?.let { blockCache.remove(it.id) }
+            blockCache.remove(block.uuid)
+            blockCache.remove(nextSibling.uuid)
+            afterNextSibling?.let { blockCache.remove(it.uuid) }
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -498,35 +539,32 @@ class SqlDelightBlockRepository(
                 queries.updateBlockContent(
                     mergedContent, 
                     System.currentTimeMillis(), 
-                    blockA.id
+                    blockA.uuid
                 )
                 
                 // 2. Reparent all children of block B to block A
-                val childrenOfB = queries.selectBlocksByParentIdOrdered(blockB.id).executeAsList()
+                val childrenOfB = queries.selectBlocksByParentUuidOrdered(blockB.uuid).executeAsList()
                 childrenOfB.forEach { child ->
-                    // For each child, we need to update parent_id AND potentially recalculate position
+                    // For each child, we need to update parent_uuid AND potentially recalculate position
                     // To keep it simple for now, we just append them to A's children
-                    val lastChildOfA = queries.selectLastChild(blockA.id).executeAsOneOrNull()
+                    val lastChildOfA = queries.selectLastChild(blockA.uuid).executeAsOneOrNull()
                     val newPosition = (lastChildOfA?.position ?: -1L) + 1L
-                    val newLeftId = lastChildOfA?.id ?: blockA.id
+                    val newLeftUuid = lastChildOfA?.uuid ?: blockA.uuid
                     
-                    queries.updateBlockHierarchy(blockA.id, newLeftId, newPosition, (blockA.level + 1L), child.id)
-                    // If the child had descendants, their levels need to be shifted too
-                    // but since they are now children of A (same level as before relative to B), 
-                    // and A/B were siblings (same level), their absolute level stays same.
+                    queries.updateBlockHierarchy(blockA.uuid, newLeftUuid, newPosition, (blockA.level + 1L), child.uuid)
                 }
                 
                 // 3. Chain repair for block B (B is being deleted)
-                val blockAfterB = queries.selectBlockByLeftId(blockB.id).executeAsOneOrNull()
+                val blockAfterB = queries.selectBlockByLeftUuid(blockB.uuid).executeAsOneOrNull()
                 if (blockAfterB != null) {
-                    queries.updateBlockLeftId(blockB.left_id, blockAfterB.id)
+                    queries.updateBlockLeftUuid(blockB.left_uuid, blockAfterB.uuid)
                 }
                 
                 // 4. Delete block B
-                queries.deleteBlockById(blockB.id)
+                queries.deleteBlockByUuid(blockB.uuid)
             }
             
-            blockCache.remove(blockCache.filter { it.value.uuid == nextBlockUuid }.keys.firstOrNull() ?: -1L)
+            blockCache.remove(nextBlockUuid)
             hierarchyCache.clear()
             success(Unit)
         } catch (e: Exception) {
@@ -549,45 +587,46 @@ class SqlDelightBlockRepository(
                 val secondPart = content.substring(cursorPosition).trim()
                 
                 // 1. Update original block
-                queries.updateBlockContent(firstPart, System.currentTimeMillis(), block.id)
+                queries.updateBlockContent(firstPart, System.currentTimeMillis(), block.uuid)
                 
                 // 2. Create new block
                 val newUuid = java.util.UUID.randomUUID().toString()
                 val newPosition = block.position + 1L
                 
                 // Shift siblings' positions
-                val siblings = if (block.parent_id == null) {
-                    queries.selectRootBlocksByPageIdOrdered(block.page_id).executeAsList()
+                val siblings = if (block.parent_uuid == null) {
+                    queries.selectRootBlocksByPageUuidOrdered(block.page_uuid).executeAsList()
                 } else {
-                    queries.selectBlocksByParentIdOrdered(block.parent_id).executeAsList()
+                    queries.selectBlocksByParentUuidOrdered(block.parent_uuid).executeAsList()
                 }
                 
                 siblings.forEach { sibling ->
                     if (sibling.position >= newPosition) {
-                        queries.updateBlockPositionOnly(sibling.position + 1L, sibling.id)
+                        queries.updateBlockPositionOnly(sibling.position + 1L, sibling.uuid)
                     }
                 }
                 
                 // Repair chain: block that followed 'block' now follows 'newBlock'
-                val nextSibling = queries.selectBlockByLeftId(block.id).executeAsOneOrNull()
+                val nextSibling = queries.selectBlockByLeftUuid(block.uuid).executeAsOneOrNull()
                 
                 queries.insertBlock(
                     uuid = newUuid,
-                    page_id = block.page_id,
-                    parent_id = block.parent_id,
-                    left_id = block.id,
+                    page_uuid = block.page_uuid,
+                    parent_uuid = block.parent_uuid,
+                    left_uuid = block.uuid,
                     content = secondPart,
                     level = block.level,
                     position = newPosition,
                     created_at = System.currentTimeMillis(),
                     updated_at = System.currentTimeMillis(),
                     properties = null,
-                    version = 0L
+                    version = 0L,
+                    content_hash = ContentHasher.sha256ForContent(secondPart)
                 )
                 
                 val insertedBlock = queries.selectBlockByUuid(newUuid).executeAsOne()
                 if (nextSibling != null) {
-                    queries.updateBlockLeftId(insertedBlock.id, nextSibling.id)
+                    queries.updateBlockLeftUuid(insertedBlock.uuid, nextSibling.uuid)
                 }
                 
                 newBlock = insertedBlock.toBlockModel()
@@ -597,14 +636,6 @@ class SqlDelightBlockRepository(
             Result.success(newBlock ?: throw IllegalStateException("Failed to create new block during split"))
         } catch (e: Exception) {
             Result.failure(e)
-        }
-    }
-
-    private fun shiftDescendantsLevel(rootId: Long, delta: Long) {
-        val children = queries.selectBlocksByParentIdOrdered(rootId).executeAsList()
-        children.forEach { child ->
-            queries.updateBlockLevelOnly(child.level + delta, child.id)
-            shiftDescendantsLevel(child.id, delta)
         }
     }
 
@@ -641,28 +672,54 @@ class SqlDelightBlockRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
-    override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = 
+    override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> =
         queries.selectBlocksWithContentLike("%$query%")
             .asFlow()
             .mapToList(PlatformDispatcher.IO)
-            .map { list -> 
+            .map { list ->
                 success(list.drop(offset).take(limit).map { it.toBlockModel() })
             }
 
+    override fun findDuplicateBlocks(limit: Int): Flow<Result<List<DuplicateGroup>>> = flow {
+        try {
+            val duplicateHashes = queries.selectDuplicateBlockHashes(limit.toLong()).executeAsList()
+            val groups = mutableListOf<DuplicateGroup>()
+
+            for (row in duplicateHashes) {
+                val hash = row.content_hash ?: continue
+
+                // Retrieve all blocks sharing this hash
+                val candidates = queries.selectBlocksByContentHash(hash)
+                    .executeAsList()
+                    .map { it.toBlockModel() }
+
+                candidates.groupBy { it.content }.forEach { (_, trueGroup) ->
+                    if (trueGroup.size > 1) {
+                        groups.add(DuplicateGroup(contentHash = hash, blocks = trueGroup, count = trueGroup.size))
+                    }
+                }
+            }
+
+            emit(success(groups))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
     private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),
             createdAt = Instant.fromEpochMilliseconds(this.created_at),
             updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
             version = this.version,
-            properties = parseProperties(this.properties)
+            properties = parseProperties(this.properties),
+            contentHash = this.content_hash
         )
     }
 
@@ -675,10 +732,9 @@ class SqlDelightBlockRepository(
 
     private fun updateBlockCache(block: com.logseq.kmp.db.Blocks) {
         if (blockCache.size >= maxCacheSize) {
-            // Evict oldest entries (simple strategy)
             blockCache.keys.take(100).forEach { blockCache.remove(it) }
         }
-        blockCache[block.id] = block
+        blockCache[block.uuid] = block
     }
 
     private val hierarchyCacheTimestamps = mutableMapOf<String, Long>()
@@ -688,9 +744,9 @@ class SqlDelightBlockRepository(
         return System.currentTimeMillis() - timestamp > hierarchyTtlMs
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = withContext(PlatformDispatcher.IO) {
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            queries.deleteBlocksByPageId(pageId)
+            queries.deleteBlocksByPageUuid(pageUuid)
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

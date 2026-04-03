@@ -1,0 +1,107 @@
+{
+  "version": "9",
+  "items": {
+    "24336150e118b3991927f67b97840d5d": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/app.cash.sqldelight/runtime-js/2.0.2/611403d9f167feddd9bdc41b8c8ba42cb3cf19cb/runtime-js-2.0.2.klib"
+    },
+    "b50857453dcb30a49d765d6aca822dfe": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-dom-api-compat/1.9.24/3c0ac04445c1aeec4366d69e1791cd6ad31ddc07/kotlin-dom-api-compat-1.9.24.klib"
+    },
+    "87ffdb4b1ef3d8283c349b6c1fc4487a": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-js/1.9.24/18030bfd7fce25b06afe1318d340f77456bb39/kotlin-stdlib-js-1.9.24.klib"
+    },
+    "b1b342d3997d67109922bb878c121640": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-datetime-js/0.6.1/723f6ab9f4c7b370bbee0d79d63c96af9b68055f/kotlinx-datetime-js-0.6.1.klib",
+      "target": "Kotlin-DateTime-library-kotlinx-datetime/0.6.1"
+    },
+    "a0654d7fd5c6ce2fd1744bb8b5b9e311": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-js/1.6.3/e316fab0dc6dfc0a96feeacb4bee9049cd28f566/kotlinx-serialization-core-js-1.6.3.klib"
+    },
+    "ec5f683e2e51ee8e5cdb632f5487b6e0": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-js/1.8.1/6d0facd74a1b6ae17fa00d7034f31bde38ed4b2/kotlinx-coroutines-core-js-1.8.1.klib"
+    },
+    "ba8177ecda3981427862b37308d71b44": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/atomicfu-js/0.23.2/e19f377f0dc24137414f5f3e1be730f60aeb9539/atomicfu-js-0.23.2.klib"
+    },
+    "e9306c2451bbe8784372b11cb78554d0": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlinx-atomicfu-runtime/1.9.24/373f8846d435f6e7f77453cefbb97c548ae4781e/kotlinx-atomicfu-runtime-1.9.24.klib"
+    },
+    "5f5eeea1d8ac16ddd80fd503bb4e234c": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-json-js/1.6.3/6fdf64da8d550723ae974a7becba5d1e33fc77b3/kotlinx-serialization-json-js-1.6.3.klib"
+    },
+    "b1171ff0f99a90ab9ffd6c697dc14d9d": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.runtime/runtime-js/1.7.1/cf3494a3a7ba554b609f36f9944c9cd4eff49f52/runtime-js-1.7.1.klib"
+    },
+    "e7d194b2b9b0796021cf909f336d4ae6": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.collection-internal/collection-js/1.7.1/851b7b4ab55c46d1674be1c82ae308ed0d499a8f/collection-js-1.7.1.klib"
+    },
+    "c40239a4d8c28eab0677446db5cfff5e": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.annotation-internal/annotation-js/1.7.1/d79c8a4f5f64a1b89b7fe4c1b2b9b234c8e9c61f/annotation-js-1.7.1.klib"
+    },
+    "e3c71d140520c1a7f3813f52978de616": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.foundation/foundation-js/1.7.1/a593f895a839f900ba293e7f62e929d7399b9d3/foundation-js-1.7.1.klib"
+    },
+    "01c5729a9e5729d227e74ce8a455212f": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.animation/animation-js/1.7.1/37710f47d4546d032f21ca31a45ef375fddd022e/animation-js-1.7.1.klib"
+    },
+    "832a781be4fe167cec17b187ddf00ad8": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.foundation/foundation-layout-js/1.7.1/66b9a789793ea57cd34cfdc58528ebd12ba2eb55/foundation-layout-js-1.7.1.klib"
+    },
+    "1143580d2752c20e0b8b7449d2ac173d": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-js/1.7.1/61e4dc2590ddad770c3992049c64b762abbaa95/ui-js-1.7.1.klib"
+    },
+    "d3ba8c8d76f986895a380422890bc08d": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-text-js/1.7.1/f864fca0fe92f88ea6d504f401e91ca706eabf83/ui-text-js-1.7.1.klib"
+    },
+    "c02bf5b20fc49605dd00682cc1bfc1f5": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-graphics-js/1.7.1/acadaba9b867ea452c4c2fa1549eb880a3e6c184/ui-graphics-js-1.7.1.klib"
+    },
+    "654234413a430208c09e975af67b6618": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-unit-js/1.7.1/1c6f53976af7cb1f411cb50078e48fd1a325b98d/ui-unit-js-1.7.1.klib"
+    },
+    "ded713a273ee1d092f2bddfe9360c91f": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-geometry-js/1.7.1/f5d5cc1b568b26d48fc4bbbb548f08e2f88fcbf1/ui-geometry-js-1.7.1.klib"
+    },
+    "fc8d09d46a6fcbcfa5c32588f08daa37": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.ui/ui-util-js/1.7.1/7ee0ad42cccef344a0d9875ef7a9167e144e9a4d/ui-util-js-1.7.1.klib"
+    },
+    "4bf21b92fbabc5dd9a3b64ea7d7c7145": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.skiko/skiko-js/0.8.18/b649fdddc9460463cb932adf1add9f0cc9d473a9/skiko-js-0.8.18.klib",
+      "target": "skiko-js/0.8.18"
+    },
+    "cfe613044691a0b10b4321b0636e06ea": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.runtime/runtime-saveable-js/1.7.1/178f388ca27ee8d6083e9d6485d074f8c9d74148/runtime-saveable-js-1.7.1.klib"
+    },
+    "0a0379ccc2c9f16cfc82023312aba2ce": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.androidx.lifecycle/lifecycle-runtime-compose-js/2.8.4/4f354273440ae0ef9ad79d5628a382a6b8395e75/lifecycle-runtime-compose-js-2.8.4.klib"
+    },
+    "f4fcb2d4757f7ce52522637d185843bb": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.androidx.lifecycle/lifecycle-runtime-js/2.8.4/70cf15b86ae89e3d639bb63892934c33211b6c6e/lifecycle-runtime-js-2.8.4.klib"
+    },
+    "c22caabe72b9869b857888f82498441a": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.androidx.lifecycle/lifecycle-common-js/2.8.4/d519a0547599d3695306dfe6180857f9eb9d37c1/lifecycle-common-js-2.8.4.klib"
+    },
+    "186dfd6b5da1254d2120cdb0f903ff76": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.androidx.lifecycle/lifecycle-viewmodel-js/2.8.4/4ee85bd3e584312880d58d344de398903174dba4/lifecycle-viewmodel-js-2.8.4.klib"
+    },
+    "a6322db18a73dc0754317cedef2b2063": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.animation/animation-core-js/1.7.1/8a37a4874614993d5a6dc60e2717db88fb78058f/animation-core-js-1.7.1.klib"
+    },
+    "65b91c73fc1a2284ad53c241b169692e": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.material3/material3-js/1.6.11/1753562be038c35c5aeb3261de82615aaca2c634/material3-js-1.6.11.klib"
+    },
+    "273c8d6e217f0337ab8d4c9c2a0eeab1": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.material/material-ripple-js/1.6.11/481cc77de6d272618a89738d25861b5f567e4a95/material-ripple-js-1.6.11.klib"
+    },
+    "db6523fe7d93315914220ae78eab14b9": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.material/material-icons-core-js/1.6.11/bd918c8ce936d7b7f265b1f5d5c4aeb66dd6bb9c/material-icons-core-js-1.6.11.klib"
+    },
+    "dad978b0106e96e16ee72ec3d7978eb5": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.compose.material/material-icons-extended-js/1.6.11/9db6733888c060f932b383bb8572fd719fa94340/material-icons-extended-js-1.6.11.klib"
+    },
+    "a66860f155cb10a237acb5f7d0f6d0e3": {
+      "src": "/home/tstapler/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-test-js-runner/1.9.24/e9b1fc55af69eb09d63b271d17c217d9483241cc/kotlin-test-js-runner-1.9.24.jar",
+      "target": "kotlin-test-js-runner/0.0.1"
+    }
+  }
+}

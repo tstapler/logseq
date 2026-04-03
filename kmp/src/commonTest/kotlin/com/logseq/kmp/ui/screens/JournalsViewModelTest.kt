@@ -9,13 +9,17 @@ import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.repository.BlockReferences
 import com.logseq.kmp.repository.BlockWithDepth
 import com.logseq.kmp.repository.BlockWithReferenceCount
+import com.logseq.kmp.repository.DuplicateGroup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -23,21 +27,21 @@ class JournalsViewModelTest {
 
     class FakeFileSystem : FileSystem {
         override fun getDefaultGraphPath(): String = "/tmp/graph"
-        override fun expandTilde(path: String): String = path
+        override fun expandTilde(path: String) = path
         override fun readFile(path: String): String? = ""
         override fun writeFile(path: String, content: String): Boolean = true
         override fun listFiles(path: String): List<String> = emptyList()
         override fun listDirectories(path: String): List<String> = emptyList()
         override fun fileExists(path: String): Boolean = true
         override fun directoryExists(path: String): Boolean = true
-        override fun createDirectory(path: String): Boolean = true
-        override fun deleteFile(path: String): Boolean = true
+        override fun createDirectory(path: String) = true
+        override fun deleteFile(path: String) = true
         override fun pickDirectory(): String? = null
         override fun getLastModifiedTime(path: String): Long? = null
     }
 
     class FakeBlockRepository : BlockRepository {
-        override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getBlockByUuid(uuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
         override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getBlockHierarchy(rootUuid: String): Flow<Result<List<BlockWithDepth>>> = flowOf(Result.success(emptyList()))
@@ -51,7 +55,7 @@ class JournalsViewModelTest {
         override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
         override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
         override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = Result.success(Unit)
-        override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int): Result<Unit> = Result.success(Unit)
         override suspend fun indentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
@@ -59,6 +63,7 @@ class JournalsViewModelTest {
         override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> = Result.success(Unit)
         override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> = Result.failure(NotImplementedError())
+        override fun findDuplicateBlocks(limit: Int): Flow<Result<List<DuplicateGroup>>> = flowOf(Result.success(emptyList()))
         override suspend fun clear() {}
     }
 
@@ -79,10 +84,10 @@ class JournalsViewModelTest {
 
         override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.uuid == uuid }))
-        override fun getPageById(id: Long): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.id == id }))
         override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.name == name }))
         override suspend fun savePage(page: Page): Result<Unit> {
-            pages.add(page)
+            val existingIdx = pages.indexOfFirst { it.uuid == page.uuid }
+            if (existingIdx >= 0) pages[existingIdx] = page else pages.add(page)
             return Result.success(Unit)
         }
         override suspend fun deletePage(pageUuid: String): Result<Unit> = Result.success(Unit)
@@ -100,14 +105,27 @@ class JournalsViewModelTest {
     @Test
     fun testLoadMore() = runTest {
         val repo = FakePageRepository()
-        // Create 15 journal pages
-        for (i in 1..15) {
-            val date = LocalDate(2026, 1, i)
+        
+        // 1. Pre-create today's journal to prevent generateTodayJournal() from adding an extra one
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        repo.savePage(
+            Page(
+                uuid = "today-uuid",
+                name = today.toString(),
+                createdAt = Clock.System.now(),
+                updatedAt = Clock.System.now(),
+                isJournal = true,
+                journalDate = today
+            )
+        )
+        
+        // 2. Create 14 more journal pages (total 15)
+        for (i in 1..14) {
+            val date = LocalDate(2025, 1, i) // Use last year to avoid collision with today
             repo.savePage(
                 Page(
-                    id = i.toLong(),
                     uuid = generateFakeUuid(i),
-                    name = "2026-01-${i.toString().padStart(2, '0')}",
+                    name = "2025-01-${i.toString().padStart(2, '0')}",
                     createdAt = Clock.System.now(),
                     updatedAt = Clock.System.now(),
                     isJournal = true,
@@ -122,7 +140,7 @@ class JournalsViewModelTest {
         val scope = CoroutineScope(Dispatchers.Unconfined)
         val viewModel = JournalsViewModel(repo, blockRepo, graphLoader, scope)
         
-        // Initial load (10 pages)
+        // Initial load (pageSize is 10)
         assertEquals(10, viewModel.uiState.value.pages.size)
         
         // Load more (remaining 5 pages)

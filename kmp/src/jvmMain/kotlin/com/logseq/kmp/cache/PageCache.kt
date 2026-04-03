@@ -14,6 +14,7 @@ import kotlin.Result.Companion.success
 /**
  * Page cache with LRU, TTL, and namespace indexing.
  * Wraps a PageRepository to provide progressive loading.
+ * Updated to use UUID-native storage.
  */
 class PageCache(
     private val config: CacheConfig,
@@ -27,7 +28,6 @@ class PageCache(
     sealed class Key {
         data class ByUuid(val uuid: String) : Key()
         data class ByName(val name: String) : Key()
-        data class ById(val id: Long) : Key()
     }
 
     fun start() {
@@ -88,42 +88,42 @@ class PageCache(
         }
     }.flowOn(Dispatchers.IO)
 
-        /**
-         * Get pages in namespace with cache.
-         */
-        fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flow {
-            try {
-                val cachedUuids: List<String>? = namespaceIndex[namespace]
-                if (cachedUuids != null && cachedUuids.isNotEmpty()) {
-                    val cachedPages = mutableListOf<Page>()
-                    var allFound = true
-                    for (uuid in cachedUuids) {
-                        val cached = pageCache.get(Key.ByUuid(uuid))
-                        if (cached != null) {
-                            cachedPages.add(cached.page)
-                        } else {
-                            allFound = false
-                            break
-                        }
-                    }
-                    if (allFound && cachedPages.size == cachedUuids.size) {
-                        metrics.value = metrics.value.withPageHit()
-                        emit(success(cachedPages))
-                        return@flow
+    /**
+     * Get pages in namespace with cache.
+     */
+    fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flow {
+        try {
+            val cachedUuids: List<String>? = namespaceIndex[namespace]
+            if (cachedUuids != null && cachedUuids.isNotEmpty()) {
+                val cachedPages = mutableListOf<Page>()
+                var allFound = true
+                for (uuid in cachedUuids) {
+                    val cached = pageCache.get(Key.ByUuid(uuid))
+                    if (cached != null) {
+                        cachedPages.add(cached.page)
+                    } else {
+                        allFound = false
+                        break
                     }
                 }
-
-                metrics.value = metrics.value.withPageMiss()
-                delegate.getPagesInNamespace(namespace).collect { result ->
-                    result.getOrNull()?.let { pages ->
-                        pages.forEach { cachePage(it) }
-                        emit(success(pages))
-                    } ?: emit(result)
+                if (allFound && cachedPages.size == cachedUuids.size) {
+                    metrics.value = metrics.value.withPageHit()
+                    emit(success(cachedPages))
+                    return@flow
                 }
-            } catch (e: Exception) {
-                emit(Result.failure(e))
             }
-        }.flowOn(Dispatchers.IO)
+
+            metrics.value = metrics.value.withPageMiss()
+            delegate.getPagesInNamespace(namespace).collect { result ->
+                result.getOrNull()?.let { pages ->
+                    pages.forEach { cachePage(it) }
+                    emit(success(pages))
+                } ?: emit(result)
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * Get all pages with cache.
@@ -162,7 +162,7 @@ class PageCache(
     /**
      * Save page - invalidates cache.
      */
-    suspend fun savePage(page: Page): Result<Long> {
+    suspend fun savePage(page: Page): Result<Unit> {
         invalidatePage(page.uuid)
         return delegate.savePage(page)
     }
@@ -190,6 +190,7 @@ class PageCache(
         val cached = pageCache.get(Key.ByUuid(uuid))
         if (cached != null) {
             pageCache.remove(Key.ByUuid(uuid))
+            pageCache.remove(Key.ByName(cached.page.name))
             nameIndex.remove(cached.page.name)
             cached.namespacePath?.let { ns ->
                 val list: MutableList<String>? = namespaceIndex[ns]
@@ -221,7 +222,6 @@ class PageCache(
         )
         pageCache.put(Key.ByUuid(page.uuid), cached)
         pageCache.put(Key.ByName(page.name), cached)
-        pageCache.put(Key.ById(page.id), cached)
 
         nameIndex[page.name] = page.uuid
         page.namespace?.let { ns ->

@@ -4,16 +4,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import androidx.compose.ui.unit.dp
 import com.logseq.kmp.ui.LogseqApp
 import com.logseq.kmp.ui.theme.setSystemDarkTheme
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.logging.Logger
+import com.logseq.kmp.error.JvmErrorTracker
 import javax.swing.UIManager
 
 fun main() {
+    // Initialize error tracking early
+    val errorTracker = JvmErrorTracker()
+    errorTracker.recordBreadcrumb("Application starting", "SYSTEM")
+    
     val logger = Logger("DesktopMain")
     
     application {
@@ -37,6 +40,7 @@ fun main() {
         val graphPath = fileSystem.getDefaultGraphPath()
         
         logger.info("Starting Desktop Application with graph: $graphPath")
+        errorTracker.recordBreadcrumb("Graph path resolved: $graphPath", "SYSTEM")
 
         Window(
             onCloseRequest = ::exitApplication,

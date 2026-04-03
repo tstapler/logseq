@@ -9,15 +9,12 @@ import kotlinx.coroutines.flow.flowOn
 /**
  * Cached wrapper around PageRepository.
  * Provides progressive loading with LRU, TTL, and namespace indexing.
+ * Updated to use UUID-native storage.
  */
 class CachedPageRepository(
     private val delegate: PageRepository,
     private val cache: PageCache
 ) : PageRepository {
-
-    override fun getPageById(id: Long): Flow<Result<Page?>> {
-        return delegate.getPageById(id)
-    }
 
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return cache.getPageByUuid(uuid)
@@ -43,7 +40,7 @@ class CachedPageRepository(
         return delegate.getJournalPages(limit, offset)
     }
 
-    override suspend fun savePage(page: Page): Result<Long> {
+    override suspend fun savePage(page: Page): Result<Unit> {
         return cache.savePage(page)
     }
 
@@ -70,35 +67,20 @@ class CachedPageRepository(
         cache.clear()
     }
 
-    /**
-     * Get cache metrics.
-     */
     fun getCacheMetrics(): CacheMetrics = cache.getMetrics()
 
-    /**
-     * Invalidate cache entry.
-     */
     fun invalidatePage(uuid: String) {
         cache.invalidatePage(uuid)
     }
 
-    /**
-     * Clear all caches.
-     */
     fun clearCache() {
         cache.clear()
     }
 
-    /**
-     * Start cache background processes.
-     */
     fun start() {
         cache.start()
     }
 
-    /**
-     * Stop cache background processes.
-     */
     fun stop() {
         cache.stop()
     }

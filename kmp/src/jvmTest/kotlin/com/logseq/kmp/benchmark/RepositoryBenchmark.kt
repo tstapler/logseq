@@ -65,11 +65,10 @@ class RepositoryBenchmark(
             if (blockRepo != null) {
                 val testBlocks = (1..3).map { i ->
                     com.logseq.kmp.model.Block(
-                        id = i.toLong(),
                         uuid = "test-block-$i",
-                        pageId = 1L,
-                        parentId = if (i > 1) (i - 1).toLong() else null,
-                        leftId = null,
+                        pageUuid = "test-page-1",
+                        parentUuid = if (i > 1) "test-block-${i - 1}" else null,
+                        leftUuid = null,
                         content = "Test block content $i",
                         level = if (i > 1) 1 else 0,
                         position = i,
@@ -108,7 +107,6 @@ class RepositoryBenchmark(
             if (pageRepo != null) {
                 val testPages = (1..2).map { i ->
                     com.logseq.kmp.model.Page(
-                        id = (100 + i).toLong(),
                         uuid = "test-page-$i",
                         name = "test-page-$i",
                         namespace = if (i % 2 == 0) "test" else null,

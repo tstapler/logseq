@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.logseq.kmp.outliner.TreeOperationsPropertyTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-03-29T06:28:09" hostname="onyx" time="0.05">
+  <properties/>
+  <testcase name="reorderSiblingsShouldHandleAnyList[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.032"/>
+  <testcase name="reorderSiblingsShouldHandleSingleElement[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="outdentShouldHandleSingleChild[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="reorderSiblingsShouldPreserveAllUuids[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="indentShouldHandleValidSiblingLists[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.002"/>
+  <testcase name="outdentShouldHandleVariousTreeStructures[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="updateLevelsShouldHandleTreeStructures[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.004"/>
+  <testcase name="moveDownShouldFailForLastElement[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="moveDownShouldHandleValidSiblingLists[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.002"/>
+  <testcase name="moveDownShouldHandleTwoElements[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="outdentShouldFailForRootLevel[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="moveUpShouldFailForFirstElement[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="edgeCasesShouldHandleVariousLevels[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="moveUpThenMoveDownShouldSwapPositions[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="reorderShouldProduceValidChain[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="moveUpShouldHandleTwoElements[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="updateLevelsShouldUpdateChildrenRecursively[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="indentShouldFailForSingleItem[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="reorderSiblingsShouldHandleEmptyList[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="indentShouldFailForFirstSibling[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="indentShouldFailForEmptyList[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="indentShouldHandleVariousContent[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="edgeCasesShouldHandleBlocksWithNullContent[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.0"/>
+  <testcase name="moveUpShouldHandleValidSiblingLists[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.003"/>
+  <testcase name="indentThenOutdentShouldChangeState[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <testcase name="edgeCasesShouldHandleVeryLongSiblingLists[jvm]" classname="com.logseq.kmp.outliner.TreeOperationsPropertyTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

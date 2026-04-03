@@ -8,9 +8,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import kotlin.Result.Companion.success
+import com.logseq.kmp.util.ContentHasher
 
 /**
  * In-memory implementation of BlockRepository for testing purposes.
+ * Updated to use UUID-native storage.
  */
 class InMemoryBlockRepository : BlockRepository {
 
@@ -24,12 +26,7 @@ class InMemoryBlockRepository : BlockRepository {
 
     override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> {
         return blocks.map { map ->
-            val parent = map[blockUuid]
-            if (parent == null) {
-                success(emptyList())
-            } else {
-                success(map.values.filter { it.parentId == parent.id }.sortedBy { it.position })
-            }
+            success(map.values.filter { it.parentUuid == blockUuid }.sortedBy { it.position })
         }
     }
 
@@ -49,7 +46,7 @@ class InMemoryBlockRepository : BlockRepository {
     ) {
         val block = allBlocks[uuid] ?: return
         result.add(BlockWithDepth(block, depth))
-        val children = allBlocks.values.filter { it.parentId == block.id }.sortedBy { it.position }
+        val children = allBlocks.values.filter { it.parentUuid == block.uuid }.sortedBy { it.position }
         children.forEach { child ->
             collectHierarchy(allBlocks, child.uuid, depth + 1, result)
         }
@@ -61,8 +58,8 @@ class InMemoryBlockRepository : BlockRepository {
             var currentUuid: String? = blockUuid
             while (currentUuid != null) {
                 val block = map[currentUuid] ?: break
-                if (block.parentId != null) {
-                    val parent = map.values.find { it.id == block.parentId }
+                if (block.parentUuid != null) {
+                    val parent = map[block.parentUuid]
                     if (parent != null) {
                         ancestors.add(parent)
                         currentUuid = parent.uuid
@@ -80,9 +77,7 @@ class InMemoryBlockRepository : BlockRepository {
     override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> {
         return blocks.map { map ->
             val block = map[blockUuid] ?: return@map success(null)
-            val parent = if (block.parentId != null) {
-                map.values.find { it.id == block.parentId }
-            } else null
+            val parent = block.parentUuid?.let { map[it] }
             success(parent)
         }
     }
@@ -90,25 +85,25 @@ class InMemoryBlockRepository : BlockRepository {
     override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> {
         return blocks.map { map ->
             val block = map[blockUuid] ?: return@map success(emptyList())
-            val siblings = if (block.parentId != null) {
-                map.values.filter { it.parentId == block.parentId && it.uuid != blockUuid }
+            val siblings = if (block.parentUuid != null) {
+                map.values.filter { it.parentUuid == block.parentUuid && it.uuid != blockUuid }
             } else {
-                map.values.filter { it.parentId == null && it.uuid != blockUuid }
+                map.values.filter { it.parentUuid == null && it.uuid != blockUuid }
             }
             success(siblings.sortedBy { it.position })
         }
     }
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> {
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> {
         return blocks.map { map ->
-            val pageBlocks = map.values.filter { it.pageId == pageId }.sortedBy { it.position }
+            val pageBlocks = map.values.filter { it.pageUuid == pageUuid }.sortedBy { it.position }
             success(pageBlocks)
         }
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> {
         val current = this.blocks.value.toMutableMap()
-        val toRemove = current.values.filter { it.pageId == pageId }.map { it.uuid }
+        val toRemove = current.values.filter { it.pageUuid == pageUuid }.map { it.uuid }
         toRemove.forEach { current.remove(it) }
         this.blocks.value = current
         return success(Unit)
@@ -141,7 +136,7 @@ class InMemoryBlockRepository : BlockRepository {
             var index = 0
             while (index < uuidsToDelete.size) {
                 val currentUuid = uuidsToDelete[index]
-                val childBlocks = current.values.filter { it.parentId == current[currentUuid]?.id }
+                val childBlocks = current.values.filter { it.parentUuid == currentUuid }
                 childBlocks.forEach { child ->
                     uuidsToDelete.add(child.uuid)
                 }
@@ -149,6 +144,16 @@ class InMemoryBlockRepository : BlockRepository {
             }
             uuidsToDelete.forEach { current.remove(it) }
         } else {
+            // Orphan children - they become root blocks (parent = null, level = 0)
+            val children = current.values.filter { it.parentUuid == blockUuid }
+            for (child in children) {
+                val levelDelta = 0 - child.level
+                val updatedChild = child.copy(parentUuid = null, level = 0)
+                current[child.uuid] = updatedChild
+                
+                // Recursively adjust levels for descendants
+                adjustDescendantLevels(child.uuid, levelDelta, current)
+            }
             current.remove(blockUuid)
         }
         blocks.value = current
@@ -163,104 +168,117 @@ class InMemoryBlockRepository : BlockRepository {
         val current = blocks.value.toMutableMap()
         val block = current[blockUuid] ?: return success(Unit)
 
+        val newLevel = if (newParentUuid == null) 0 else (current[newParentUuid]?.level ?: -1) + 1
+        val levelDelta = newLevel - block.level
+
         val updatedBlock = block.copy(
-            parentId = newParentUuid?.let { uuid ->
-                current[uuid]?.id
-            },
-            position = newPosition
+            parentUuid = newParentUuid,
+            position = newPosition,
+            level = newLevel
         )
         current[blockUuid] = updatedBlock
+        
+        if (levelDelta != 0) {
+            adjustDescendantLevels(block.uuid, levelDelta, current)
+        }
+        
         blocks.value = current
         return success(Unit)
     }
 
     override suspend fun indentBlock(blockUuid: String): Result<Unit> {
-        val current = blocks.value
+        val current = blocks.value.toMutableMap()
         val block = current[blockUuid] ?: return success(Unit)
 
         val siblings = current.values
-            .filter { it.pageId == block.pageId && it.parentId == block.parentId }
+            .filter { it.pageUuid == block.pageUuid && it.parentUuid == block.parentUuid }
             .sortedBy { it.position }
 
         val blockIndex = siblings.indexOfFirst { it.uuid == blockUuid }
         if (blockIndex <= 0) return success(Unit) // No previous sibling
 
         val prevSibling = siblings[blockIndex - 1]
-        val prevSiblingChildren = current.values.filter { it.parentId == prevSibling.id }
+        val prevSiblingChildren = current.values.filter { it.parentUuid == prevSibling.uuid }
         val newPosition = if (prevSiblingChildren.isEmpty()) 0 else (prevSiblingChildren.maxOfOrNull { it.position } ?: -1) + 1
 
-        val updates = mutableMapOf<String, Block>()
-        updates[block.uuid] = block.copy(parentId = prevSibling.id, level = block.level + 1, position = newPosition)
-        adjustDescendantLevels(block.id, +1, current, updates)
+        val updatedBlock = block.copy(parentUuid = prevSibling.uuid, level = block.level + 1, position = newPosition)
+        current[block.uuid] = updatedBlock
+        
+        adjustDescendantLevels(block.uuid, +1, current)
 
-        blocks.value = current + updates
+        blocks.value = current
         return success(Unit)
     }
 
     override suspend fun outdentBlock(blockUuid: String): Result<Unit> {
-        val current = blocks.value
+        val current = blocks.value.toMutableMap()
         val block = current[blockUuid] ?: return success(Unit)
-        val parentId = block.parentId ?: return success(Unit) // Already at root
+        val parentUuid = block.parentUuid ?: return success(Unit) // Already at root
 
-        val parent = current.values.find { it.id == parentId } ?: return success(Unit)
-        val grandparentId = parent.parentId
+        val parent = current[parentUuid] ?: return success(Unit)
+        val grandParentUuid = parent.parentUuid
 
         val grandparentChildren = current.values
-            .filter { it.pageId == block.pageId && it.parentId == grandparentId }
+            .filter { it.pageUuid == block.pageUuid && it.parentUuid == grandParentUuid }
             .sortedBy { it.position }
 
-        val parentInGrandchildren = grandparentChildren.find { it.id == parentId }
+        val parentInGrandchildren = grandparentChildren.find { it.uuid == parentUuid }
         val newPosition = (parentInGrandchildren?.position ?: -1) + 1
 
-        val updates = mutableMapOf<String, Block>()
         // Shift grandparent's children at or after newPosition to make room
         for (sibling in grandparentChildren) {
             if (sibling.position >= newPosition) {
-                updates[sibling.uuid] = sibling.copy(position = sibling.position + 1)
+                current[sibling.uuid] = sibling.copy(position = sibling.position + 1)
             }
         }
-        updates[block.uuid] = block.copy(parentId = grandparentId, level = parent.level, position = newPosition)
-        adjustDescendantLevels(block.id, parent.level - block.level, current, updates)
+        
+        val updatedBlock = block.copy(parentUuid = grandParentUuid, level = parent.level, position = newPosition)
+        current[block.uuid] = updatedBlock
+        
+        val levelDelta = parent.level - block.level
+        if (levelDelta != 0) {
+            adjustDescendantLevels(block.uuid, levelDelta, current)
+        }
 
-        blocks.value = current + updates
+        blocks.value = current
         return success(Unit)
     }
 
     override suspend fun moveBlockUp(blockUuid: String): Result<Unit> {
-        val current = blocks.value
+        val current = blocks.value.toMutableMap()
         val block = current[blockUuid] ?: return success(Unit)
 
         val siblings = current.values
-            .filter { it.pageId == block.pageId && it.parentId == block.parentId }
+            .filter { it.pageUuid == block.pageUuid && it.parentUuid == block.parentUuid }
             .sortedBy { it.position }
 
         val blockIndex = siblings.indexOfFirst { it.uuid == blockUuid }
         if (blockIndex <= 0) return success(Unit)
 
         val prevSibling = siblings[blockIndex - 1]
-        blocks.value = current + mapOf(
-            block.uuid to block.copy(position = prevSibling.position),
-            prevSibling.uuid to prevSibling.copy(position = block.position)
-        )
+        current[block.uuid] = block.copy(position = prevSibling.position)
+        current[prevSibling.uuid] = prevSibling.copy(position = block.position)
+        
+        blocks.value = current
         return success(Unit)
     }
 
     override suspend fun moveBlockDown(blockUuid: String): Result<Unit> {
-        val current = blocks.value
+        val current = blocks.value.toMutableMap()
         val block = current[blockUuid] ?: return success(Unit)
 
         val siblings = current.values
-            .filter { it.pageId == block.pageId && it.parentId == block.parentId }
+            .filter { it.pageUuid == block.pageUuid && it.parentUuid == block.parentUuid }
             .sortedBy { it.position }
 
         val blockIndex = siblings.indexOfFirst { it.uuid == blockUuid }
-        if (blockIndex >= siblings.size - 1) return success(Unit)
+        if (blockIndex < 0 || blockIndex >= siblings.size - 1) return success(Unit)
 
         val nextSibling = siblings[blockIndex + 1]
-        blocks.value = current + mapOf(
-            block.uuid to block.copy(position = nextSibling.position),
-            nextSibling.uuid to nextSibling.copy(position = block.position)
-        )
+        current[block.uuid] = block.copy(position = nextSibling.position)
+        current[nextSibling.uuid] = nextSibling.copy(position = block.position)
+        
+        blocks.value = current
         return success(Unit)
     }
 
@@ -269,8 +287,33 @@ class InMemoryBlockRepository : BlockRepository {
         val blockA = current[blockUuid] ?: return success(Unit)
         val blockB = current[nextBlockUuid] ?: return success(Unit)
         
+        // 1. Update content of block A
         current[blockUuid] = blockA.copy(content = blockA.content + separator + blockB.content)
+        
+        // 2. Reparent children of block B to block A
+        val childrenOfB = current.values.filter { it.parentUuid == blockB.uuid }.sortedBy { it.position }
+        val lastChildOfA = current.values.filter { it.parentUuid == blockA.uuid }.maxByOrNull { it.position }
+        var nextPosition = (lastChildOfA?.position ?: -1) + 1
+        
+        val targetLevelForChildren = blockA.level + 1
+        
+        for (child in childrenOfB) {
+            val levelDelta = targetLevelForChildren - child.level
+            val updatedChild = child.copy(
+                parentUuid = blockA.uuid,
+                position = nextPosition++,
+                level = targetLevelForChildren
+            )
+            current[child.uuid] = updatedChild
+            // Recursively adjust levels for this child's descendants
+            if (levelDelta != 0) {
+                adjustDescendantLevels(child.uuid, levelDelta, current)
+            }
+        }
+        
+        // 3. Remove block B
         current.remove(nextBlockUuid)
+        
         blocks.value = current
         return success(Unit)
     }
@@ -283,11 +326,21 @@ class InMemoryBlockRepository : BlockRepository {
         val secondPart = block.content.substring(cursorPosition).trim()
         
         val updatedBlock = block.copy(content = firstPart)
+        val newPosition = block.position + 1
+        
+        // Shift following siblings
+        val siblings = current.values.filter { it.pageUuid == block.pageUuid && it.parentUuid == block.parentUuid }
+        for (sibling in siblings) {
+            if (sibling.position >= newPosition) {
+                current[sibling.uuid] = sibling.copy(position = sibling.position + 1)
+            }
+        }
+
         val newBlock = block.copy(
-            uuid = java.util.UUID.randomUUID().toString(),
-            id = (current.values.maxOfOrNull { it.id } ?: 0L) + 1,
+            uuid = com.logseq.kmp.util.UuidGenerator.generateV7(),
             content = secondPart,
-            position = block.position + 1
+            position = newPosition,
+            level = block.level // New block must be at the same level
         )
         
         current[blockUuid] = updatedBlock
@@ -297,18 +350,20 @@ class InMemoryBlockRepository : BlockRepository {
     }
 
     private fun adjustDescendantLevels(
-        parentId: Long,
+        parentUuid: String,
         delta: Int,
-        snapshot: Map<String, Block>,
-        updates: MutableMap<String, Block>
+        current: MutableMap<String, Block>,
+        visited: MutableSet<String> = mutableSetOf()
     ) {
-        val children = snapshot.values.filter { it.parentId == parentId }
+        if (parentUuid in visited) return
+        visited.add(parentUuid)
+        
+        val children = current.values.filter { it.parentUuid == parentUuid }
         for (child in children) {
-            val base = updates[child.uuid] ?: child
-            val newLevel = base.level + delta
+            val newLevel = child.level + delta
             if (newLevel >= 0) {
-                updates[child.uuid] = base.copy(level = newLevel)
-                adjustDescendantLevels(child.id, delta, snapshot, updates)
+                current[child.uuid] = child.copy(level = newLevel)
+                adjustDescendantLevels(child.uuid, delta, current, visited)
             }
         }
     }
@@ -319,7 +374,7 @@ class InMemoryBlockRepository : BlockRepository {
             val linkedBlocks = map.values.filter { block ->
                 wikiLinkPattern.containsMatchIn(block.content)
             }
-            success(linkedBlocks.sortedBy { it.pageId })
+            success(linkedBlocks.sortedBy { it.pageUuid })
         }
     }
 
@@ -331,7 +386,7 @@ class InMemoryBlockRepository : BlockRepository {
                 plainTextPattern.containsMatchIn(block.content) &&
                     !wikiLinkPattern.containsMatchIn(block.content)
             }
-            success(unlinkedBlocks.sortedBy { it.pageId })
+            success(unlinkedBlocks.sortedBy { it.pageUuid })
         }
     }
 
@@ -340,7 +395,25 @@ class InMemoryBlockRepository : BlockRepository {
             val matchingBlocks = map.values.filter { block ->
                 block.content.contains(query, ignoreCase = true)
             }
-            success(matchingBlocks.sortedBy { it.pageId }.drop(offset).take(limit))
+            success(matchingBlocks.sortedBy { it.pageUuid }.drop(offset).take(limit))
+        }
+    }
+
+    override fun findDuplicateBlocks(limit: Int): Flow<Result<List<DuplicateGroup>>> {
+        return blocks.map { map ->
+            val groups = map.values
+                .groupBy { ContentHasher.sha256ForContent(it.content) }
+                .filter { it.value.size > 1 }
+                .map { (hash, candidates) ->
+                    candidates.groupBy { it.content }
+                        .filter { it.value.size > 1 }
+                        .map { (_, trueGroup) ->
+                            DuplicateGroup(contentHash = hash, blocks = trueGroup, count = trueGroup.size)
+                        }
+                }
+                .flatten()
+                .take(limit)
+            success(groups)
         }
     }
 }
@@ -377,12 +450,6 @@ class InMemoryPageRepository : PageRepository {
         }
     }
 
-    override fun getPageById(id: Long): Flow<Result<Page?>> {
-        return pages.map { map ->
-            success(map.values.find { it.id == id })
-        }
-    }
-
     override fun getPageByName(name: String): Flow<Result<Page?>> {
         return pages.map { map ->
             val page = map.values.find { page ->
@@ -399,11 +466,11 @@ class InMemoryPageRepository : PageRepository {
         }
     }
 
-    override suspend fun savePage(page: Page): Result<Long> {
+    override suspend fun savePage(page: Page): Result<Unit> {
         val current = pages.value.toMutableMap()
         current[page.uuid] = page
         pages.value = current
-        return success(page.id)
+        return success(Unit)
     }
 
     override suspend fun deletePage(pageUuid: String): Result<Unit> {
@@ -483,7 +550,6 @@ class InMemorySearchRepository(
         
         return searchPagesByTitle(searchRequest.query!!, searchRequest.limit).map { pagesRes ->
             val pages = pagesRes.getOrNull() ?: emptyList()
-            // We'll just return pages for now in this fake search
             success(SearchResult(emptyList(), pages, pages.size, false))
         }
     }

@@ -11,6 +11,8 @@ import kotlin.Result.Companion.success
  * Datalog-style in-memory repository for pages that mirrors Datascript behavior.
  * Uses Datalog query patterns similar to Logseq's Clojure implementation.
  * Cross-platform compatible - doesn't use JVM-specific Dispatchers.IO.
+ * 
+ * Updated to use UUID-native storage.
  */
 class DatascriptPageRepository : PageRepository {
 
@@ -22,12 +24,6 @@ class DatascriptPageRepository : PageRepository {
     private val byUuid = MutableStateFlow<Map<String, Page>>(emptyMap())
     private val byName = MutableStateFlow<Map<String, Page>>(emptyMap())
     private val byNamespace = MutableStateFlow<Map<String, List<Page>>>(emptyMap())
-
-    override fun getPageById(id: Long): Flow<Result<Page?>> {
-        return byUuid.map { map ->
-            Result.success(map.values.find { it.id == id })
-        }
-    }
 
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return pages.map { map ->
@@ -70,7 +66,7 @@ class DatascriptPageRepository : PageRepository {
         }
     }
 
-    override suspend fun savePage(page: Page): Result<Long> {
+    override suspend fun savePage(page: Page): Result<Unit> {
         return try {
             val current = pages.value.toMutableMap()
             current[page.uuid] = page
@@ -78,7 +74,7 @@ class DatascriptPageRepository : PageRepository {
 
             // Update indexes
             refreshIndexes(current)
-            success(page.id)
+            success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -88,7 +84,7 @@ class DatascriptPageRepository : PageRepository {
         return try {
             val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
             val newPage = page.copy(isFavorite = !page.isFavorite)
-            savePage(newPage).map { Unit }
+            savePage(newPage)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -98,7 +94,7 @@ class DatascriptPageRepository : PageRepository {
         return try {
             val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
             val newPage = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
-            savePage(newPage).map { Unit }
+            savePage(newPage)
         } catch (e: Exception) {
             Result.failure(e)
         }

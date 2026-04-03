@@ -40,21 +40,20 @@ class SearchRepositoryIntegrationTests {
     }
 
     private fun createTestBlock(
-        id: Long,
         uuid: String,
-        pageId: Long,
+        pageUuid: String,
         content: String,
-        properties: Map<String, String> = emptyMap()
+        properties: Map<String, String> = emptyMap(),
+        position: Int = 0
     ): Block {
         return Block(
-            id = id,
             uuid = uuid,
-            pageId = pageId,
-            parentId = null,
-            leftId = null,
+            pageUuid = pageUuid,
+            parentUuid = null,
+            leftUuid = null,
             content = content,
             level = 1,
-            position = id.toInt(),
+            position = position,
             createdAt = now,
             updatedAt = now,
             properties = properties
@@ -62,13 +61,11 @@ class SearchRepositoryIntegrationTests {
     }
 
     private fun createTestPage(
-        id: Long,
         uuid: String,
         name: String,
         properties: Map<String, String> = emptyMap()
     ): Page {
         return Page(
-            id = id,
             uuid = uuid,
             name = name,
             namespace = null,
@@ -81,10 +78,11 @@ class SearchRepositoryIntegrationTests {
 
     @Test
     fun testSearchBlocksByContent() = runTest {
-        pageRepo.savePage(createTestPage(1, generateUuid(100), "Page 1"))
-        blockRepo.saveBlock(createTestBlock(1, generateUuid(1), 1, "Hello world content"))
-        blockRepo.saveBlock(createTestBlock(2, generateUuid(2), 1, "Goodbye world content"))
-        blockRepo.saveBlock(createTestBlock(3, generateUuid(3), 1, "Another unrelated block"))
+        val pageUuid = generateUuid(100)
+        pageRepo.savePage(createTestPage(pageUuid, "Page 1"))
+        blockRepo.saveBlock(createTestBlock(generateUuid(1), pageUuid, "Hello world content", position = 1))
+        blockRepo.saveBlock(createTestBlock(generateUuid(2), pageUuid, "Goodbye world content", position = 2))
+        blockRepo.saveBlock(createTestBlock(generateUuid(3), pageUuid, "Another unrelated block", position = 3))
 
         val results = repository.searchBlocksByContent("hello").first()
         assertTrue(results.isSuccess)
@@ -94,9 +92,10 @@ class SearchRepositoryIntegrationTests {
 
     @Test
     fun testSearchBlocksByContentCaseInsensitive() = runTest {
-        pageRepo.savePage(createTestPage(1, generateUuid(100), "Page 1"))
-        blockRepo.saveBlock(createTestBlock(1, generateUuid(1), 1, "KOTLIN PROGRAMMING"))
-        blockRepo.saveBlock(createTestBlock(2, generateUuid(2), 1, "kotlin is great"))
+        val pageUuid = generateUuid(100)
+        pageRepo.savePage(createTestPage(pageUuid, "Page 1"))
+        blockRepo.saveBlock(createTestBlock(generateUuid(1), pageUuid, "KOTLIN PROGRAMMING", position = 1))
+        blockRepo.saveBlock(createTestBlock(generateUuid(2), pageUuid, "kotlin is great", position = 2))
 
         val results = repository.searchBlocksByContent("kotlin").first()
         assertTrue(results.isSuccess)
@@ -105,9 +104,9 @@ class SearchRepositoryIntegrationTests {
 
     @Test
     fun testSearchPagesByTitle() = runTest {
-        pageRepo.savePage(createTestPage(1, generateUuid(1), "Kotlin Guide"))
-        pageRepo.savePage(createTestPage(2, generateUuid(2), "Java Tutorial"))
-        pageRepo.savePage(createTestPage(3, generateUuid(3), "Python Programming"))
+        pageRepo.savePage(createTestPage(generateUuid(1), "Kotlin Guide"))
+        pageRepo.savePage(createTestPage(generateUuid(2), "Java Tutorial"))
+        pageRepo.savePage(createTestPage(generateUuid(3), "Python Programming"))
 
         val results = repository.searchPagesByTitle("kotlin").first()
         assertTrue(results.isSuccess)
@@ -117,14 +116,15 @@ class SearchRepositoryIntegrationTests {
 
     @Test
     fun testFindBlocksReferencing() = runTest {
-        pageRepo.savePage(createTestPage(1, generateUuid(100), "Page 1"))
+        val pageUuid = generateUuid(100)
+        pageRepo.savePage(createTestPage(pageUuid, "Page 1"))
         val targetBlockUuid = generateUuid(1)
         val refBlock1Uuid = generateUuid(2)
         val refBlock2Uuid = generateUuid(3)
 
-        blockRepo.saveBlock(createTestBlock(1, targetBlockUuid, 1, "Target content"))
-        blockRepo.saveBlock(createTestBlock(2, refBlock1Uuid, 1, "References target-block"))
-        blockRepo.saveBlock(createTestBlock(3, refBlock2Uuid, 1, "Also references target-block"))
+        blockRepo.saveBlock(createTestBlock(targetBlockUuid, pageUuid, "Target content", position = 1))
+        blockRepo.saveBlock(createTestBlock(refBlock1Uuid, pageUuid, "References target-block", position = 2))
+        blockRepo.saveBlock(createTestBlock(refBlock2Uuid, pageUuid, "Also references target-block", position = 3))
 
         refRepo.addReference(refBlock1Uuid, targetBlockUuid)
         refRepo.addReference(refBlock2Uuid, targetBlockUuid)
@@ -136,9 +136,10 @@ class SearchRepositoryIntegrationTests {
 
     @Test
     fun testSearchWithFilters() = runTest {
-        pageRepo.savePage(createTestPage(1, generateUuid(100), "Page 1"))
-        blockRepo.saveBlock(createTestBlock(1, generateUuid(1), 1, "Hello world", mapOf("tag" to "test")))
-        blockRepo.saveBlock(createTestBlock(2, generateUuid(2), 1, "Hello again", mapOf("tag" to "other")))
+        val pageUuid = generateUuid(100)
+        pageRepo.savePage(createTestPage(pageUuid, "Page 1"))
+        blockRepo.saveBlock(createTestBlock(generateUuid(1), pageUuid, "Hello world", mapOf("tag" to "test"), position = 1))
+        blockRepo.saveBlock(createTestBlock(generateUuid(2), pageUuid, "Hello again", mapOf("tag" to "other"), position = 2))
         
         val request = SearchRequest(
             query = "hello",

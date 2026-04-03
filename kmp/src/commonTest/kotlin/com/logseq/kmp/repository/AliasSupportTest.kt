@@ -26,7 +26,6 @@ class AliasSupportTest {
     fun `test resolve page by alias`() = runTest {
         val now = Clock.System.now()
         val page = Page(
-            id = 1L,
             uuid = "00000000-0000-0000-0000-000000000001",
             name = "Logseq",
             createdAt = now,
@@ -55,7 +54,6 @@ class AliasSupportTest {
     fun `test search pages by alias`() = runTest {
         val now = Clock.System.now()
         val page = Page(
-            id = 1L,
             uuid = "00000000-0000-0000-0000-000000000001",
             name = "Logseq",
             createdAt = now,

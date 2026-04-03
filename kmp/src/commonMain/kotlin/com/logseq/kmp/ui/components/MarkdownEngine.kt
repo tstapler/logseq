@@ -3,10 +3,12 @@ package com.logseq.kmp.ui.components
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 
 /**
  * Markdown patterns for parsing various markdown syntax elements
@@ -29,8 +31,102 @@ const val WIKI_LINK_TAG = "WIKI_LINK"
 const val BLOCK_REF_TAG = "BLOCK_REF"
 const val TAG_TAG = "TAG"
 
+private sealed class InlineToken {
+    data class Text(val content: String) : InlineToken()
+    data class Bold(val content: String) : InlineToken()
+    data class Italic(val content: String) : InlineToken()
+    data class Code(val content: String) : InlineToken()
+    data class Strike(val content: String) : InlineToken()
+    data class WikiLink(val title: String) : InlineToken()
+    data class BlockRef(val content: String, val uuid: String) : InlineToken()
+    data class Tag(val name: String) : InlineToken()
+    data class Url(val url: String) : InlineToken()
+    data class MdLink(val text: String, val url: String) : InlineToken()
+    data class Image(val alt: String, val url: String) : InlineToken()
+}
+
+private data class RawMatch(val start: Int, val end: Int, val token: InlineToken)
+
 /**
- * Parses markdown and applies proper styling and annotations
+ * Tokenizes markdown text into a list of inline tokens.
+ * Non-overlapping matches are selected greedily left-to-right.
+ */
+private fun tokenizeMarkdown(text: String, resolvedRefs: Map<String, String>): List<InlineToken> {
+    val matches = mutableListOf<RawMatch>()
+
+    MarkdownPatterns.imagePattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Image(m.groupValues[1], m.groupValues[2])))
+    }
+
+    MarkdownPatterns.linkPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.MdLink(m.groupValues[1], m.groupValues[2])))
+    }
+
+    MarkdownPatterns.wikiLinkPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.WikiLink(m.groupValues[1])))
+    }
+
+    MarkdownPatterns.blockRefPattern.findAll(text).forEach { m ->
+        val uuid = m.groupValues[1]
+        val content = resolvedRefs[uuid] ?: "((...))"
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.BlockRef(content, uuid)))
+    }
+
+    MarkdownPatterns.boldPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Bold(m.groupValues[2])))
+    }
+
+    MarkdownPatterns.italicPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Italic(m.groupValues[2])))
+    }
+
+    MarkdownPatterns.codePattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Code(m.groupValues[1])))
+    }
+
+    MarkdownPatterns.strikethroughPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Strike(m.groupValues[1])))
+    }
+
+    MarkdownPatterns.tagPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Tag(m.groupValues[1])))
+    }
+
+    MarkdownPatterns.urlPattern.findAll(text).forEach { m ->
+        matches.add(RawMatch(m.range.first, m.range.last + 1, InlineToken.Url(m.value)))
+    }
+
+    // Sort by start position; greedily select non-overlapping matches
+    matches.sortBy { it.start }
+    val selected = mutableListOf<RawMatch>()
+    var pos = 0
+    for (m in matches) {
+        if (m.start >= pos) {
+            selected.add(m)
+            pos = m.end
+        }
+    }
+
+    // Fill gaps between matches with plain text
+    val tokens = mutableListOf<InlineToken>()
+    var textPos = 0
+    for (m in selected) {
+        if (m.start > textPos) {
+            tokens.add(InlineToken.Text(text.substring(textPos, m.start)))
+        }
+        tokens.add(m.token)
+        textPos = m.end
+    }
+    if (textPos < text.length) {
+        tokens.add(InlineToken.Text(text.substring(textPos)))
+    }
+    return tokens
+}
+
+/**
+ * Parses markdown and applies proper styling and annotations.
+ * Markdown syntax markers (**, *, ~~, `) are stripped from the output text
+ * so that only the rendered style is visible in view mode.
  */
 fun parseMarkdownWithStyling(
     text: String,
@@ -38,175 +134,149 @@ fun parseMarkdownWithStyling(
     textColor: Color,
     resolvedRefs: Map<String, String> = emptyMap()
 ): AnnotatedString {
-    // 1. Pre-process text to resolve block refs (expand them)
-    val sb = StringBuilder()
-    var lastIndex = 0
-    val refMap = mutableMapOf<IntRange, String>() // Map range in SB to UUID (for styling)
-    
-    MarkdownPatterns.blockRefPattern.findAll(text).forEach { match ->
-        // Append text before match
-        sb.append(text.substring(lastIndex, match.range.first))
-        
-        val refUuid = match.groupValues[1]
-        val content = resolvedRefs[refUuid] ?: "((...))" // Show placeholder if not resolved
-        val start = sb.length
-        sb.append(content)
-        val end = sb.length
-        
-        refMap[start until end] = refUuid
-        lastIndex = match.range.last + 1
-    }
-    sb.append(text.substring(lastIndex))
-    val newText = sb.toString()
+    val tokens = tokenizeMarkdown(text, resolvedRefs)
 
-    // 2. Build AnnotatedString from newText
-    val builder = AnnotatedString.Builder(newText)
-    val textLength = newText.length
+    return buildAnnotatedString {
+        if (textColor != Color.Unspecified) {
+            pushStyle(SpanStyle(color = textColor))
+        }
 
-    // Apply base text color
-    if (textColor != Color.Unspecified) {
-        builder.addStyle(SpanStyle(color = textColor), 0, textLength)
-    }
-    
-    // Apply styling for Block Refs
-    refMap.forEach { (range, uuid) ->
-        builder.addStringAnnotation(BLOCK_REF_TAG, uuid, range.first, range.last + 1)
-        builder.addStyle(
-            SpanStyle(
-                color = linkColor,
-                textDecoration = TextDecoration.Underline,
-                fontStyle = FontStyle.Italic,
-                background = Color.Gray.copy(alpha = 0.05f)
-            ),
-            range.first, 
-            range.last + 1
-        )
-    }
+        tokens.forEach { token ->
+            when (token) {
+                is InlineToken.Text -> append(token.content)
 
-    // Helper for safe bounds
+                is InlineToken.Bold ->
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(token.content) }
+
+                is InlineToken.Italic ->
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(token.content) }
+
+                is InlineToken.Code ->
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color.Gray.copy(alpha = 0.1f))) {
+                        append(token.content)
+                    }
+
+                is InlineToken.Strike ->
+                    withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) { append(token.content) }
+
+                is InlineToken.WikiLink -> {
+                    val start = length
+                    withStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.Medium)) {
+                        append("[[${token.title}]]")
+                    }
+                    addStringAnnotation(WIKI_LINK_TAG, token.title, start, length)
+                }
+
+                is InlineToken.BlockRef -> {
+                    val start = length
+                    withStyle(SpanStyle(
+                        color = linkColor,
+                        textDecoration = TextDecoration.Underline,
+                        fontStyle = FontStyle.Italic,
+                        background = Color.Gray.copy(alpha = 0.05f)
+                    )) {
+                        append(token.content)
+                    }
+                    addStringAnnotation(BLOCK_REF_TAG, token.uuid, start, length)
+                }
+
+                is InlineToken.Tag -> {
+                    val start = length
+                    withStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.Medium)) {
+                        append("#${token.name}")
+                    }
+                    addStringAnnotation(TAG_TAG, token.name, start, length)
+                }
+
+                is InlineToken.Url -> {
+                    val start = length
+                    withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+                        append(token.url)
+                    }
+                    addStringAnnotation("url", token.url, start, length)
+                }
+
+                is InlineToken.MdLink -> {
+                    val start = length
+                    withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+                        append(token.text)
+                    }
+                    addStringAnnotation("link", token.url, start, length)
+                }
+
+                is InlineToken.Image -> {
+                    val start = length
+                    withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+                        append(token.alt.ifEmpty { token.url })
+                    }
+                    addStringAnnotation("image", token.url, start, length)
+                }
+            }
+        }
+
+        if (textColor != Color.Unspecified) {
+            pop()
+        }
+    }
+}
+
+/**
+ * Applies markdown styling to an existing AnnotatedString.Builder for edit mode.
+ * In edit mode, markers remain visible but are styled to give visual hints.
+ */
+fun applyMarkdownStylingForEditor(
+    text: String,
+    builder: AnnotatedString.Builder,
+    linkColor: Color
+) {
+    val textLength = text.length
+
     fun safeRange(start: Int, end: Int): Pair<Int, Int> {
         val safeStart = start.coerceIn(0, textLength)
         val safeEnd = end.coerceIn(safeStart, textLength)
         return safeStart to safeEnd
     }
 
-    // Apply styling for images
-    MarkdownPatterns.imagePattern.findAll(newText).forEach { match ->
-        val imageUrl = match.groupValues[2]
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStringAnnotation("image", imageUrl, safeStart, safeEnd)
-            builder.addStyle(
-                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
-                safeStart, safeEnd
-            )
-        }
+    MarkdownPatterns.boldPattern.findAll(text).forEach { match ->
+        val (s, e) = safeRange(match.range.first, match.range.last + 1)
+        if (s < e) builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold), s, e)
     }
 
-    // Apply styling for links
-    val markdownLinkRanges = mutableListOf<IntRange>()
-    MarkdownPatterns.linkPattern.findAll(newText).forEach { match ->
-        val linkUrl = match.groupValues[2]
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            markdownLinkRanges.add(match.range)
-            builder.addStringAnnotation("link", linkUrl, safeStart, safeEnd)
-            builder.addStyle(
-                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
-                safeStart, safeEnd
-            )
-        }
+    MarkdownPatterns.italicPattern.findAll(text).forEach { match ->
+        val (s, e) = safeRange(match.range.first, match.range.last + 1)
+        if (s < e) builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), s, e)
     }
 
-    // Apply styling for plain URLs
-    MarkdownPatterns.urlPattern.findAll(newText).forEach { match ->
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        val isInside = markdownLinkRanges.any { it.contains(safeStart) }
-        if (!isInside && safeStart < safeEnd) {
-            builder.addStringAnnotation("url", match.value, safeStart, safeEnd)
-            builder.addStyle(
-                SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
-                safeStart, safeEnd
-            )
-        }
+    MarkdownPatterns.codePattern.findAll(text).forEach { match ->
+        val (s, e) = safeRange(match.range.first, match.range.last + 1)
+        if (s < e) builder.addStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color.Gray.copy(alpha = 0.1f)), s, e)
     }
-    
-    // Apply styling for code
-    MarkdownPatterns.codePattern.findAll(newText).forEach { match ->
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStyle(
-                SpanStyle(fontFamily = FontFamily.Monospace, background = Color.Gray.copy(alpha = 0.1f)),
-                safeStart, safeEnd
-            )
-        }
+
+    MarkdownPatterns.strikethroughPattern.findAll(text).forEach { match ->
+        val (s, e) = safeRange(match.range.first, match.range.last + 1)
+        if (s < e) builder.addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), s, e)
     }
-    
-    // Apply styling for strikethrough
-    MarkdownPatterns.strikethroughPattern.findAll(newText).forEach { match ->
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStyle(
-                SpanStyle(textDecoration = TextDecoration.LineThrough),
-                safeStart, safeEnd
-            )
-        }
-    }
-    
-    // Apply styling for bold
-    MarkdownPatterns.boldPattern.findAll(newText).forEach { match ->
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStyle(
-                SpanStyle(fontWeight = FontWeight.Bold),
-                safeStart, safeEnd
-            )
-        }
-    }
-    
-    // Apply styling for italic
-    MarkdownPatterns.italicPattern.findAll(newText).forEach { match ->
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStyle(
-                SpanStyle(fontStyle = FontStyle.Italic),
-                safeStart, safeEnd
-            )
-        }
-    }
-    
-    // Apply styling for wiki links
-    MarkdownPatterns.wikiLinkPattern.findAll(newText).forEach { match ->
+
+    MarkdownPatterns.wikiLinkPattern.findAll(text).forEach { match ->
         val linkText = match.groupValues[1]
-        val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-        if (safeStart < safeEnd) {
-            builder.addStringAnnotation(WIKI_LINK_TAG, linkText, safeStart, safeEnd)
-            builder.addStyle(
-                SpanStyle(color = linkColor, fontWeight = FontWeight.Medium),
-                safeStart, safeEnd
-            )
+        val (s, e) = safeRange(match.range.first, match.range.last + 1)
+        if (s < e) {
+            builder.addStringAnnotation(WIKI_LINK_TAG, linkText, s, e)
+            builder.addStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.Medium), s, e)
         }
     }
 
-    // Apply styling for tags
-    MarkdownPatterns.tagPattern.findAll(newText).forEach { match ->
+    MarkdownPatterns.tagPattern.findAll(text).forEach { match ->
         val tagName = match.groupValues[1]
-        // Skip if inside a wiki link range (simple collision check)
-        val isInsideLink = MarkdownPatterns.wikiLinkPattern.findAll(newText).any { linkMatch ->
-            match.range.first >= linkMatch.range.first && match.range.last <= linkMatch.range.last
+        val isInsideLink = MarkdownPatterns.wikiLinkPattern.findAll(text).any { lm ->
+            match.range.first >= lm.range.first && match.range.last <= lm.range.last
         }
-        
         if (!isInsideLink) {
-            val (safeStart, safeEnd) = safeRange(match.range.first, match.range.last + 1)
-            if (safeStart < safeEnd) {
-                builder.addStringAnnotation(TAG_TAG, tagName, safeStart, safeEnd)
-                builder.addStyle(
-                    SpanStyle(color = linkColor, fontWeight = FontWeight.Medium),
-                    safeStart, safeEnd
-                )
+            val (s, e) = safeRange(match.range.first, match.range.last + 1)
+            if (s < e) {
+                builder.addStringAnnotation(TAG_TAG, tagName, s, e)
+                builder.addStyle(SpanStyle(color = linkColor, fontWeight = FontWeight.Medium), s, e)
             }
         }
     }
-
-    return builder.toAnnotatedString()
 }

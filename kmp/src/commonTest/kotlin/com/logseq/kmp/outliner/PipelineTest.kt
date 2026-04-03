@@ -13,9 +13,8 @@ class PipelineTest {
     @Test
     fun testExtractReferences() {
         val block = Block(
-            id = 1L,
             uuid = "00000000-0000-0000-0000-000000000001",
-            pageId = 1L,
+            pageUuid = "page-1",
             content = "This is a [[page]] with a ((00000000-0000-0000-0000-000000000002)) reference and a #tag",
             position = 0,
             createdAt = Clock.System.now(),
@@ -37,9 +36,8 @@ class PipelineTest {
     @Test
     fun testProcessBlock() {
         val block = Block(
-            id = 1L,
             uuid = "00000000-0000-0000-0000-000000000001",
-            pageId = 1L,
+            pageUuid = "page-1",
             content = """
                 title:: My Block
                 tags:: tag1, tag2
@@ -61,9 +59,8 @@ class PipelineTest {
     @Test
     fun testReferenceExtractionWithProperties() {
         val block = Block(
-            id = 1L,
             uuid = "00000000-0000-0000-0000-000000000001",
-            pageId = 1L,
+            pageUuid = "page-1",
             content = """
                 tags:: [[work]], #urgent
                 

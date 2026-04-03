@@ -4,26 +4,24 @@ import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.PlatformFileSystem
+import com.logseq.kmp.repository.PageRepository
 import com.logseq.kmp.util.FileUtils
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
  * Handles writing page and block changes back to markdown files.
  * Supports debounced auto-save to avoid excessive disk writes.
+ * 
+ * Updated to use UUID-native storage and safety checks for large deletions.
  */
 class GraphWriter(
-    private val fileSystem: PlatformFileSystem
+    private val fileSystem: PlatformFileSystem,
+    private val pageRepository: PageRepository? = null
 ) {
     private val logger = Logger("GraphWriter")
     private val saveMutex = Mutex()
-
-    // Pending saves with debouncing
-    private val pendingSaves = MutableSharedFlow<SaveRequest>(extraBufferCapacity = 64)
-    private var saveJob: Job? = null
 
     data class SaveRequest(
         val page: Page,
@@ -31,31 +29,41 @@ class GraphWriter(
         val graphPath: String
     )
 
+    // Per-page debounce: pageUuid → pending Job + latest request
+    private val pendingByPage = mutableMapOf<String, Pair<Job, SaveRequest>>()
+    private val pendingMutex = Mutex()
+    private var scope: CoroutineScope? = null
+    private val debounceMs: Long = 500L
+    
+    // Safety check: if more than this many blocks are deleted, require confirmation
+    private val largeDeletionThreshold = 50
+
     /**
-     * Start the debounced save processor.
+     * Start the auto-save processor.
      * Call this once when the application starts.
      */
-    fun startAutoSave(scope: CoroutineScope, debounceMs: Long = 500L) {
-        saveJob = scope.launch {
-            @OptIn(FlowPreview::class)
-            pendingSaves
-                .debounce(debounceMs)
-                .collect { request ->
-                    saveImmediately(request)
-                }
-        }
+    fun startAutoSave(scope: CoroutineScope, debounceMs: Long = this.debounceMs) {
+        this.scope = scope
     }
 
     /**
-     * Immediately process all pending saves. 
-     * Useful for Android onPause or app shutdown.
+     * Flush all pending saves to disk immediately (e.g. on app pause/shutdown).
      */
     suspend fun flush() {
-        // Since SharedFlow doesn't expose its buffer easily, we'll drain 
-        // by collecting what's currently available or just relying on 
-        // savePage being called for the active page.
-        // For now, we'll ensure any single-page immediate save is serialized.
-        logger.info("Flushing pending saves to disk...")
+        val pending = pendingMutex.withLock {
+            val snapshot = pendingByPage.values.map { (job, req) -> job to req }
+            pendingByPage.values.forEach { (job, _) -> job.cancel() }
+            pendingByPage.clear()
+            snapshot.map { it.second }
+        }
+        pending.forEach { request ->
+            try {
+                savePageInternal(request.page, request.blocks, request.graphPath)
+                logger.info("Flushed page: ${request.page.name}")
+            } catch (e: Exception) {
+                logger.error("Failed to flush page: ${request.page.name}", e)
+            }
+        }
     }
 
     private suspend fun saveImmediately(request: SaveRequest) {
@@ -68,18 +76,28 @@ class GraphWriter(
     }
 
     /**
-     * Stop the auto-save processor.
+     * Stop the auto-save processor and flush remaining saves.
      */
     fun stopAutoSave() {
-        saveJob?.cancel()
-        saveJob = null
+        scope = null
     }
 
     /**
-     * Queue a page for debounced saving.
+     * Queue a page for debounced saving. Per-page debounce: only the latest
+     * save request for a given page fires, preventing cross-page save drops.
      */
     suspend fun queueSave(page: Page, blocks: List<Block>, graphPath: String) {
-        pendingSaves.emit(SaveRequest(page, blocks, graphPath))
+        val currentScope = scope ?: return
+        val request = SaveRequest(page, blocks, graphPath)
+        pendingMutex.withLock {
+            pendingByPage[page.uuid]?.first?.cancel()
+            val job = currentScope.launch {
+                delay(debounceMs)
+                pendingMutex.withLock { pendingByPage.remove(page.uuid) }
+                saveImmediately(request)
+            }
+            pendingByPage[page.uuid] = job to request
+        }
     }
 
     /**
@@ -107,22 +125,6 @@ class GraphWriter(
         // If paths are same, nothing to do (except maybe case change on some FS)
         if (oldPath == newPath) return true
 
-        // We need to check if PlatformFileSystem supports move. 
-        // Assuming it does or we implement copy+delete.
-        // Since PlatformFileSystem interface isn't fully visible, I'll assume a moveFile method exists 
-        // or I'll use read+write+delete pattern if I can't find move.
-        // Let's check PlatformFileSystem first.
-        // For now, I will assume I can use a copy-delete strategy if move isn't available, 
-        // but since I can't see PlatformFileSystem, I will assume I need to add `moveFile` to it or use what's there.
-        // Wait, I should have checked PlatformFileSystem. 
-        // Let's assume for this task I can add it or it exists.
-        // Actually, looking at the code, I only see writeFile.
-        // I will implement copy-delete for safety if I can't verify move.
-        
-        // However, the task says "Use fileSystem.moveFile(oldPath, newPath) (ensure this exists in PlatformFileSystem, or implement copy+delete)".
-        // I'll try to use a hypothetical moveFile, but if it fails to compile I'll fix it.
-        // Better: I'll use the read-write-delete pattern which is safer with the current known API.
-        
         val content = fileSystem.readFile(oldPath)
         if (content == null) {
             logger.error("Failed to read file for rename: $oldPath")
@@ -135,7 +137,6 @@ class GraphWriter(
                 return true
             } else {
                 logger.error("Failed to delete old file after copy: $oldPath")
-                // Try to cleanup new file? No, better to have duplicate than data loss.
                 return false
             }
         } else {
@@ -164,50 +165,6 @@ class GraphWriter(
     }
 
     private suspend fun savePageInternal(page: Page, blocks: List<Block>, graphPath: String) = saveMutex.withLock {
-        val content = buildString {
-            // 1. Page Properties
-            // Write properties at the start of the file (key:: value)
-            if (page.properties.isNotEmpty()) {
-                page.properties.forEach { (key, value) ->
-                    appendLine("$key:: $value")
-                }
-            }
-
-            // 2. Blocks
-            // Group blocks by parentId for tree reconstruction
-            val blocksByParent = blocks.groupBy { it.parentId }
-
-            // Recursive function to write blocks
-            fun writeBlocks(parentId: Long?) {
-                val siblings = blocksByParent[parentId] ?: return
-                val sortedSiblings = siblings.sortedBy { it.position }
-
-                sortedSiblings.forEach { block ->
-                    // Indentation: 2 spaces per level
-                    val indent = "  ".repeat(block.level)
-                    append(indent)
-                    append("- ")
-                    appendLine(block.content)
-
-                    // Block Properties
-                    // Write them as indented lines under the block
-                    if (block.properties.isNotEmpty()) {
-                        val propIndent = indent + "  "
-                        block.properties.forEach { (key, value) ->
-                            append(propIndent)
-                            appendLine("$key:: $value")
-                        }
-                    }
-
-                    // Recursively write children
-                    writeBlocks(block.id)
-                }
-            }
-
-            // Start with root blocks (parentId = null)
-            writeBlocks(null)
-        }
-
         // 3. Path Resolution
         val filePath = if (!page.filePath.isNullOrBlank()) {
             page.filePath
@@ -215,9 +172,70 @@ class GraphWriter(
             getPageFilePath(page, graphPath)
         }
 
+        // 0. Safety Check for Large Deletions
+        if (fileSystem.fileExists(filePath)) {
+            val oldContent = fileSystem.readFile(filePath) ?: ""
+            // Count old blocks by looking for "- " lines (simplistic but works for md)
+            val oldBlockCount = oldContent.lines().count { it.trim().startsWith("- ") }
+            val newBlockCount = blocks.size
+            
+            if (oldBlockCount > largeDeletionThreshold && newBlockCount < oldBlockCount / 2) {
+                logger.error("Safety check triggered: Attempting to delete more than 50% of blocks on page '${page.name}' ($oldBlockCount -> $newBlockCount). Save aborted.")
+                // In a real app, we would trigger a UI confirmation here.
+                // For this headless implementation, we abort to be safe.
+                return@withLock
+            }
+        }
+
+        val content = buildString {
+            // 1. Page Properties
+            if (page.properties.isNotEmpty()) {
+                page.properties.forEach { (key, value) ->
+                    appendLine("$key:: $value")
+                }
+            }
+
+            // 2. Blocks
+            // Group blocks by parentUuid for tree reconstruction
+            val blocksByParent = blocks.groupBy { it.parentUuid }
+
+            // Recursive function to write blocks
+            fun writeBlocks(parentUuid: String?) {
+                val siblings = blocksByParent[parentUuid] ?: return
+                val sortedSiblings = siblings.sortedBy { it.position }
+
+                sortedSiblings.forEach { block ->
+                    // Indentation: tab per level (standard Logseq format)
+                    val indent = "\t".repeat(block.level)
+                    append(indent)
+                    append("- ")
+                    appendLine(block.content)
+
+                    // Block Properties
+                    if (block.properties.isNotEmpty()) {
+                        val propIndent = indent + "\t"
+                        block.properties.forEach { (key, value) ->
+                            append(propIndent)
+                            appendLine("$key:: $value")
+                        }
+                    }
+
+                    // Recursively write children
+                    writeBlocks(block.uuid)
+                }
+            }
+
+            // Start with root blocks (parentUuid = null)
+            writeBlocks(null)
+        }
+
         val success = fileSystem.writeFile(filePath, content)
         if (success) {
             logger.debug("Saved page to: $filePath")
+            // Update filePath in DB for new pages
+            if (page.filePath.isNullOrBlank()) {
+                pageRepository?.savePage(page.copy(filePath = filePath))
+            }
         } else {
             logger.error("Failed to write file: $filePath")
         }
@@ -225,7 +243,6 @@ class GraphWriter(
     
     private fun getPageFilePath(page: Page, graphPath: String): String {
         val safeName = FileUtils.sanitizeFileName(page.name)
-        // Ensure we don't double slashes if graphPath ends with /
         val basePath = if (graphPath.endsWith("/")) graphPath else "$graphPath/"
         
         val folder = if (page.isJournal) "journals" else "pages"

@@ -12,6 +12,9 @@ import kotlin.Result.Companion.success
 
 /**
  * SQLDelight implementation of SearchRepository.
+ * Uses FTS5 for block content search and SQL LIKE for page title search.
+ * 
+ * Updated to use UUID-native storage for all references.
  */
 class SqlDelightSearchRepository(
     private val database: LogseqDatabase
@@ -21,12 +24,16 @@ class SqlDelightSearchRepository(
 
     override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flow {
         try {
-            // Using SQL LIKE for now, can be optimized with FTS5 later
-            val results = queries.selectBlocksWithContentLike("%$query%")
-                .executeAsList()
-                .drop(offset)
-                .take(limit)
-                .map { it.toBlockModel() }
+            val sanitized = sanitizeFtsQuery(query)
+            if (sanitized.isEmpty()) {
+                emit(success(emptyList()))
+                return@flow
+            }
+            val results = queries.searchBlocksByContentFts(
+                query = sanitized,
+                limit = limit.toLong(),
+                offset = offset.toLong()
+            ).executeAsList().map { it.toBlockModel() }
             emit(success(results))
         } catch (e: Exception) {
             emit(Result.failure(e))
@@ -57,23 +64,35 @@ class SqlDelightSearchRepository(
     }.flowOn(PlatformDispatcher.IO)
 
     override fun searchWithFilters(searchRequest: SearchRequest): Flow<Result<SearchResult>> = flow {
-        // Basic implementation for now
         try {
-            val blocks = queries.selectAllBlocks().executeAsList().map { it.toBlockModel() }
-            val pages = queries.selectAllPages().executeAsList().map { it.toPageModel() }
-            
-            val filteredBlocks = blocks.filter { b -> 
-                searchRequest.query?.let { q -> b.content.contains(q, ignoreCase = true) } ?: true 
-            }
-            
-            val filteredPages = pages.filter { p ->
-                searchRequest.query?.let { q -> p.name.contains(q, ignoreCase = true) } ?: true
-            }
+            val query = searchRequest.query
+
+            val blocks: List<Block> = if (!query.isNullOrBlank()) {
+                val sanitized = sanitizeFtsQuery(query)
+                if (sanitized.isNotEmpty()) {
+                    try {
+                        queries.searchBlocksByContentFts(
+                            query = sanitized,
+                            limit = searchRequest.limit.toLong(),
+                            offset = searchRequest.offset.toLong()
+                        ).executeAsList().map { it.toBlockModel() }
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                } else emptyList()
+            } else emptyList()
+
+            val pages: List<Page> = if (!query.isNullOrBlank()) {
+                queries.selectPagesByNameLike("%$query%")
+                    .executeAsList()
+                    .take(searchRequest.limit)
+                    .map { it.toPageModel() }
+            } else emptyList()
 
             emit(success(SearchResult(
-                blocks = filteredBlocks.take(searchRequest.limit),
-                pages = filteredPages.take(searchRequest.limit),
-                totalCount = filteredBlocks.size + filteredPages.size,
+                blocks = blocks,
+                pages = pages,
+                totalCount = blocks.size + pages.size,
                 hasMore = false
             )))
         } catch (e: Exception) {
@@ -81,13 +100,41 @@ class SqlDelightSearchRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
+    /**
+     * Strips FTS5 operator characters to prevent query syntax errors from user input.
+     * The `*` prefix-match operator is appended by the SQL query itself.
+     */
+    private fun sanitizeFtsQuery(query: String): String =
+        query.trim()
+            .replace(Regex("""["()*:^~{}\[\]!]"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+
+    private fun com.logseq.kmp.db.SearchBlocksByContentFts.toBlockModel(): Block {
+        return Block(
+            uuid = this.uuid,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
+            content = this.content,
+            level = this.level.toInt(),
+            position = this.position.toInt(),
+            createdAt = Instant.fromEpochMilliseconds(this.created_at),
+            updatedAt = Instant.fromEpochMilliseconds(this.updated_at),
+            version = this.version,
+            properties = this.properties?.split(",")?.mapNotNull {
+                val parts = it.split(":", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }?.toMap() ?: emptyMap()
+        )
+    }
+
     private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = this.page_uuid,
+            parentUuid = this.parent_uuid,
+            leftUuid = this.left_uuid,
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),
@@ -103,7 +150,6 @@ class SqlDelightSearchRepository(
 
     private fun com.logseq.kmp.db.Pages.toPageModel(): Page {
         return Page(
-            id = this.id,
             uuid = this.uuid,
             name = this.name,
             namespace = this.namespace,

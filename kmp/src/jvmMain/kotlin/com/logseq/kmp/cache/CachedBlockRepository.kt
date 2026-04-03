@@ -3,6 +3,7 @@ package com.logseq.kmp.cache
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.BlockWithDepth
+import com.logseq.kmp.repository.DuplicateGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.flowOn
 /**
  * Cached wrapper around BlockRepository.
  * Provides progressive loading with LRU, TTL, and prefetch.
+ * Updated to use UUID-native storage.
  */
 class CachedBlockRepository(
     private val delegate: BlockRepository,
@@ -37,13 +39,11 @@ class CachedBlockRepository(
     }
 
     override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> {
-        // For siblings, we use the delegate
-        // Could cache this as well if needed
         return delegate.getBlockSiblings(blockUuid)
     }
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> {
-        return delegate.getBlocksForPage(pageId)
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> {
+        return delegate.getBlocksForPage(pageUuid)
     }
 
     override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
@@ -51,8 +51,6 @@ class CachedBlockRepository(
     }
 
     override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> {
-        // Naive implementation looping saveBlock to avoid changing BlockCache interface for now
-        // In a real implementation, BlockCache should also support batch operations
         return try {
             blocks.forEach { cache.saveBlock(it) }
             kotlin.Result.success(Unit)
@@ -120,40 +118,29 @@ class CachedBlockRepository(
         return delegate.getUnlinkedReferences(pageName)
     }
 
-    /**
-     * Get cache metrics.
-     */
     fun getCacheMetrics(): CacheMetrics = cache.getMetrics()
 
-    /**
-     * Invalidate cache entry.
-     */
     fun invalidateBlock(uuid: String) {
         cache.invalidateBlock(uuid)
     }
 
-    /**
-     * Clear all caches.
-     */
     fun clearCache() {
         cache.clear()
     }
 
-    /**
-     * Start cache background processes.
-     */
     fun start() {
         cache.start()
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
-        return delegate.deleteBlocksForPage(pageId).also {
-            // cache.invalidatePage(pageId)
-        }
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> {
+        return delegate.deleteBlocksForPage(pageUuid)
     }
 
     override suspend fun clear() {
         delegate.clear()
         cache.clear()
     }
+
+    override fun findDuplicateBlocks(limit: Int): Flow<Result<List<DuplicateGroup>>> =
+        delegate.findDuplicateBlocks(limit)
 }

@@ -13,6 +13,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
+/**
+ * Integration test to reproduce ordering issues.
+ * Updated to use UUID-native storage.
+ */
 class PipelineReproductionTest {
 
     private val fileSystem = object : FileSystem {
@@ -21,7 +25,6 @@ class PipelineReproductionTest {
         override fun expandTilde(path: String) = path
         override fun readFile(path: String) = files[path]
         override fun writeFile(path: String, content: String) = true
-        // Fix: listFiles should return filenames only, filtered by directory
         override fun listFiles(path: String) = files.keys
             .filter { it.startsWith(path) && it != path }
             .map { it.substringAfterLast("/") }
@@ -57,9 +60,11 @@ class PipelineReproductionTest {
         
         graphLoader.loadGraph("/graph") { }
         
-        val pages = pageRepository.getAllPages().first().getOrNull()!!
+        val pagesResult = pageRepository.getAllPages().first()
+        val pages = pagesResult.getOrNull()!!
         val page = pages[0]
-        val blocks = blockRepository.getBlocksForPage(page.id).first().getOrNull()!!
+        val blocksResult = blockRepository.getBlocksForPage(page.uuid).first()
+        val blocks = blocksResult.getOrNull()!!
         
         println("Loaded ${blocks.size} blocks from repository")
         
@@ -69,11 +74,11 @@ class PipelineReproductionTest {
         
         val root = blocks.find { it.content.startsWith("Till Listening") }!!
         
-        println("Root ID: ${root.id}")
-        println("Rediscovering ID: ${rediscovering.id}, Parent ID: ${rediscovering.parentId}")
+        println("Root UUID: ${root.uuid}")
+        println("Rediscovering UUID: ${rediscovering.uuid}, Parent UUID: ${rediscovering.parentUuid}")
         
         // Verify parentage in DB
-        assertEquals(root.id, rediscovering.parentId, "Rediscovering Paper should be child of Root in DB")
+        assertEquals(root.uuid, rediscovering.parentUuid, "Rediscovering Paper should be child of Root in DB")
         
         // Verify Sorting
         val sorted = BlockSorter.sort(blocks)
@@ -81,7 +86,7 @@ class PipelineReproductionTest {
         println("Sorted Order:")
         sorted.forEach { 
             val indent = "  ".repeat(it.level)
-            println("$indent- ${it.content} (ID: ${it.id}, Parent: ${it.parentId})")
+            println("$indent- ${it.content} (UUID: ${it.uuid}, Parent: ${it.parentUuid})")
         }
         
         // Verify position in sorted list
@@ -113,15 +118,15 @@ class PipelineReproductionTest {
         val movableIndex = sorted.indexOf(movable)
         
         assert(bathingIndex > rediscoveringIndex)
-        assertEquals(rediscovering.id, bathing.parentId, "Bathing should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, bathing.parentUuid, "Bathing should be child of Rediscovering")
         assertEquals(2, bathing.level, "Bathing should be level 2")
         
         assert(ironGallIndex > bathingIndex)
-        assertEquals(rediscovering.id, ironGall.parentId, "Iron Gall should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, ironGall.parentUuid, "Iron Gall should be child of Rediscovering")
         assertEquals(2, ironGall.level, "Iron Gall should be level 2")
         
         assert(movableIndex > ironGallIndex)
-        assertEquals(rediscovering.id, movable.parentId, "Movable should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, movable.parentUuid, "Movable should be child of Rediscovering")
         assertEquals(2, movable.level, "Movable should be level 2")
     }
 }

@@ -3,9 +3,6 @@ package com.logseq.kmp.repository
 import com.logseq.kmp.db.DriverFactory
 import com.logseq.kmp.db.LogseqDatabase
 import com.logseq.kmp.db.createDatabase
-import com.logseq.kmp.platform.EncryptionManager
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 
 /**
  * Factory implementation for creating repository instances.
@@ -22,8 +19,8 @@ class RepositoryFactoryImpl(
 
     private val instances = mutableMapOf<String, Any>()
 
-    override fun createBlockRepository(backend: GraphBackend, encryptionManager: EncryptionManager?): BlockRepository {
-        val repo = when (backend) {
+    override fun createBlockRepository(backend: GraphBackend): BlockRepository {
+        return when (backend) {
             GraphBackend.IN_MEMORY -> getOrCreateInstance("block_in_memory") {
                 InMemoryBlockRepository()
             }
@@ -35,16 +32,10 @@ class RepositoryFactoryImpl(
             }
             else -> throw NotImplementedError("Backend $backend not implemented")
         }
-        
-        return if (encryptionManager != null) {
-            EncryptedBlockRepository(repo, encryptionManager, "default")
-        } else {
-            repo
-        }
     }
 
-    override fun createPageRepository(backend: GraphBackend, encryptionManager: EncryptionManager?): PageRepository {
-        val repo = when (backend) {
+    override fun createPageRepository(backend: GraphBackend): PageRepository {
+        return when (backend) {
             GraphBackend.IN_MEMORY -> getOrCreateInstance("page_in_memory") {
                 InMemoryPageRepository()
             }
@@ -56,16 +47,10 @@ class RepositoryFactoryImpl(
             }
             else -> throw NotImplementedError("Backend $backend not implemented")
         }
-
-        return if (encryptionManager != null) {
-            EncryptedPageRepository(repo, encryptionManager, "default")
-        } else {
-            repo
-        }
     }
 
-    override fun createPropertyRepository(backend: GraphBackend, encryptionManager: EncryptionManager?): PropertyRepository {
-        val repo = when (backend) {
+    override fun createPropertyRepository(backend: GraphBackend): PropertyRepository {
+        return when (backend) {
             GraphBackend.IN_MEMORY -> getOrCreateInstance("property_in_memory") {
                 InMemoryPropertyRepository()
             }
@@ -76,12 +61,6 @@ class RepositoryFactoryImpl(
                 SqlDelightPropertyRepository(database)
             }
             else -> throw NotImplementedError("Backend $backend not implemented")
-        }
-
-        return if (encryptionManager != null) {
-            EncryptedPropertyRepository(repo, encryptionManager, "default")
-        } else {
-            repo
         }
     }
 
@@ -140,16 +119,10 @@ class RepositoryFactoryImpl(
     }
 }
 
-data class RepositorySet(
-    val blockRepository: BlockRepository,
-    val pageRepository: PageRepository,
-    val propertyRepository: PropertyRepository,
-    val referenceRepository: ReferenceRepository,
-    val searchRepository: SearchRepository
-)
-
 /**
  * Global access to repositories.
+ * 
+ * Note: For multi-graph support, use GraphManager instead.
  */
 object Repositories {
     private lateinit var factory: RepositoryFactoryImpl

@@ -28,10 +28,10 @@ class GraphWriterTest {
             
             try {
                 // Create a page
+                val pageUuid = "00000000-0000-0000-0000-000000000001"
                 val page = Page(
-                    id = 1,
-                    uuid = "00000000-0000-0000-0000-000000000001", // Valid UUID
-                    name = "TestPage", // No spaces to be safe with validation
+                    uuid = pageUuid,
+                    name = "TestPage",
                     createdAt = now,
                     updatedAt = now,
                     journalDate = null,
@@ -44,53 +44,51 @@ class GraphWriterTest {
                 // B (pos 1)
                 //   B1 (pos 0, parent B)
                 
+                val blockAUuid = "00000000-0000-0000-0000-000000000010"
                 val blockA = Block(
-                    id = 10,
-                    uuid = "00000000-0000-0000-0000-000000000010",
-                    pageId = 1,
+                    uuid = blockAUuid,
+                    pageUuid = pageUuid,
                     content = "Block A",
                     level = 0,
-                    position = 0, // Sibling index 0
-                    parentId = null,
+                    position = 0,
+                    parentUuid = null,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
                 val blockA1 = Block(
-                    id = 11,
                     uuid = "00000000-0000-0000-0000-000000000011",
-                    pageId = 1,
+                    pageUuid = pageUuid,
                     content = "Block A1",
                     level = 1,
-                    position = 0, // Sibling index 0 (under A)
-                    parentId = 10,
+                    position = 0,
+                    parentUuid = blockAUuid,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
+                val blockBUuid = "00000000-0000-0000-0000-000000000012"
                 val blockB = Block(
-                    id = 12,
-                    uuid = "00000000-0000-0000-0000-000000000012",
-                    pageId = 1,
+                    uuid = blockBUuid,
+                    pageUuid = pageUuid,
                     content = "Block B",
                     level = 0,
-                    position = 1, // Sibling index 1
-                    parentId = null,
+                    position = 1,
+                    parentUuid = null,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
                 val blockB1 = Block(
-                    id = 13,
                     uuid = "00000000-0000-0000-0000-000000000013",
-                    pageId = 1,
+                    pageUuid = pageUuid,
                     content = "Block B1",
                     level = 1,
-                    position = 0, // Sibling index 0 (under B)
-                    parentId = 12,
+                    position = 0,
+                    parentUuid = blockBUuid,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
@@ -107,23 +105,8 @@ class GraphWriterTest {
                 
                 println("Saved content:\n$content")
                 
-                // Expected content:
-                // - Block A
-                //   - Block A1
-                // - Block B
-                //   - Block B1
-                
-                val expected = """
-                - Block A
-                  - Block A1
-                - Block B
-                  - Block B1
-                """.trimIndent()
-                
-                // We assert that B follows A1 (with B having less indentation)
-                // And B1 follows B
-                
-                assertTrue(content!!.contains("- Block B\n  - Block B1"), "Block B1 should be nested under Block B. Actual:\n$content")
+                // Expected content (using tabs for indentation)
+                assertTrue(content!!.contains("- Block B\n\t- Block B1"), "Block B1 should be nested under Block B. Actual:\n$content")
                 
             } finally {
                 tempDir.deleteRecursively()

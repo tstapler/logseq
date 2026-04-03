@@ -15,7 +15,7 @@ data class PluginMetadata(
     val updatedAt: Instant? = null
 ) {
     init {
-        Validation.validateId(id)
+        require(id >= 0) { "ID must be non-negative" }
         Validation.validateName(pluginId)
         require(entityType.isNotBlank()) { "Entity type cannot be blank" }
         require(entityUuid.isNotBlank()) { "Entity UUID cannot be blank" }
