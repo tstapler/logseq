@@ -14,10 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.logseq.kmp.editor.*
 import com.logseq.kmp.editor.state.EditorState
+import com.logseq.kmp.editor.state.EditorConfig
 import com.logseq.kmp.editor.blocks.IBlockOperations
 import com.logseq.kmp.editor.text.ITextOperations
 import com.logseq.kmp.editor.text.TextRange
-import com.logseq.kmp.editor.components.RichTextEditor
 import com.logseq.kmp.model.Block
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -134,28 +134,23 @@ private fun PerformanceOptimizedBlockEditor(
     var lastChangeTime by remember { mutableStateOf(0L) }
     val changeDebounceMs = remember { 200L }
     
+    // Get editor state (we need a placeholder for the new signature)
+    val editorState = remember { EditorState(textOperations = textOperations) }
+    val editorConfig = remember { EditorConfig() }
+    
     // Always render the editor - content sync handled by RichTextEditor internally
     RichTextEditor(
-        block = block,
+        blockId = block.uuid,
+        editorState = editorState,
         textOperations = textOperations,
+        editorConfig = editorConfig,
+        onEditorStateChange = { },
         modifier = modifier,
+        onTriggerDetected = { _, _ -> },
+        placeholder = { },
+        onTextLayout = { },
         onFocusChange = { focused ->
             if (focused) onFocus()
-        },
-        onContentChange = { newContent ->
-            // Performance: Debounce rapid changes
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            if (now - lastChangeTime > changeDebounceMs) {
-                lastChangeTime = now
-                scope.launch {
-                    // Performance: Batch update to reduce repository calls
-                    textOperations.replaceText(
-                        block.uuid,
-                        TextRange(0, textState.content.length),
-                        newContent
-                    )
-                }
-            }
         }
     )
 }

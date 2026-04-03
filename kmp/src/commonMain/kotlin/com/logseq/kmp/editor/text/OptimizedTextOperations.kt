@@ -427,6 +427,7 @@ class OptimizedTextOperations(
             if (format.italic) newText = "_${newText}_"
             if (format.code) newText = "`$newText`"
             if (format.quote) newText = "> $newText"
+            if (format.bracket) newText = "[[$newText]]"
             
             // Replace text
             val updatedContent = buildString {

@@ -1,4 +1,4 @@
-package com.logseq.kmp.editor.components
+package com.logseq.kmp.editor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.TextRange as ComposeTextRange
+import androidx.compose.ui.geometry.Rect
 
 import com.logseq.kmp.editor.state.EditorState
 import com.logseq.kmp.editor.text.ITextOperations
@@ -33,6 +34,7 @@ import com.logseq.kmp.editor.state.EditorConfig
 import com.logseq.kmp.editor.text.TextRange
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.performance.PerformanceMonitor
+import com.logseq.kmp.model.Block
 import kotlinx.coroutines.launch
 
 /**
@@ -57,7 +59,7 @@ fun RichTextEditor(
     interactionSource: androidx.compose.foundation.interaction.MutableInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
     cursorBrush: Brush = SolidColor(MaterialTheme.colorScheme.primary),
     onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = { },
-    onTriggerDetected: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> }
+    onTriggerDetected: (String, Rect?) -> Unit = { _, _ -> }
 ) {
     val logger = remember { Logger("RichTextEditor") }
     val scope = rememberCoroutineScope()

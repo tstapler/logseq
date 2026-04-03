@@ -12,6 +12,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.editor.text.ITextOperations
+import com.logseq.kmp.editor.text.TextRange
 import com.logseq.kmp.editor.state.EditorState
 import com.logseq.kmp.editor.state.EditorConfig
 import com.logseq.kmp.editor.state.EditorMode
@@ -124,6 +125,13 @@ class Editor(
                 // Command palette
                 scope.value?.launch {
                     _editorState.update { it.copy(mode = EditorMode.VIEW) }
+                }
+                return true
+            }
+            key == Key.LeftBracket && !keyEvent.isCtrlPressed && !keyEvent.isAltPressed -> {
+                // Wrap selection with [[]] - user presses [ key
+                scope.value?.launch {
+                    wrapSelectionWithBrackets()
                 }
                 return true
             }
@@ -410,6 +418,29 @@ class Editor(
                     position = 0
                 )
             }
+        }
+    }
+
+    private suspend fun wrapSelectionWithBrackets() {
+        val currentBlockId = _cursorState.value.blockId ?: return
+        val textState = textOperations.getTextState(currentBlockId).value
+        
+        if (textState.hasSelection) {
+            // Wrap the selected text with [[]]
+            val range = textState.selection.range
+            val selectedText = textState.content.substring(range.start, range.end)
+            val wrappedText = "[[$selectedText]]"
+            
+            textOperations.replaceText(currentBlockId, range, wrappedText).getOrNull()
+            
+            // Move cursor to after the closing ]]
+            val newCursorPos = range.start + wrappedText.length
+            textOperations.setSelection(currentBlockId, TextRange(newCursorPos, newCursorPos))
+        } else {
+            // No selection, just insert [[]] and place cursor between them
+            textOperations.insertText(currentBlockId, "[[]]").getOrNull()
+            // Move cursor to position after first [
+            textOperations.setSelection(currentBlockId, TextRange(2, 2))
         }
     }
 }

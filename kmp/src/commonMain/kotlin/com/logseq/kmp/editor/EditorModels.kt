@@ -69,7 +69,8 @@ data class TextFormat(
     val quote: Boolean = false,
     val link: String? = null,
     val highlight: Boolean = false,
-    val strike: Boolean = false
+    val strike: Boolean = false,
+    val bracket: Boolean = false
 )
 
 /**
