@@ -40,6 +40,9 @@ fun main() {
         val fileSystem = PlatformFileSystem()
         val graphPath = fileSystem.getDefaultGraphPath()
         
+        // Register the active graph root in the whitelist
+        fileSystem.registerGraphRoot(graphPath)
+        
         logger.info("Starting Desktop Application with graph: $graphPath")
         errorTracker.recordBreadcrumb("Graph path resolved: $graphPath", "SYSTEM")
 

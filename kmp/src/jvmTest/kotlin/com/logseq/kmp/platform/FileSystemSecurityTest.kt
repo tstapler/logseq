@@ -36,13 +36,11 @@ class FileSystemSecurityTest {
 
     @Test
     fun testExplicitGraphRootAllowed() {
-        // Test that a path becomes whitelisted when used as a graph root (via createDirectory or writeFile)
+        // Test that a path becomes whitelisted when registered via registerGraphRoot
         val externalDir = "/tmp/logseq_external_${System.currentTimeMillis()}"
         val testFile = "$externalDir/test.md"
         
         try {
-            // Initially unauthorized if not in home (assuming /tmp is not in home)
-            // Note: If home is in /tmp (some CI envs), this test might need adjustment
             val homePath = Paths.get(homeDir).toAbsolutePath().normalize()
             val tmpPath = Paths.get(externalDir).toAbsolutePath().normalize()
             if (tmpPath.startsWith(homePath)) {
@@ -50,9 +48,15 @@ class FileSystemSecurityTest {
                 return
             }
 
+            // Initially unauthorized
+            assertFalse(fileSystem.createDirectory(externalDir), "Should block directory creation outside whitelist")
+            assertFalse(fileSystem.writeFile(testFile, "content"), "Should block file write outside whitelist")
+
             // This should add externalDir to whitelist
+            fileSystem.registerGraphRoot(externalDir)
+            
             val created = fileSystem.createDirectory(externalDir)
-            assertTrue(created, "Should be able to create external directory (adds to whitelist)")
+            assertTrue(created, "Should be able to create external directory after registration")
             
             val writeSuccess = fileSystem.writeFile(testFile, "content")
             assertTrue(writeSuccess, "Should be able to write to whitelisted external directory")

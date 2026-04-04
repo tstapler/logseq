@@ -33,7 +33,7 @@ actual class PlatformFileSystem actual constructor() : JvmFileSystemBase(), File
             val result = chooser.showOpenDialog(null)
             if (result == JFileChooser.APPROVE_OPTION) {
                 selectedPath = chooser.selectedFile.absolutePath
-                selectedPath?.let { addToWhitelist(it) }
+                selectedPath?.let { registerGraphRoot(it) }
             }
         }
 

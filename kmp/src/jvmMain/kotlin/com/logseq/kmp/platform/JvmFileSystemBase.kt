@@ -20,7 +20,7 @@ abstract class JvmFileSystemBase {
     // Whitelist to track allowed base directories. Using ConcurrentHashMap to ensure thread safety.
     private val whitelist = ConcurrentHashMap.newKeySet<String>().apply {
         // Initial whitelist includes home directory
-        add(Paths.get(homeDir).toAbsolutePath().normalize().toString())
+        add(Paths.get(System.getProperty("user.home")).toAbsolutePath().normalize().toString())
     }
 
     open fun getDefaultGraphPath(): String = "$homeDir/Documents/logseq"
@@ -31,6 +31,17 @@ abstract class JvmFileSystemBase {
         } else {
             path
         }
+    }
+
+    /**
+     * Registers a path as an authorized graph root.
+     * Use this when the application starts with a specific graph path
+     * or when the user explicitly selects a new graph via a picker.
+     */
+    fun registerGraphRoot(path: String) {
+        val expandedPath = expandTilde(path)
+        val absolutePathStr = Paths.get(expandedPath).toAbsolutePath().normalize().toString()
+        whitelist.add(absolutePathStr)
     }
 
     protected fun validatePath(path: String, addToWhitelist: Boolean = false): String {
@@ -54,12 +65,6 @@ abstract class JvmFileSystemBase {
         
         return absolutePathStr
     }
-    
-    protected fun addToWhitelist(path: String) {
-        val expandedPath = expandTilde(path)
-        val absolutePathStr = Paths.get(expandedPath).toAbsolutePath().normalize().toString()
-        whitelist.add(absolutePathStr)
-    }
 
     open fun readFile(path: String): String? {
         return try {
@@ -75,7 +80,9 @@ abstract class JvmFileSystemBase {
 
     open fun writeFile(path: String, content: String): Boolean {
         return try {
-            val validatedPath = validatePath(path, addToWhitelist = true)
+            // Security: We NO LONGER auto-whitelist here. 
+            // The root must be whitelisted via registerGraphRoot or pickDirectory.
+            val validatedPath = validatePath(path, addToWhitelist = false)
             if (content.length > MAX_FILE_SIZE) return false
             val pathObj = Paths.get(validatedPath)
             val parentDir = pathObj.parent
@@ -146,7 +153,8 @@ abstract class JvmFileSystemBase {
 
     open fun createDirectory(path: String): Boolean {
         return try {
-            val validatedPath = validatePath(path, addToWhitelist = true)
+            // Security: We NO LONGER auto-whitelist here.
+            val validatedPath = validatePath(path, addToWhitelist = false)
             val pathObj = Paths.get(validatedPath)
             if (Files.exists(pathObj)) {
                 return Files.isDirectory(pathObj)
@@ -168,7 +176,7 @@ abstract class JvmFileSystemBase {
             false
         }
     }
-    
+
     open fun getLastModifiedTime(path: String): Long? {
         return try {
             val validatedPath = validatePath(path)

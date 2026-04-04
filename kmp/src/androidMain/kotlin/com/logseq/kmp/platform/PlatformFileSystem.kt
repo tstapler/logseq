@@ -8,7 +8,7 @@ actual class PlatformFileSystem actual constructor() : FileSystem {
     private var context: Context? = null
     private val maxPathLength = 4096
     private val maxFileSize = 100 * 1024 * 1024
-    private val dangerousPatterns = listOf("..", "../", "..\\", "\u0000")
+    private val dangerousPatterns = listOf("\u0000")
     private val homeDir: String by lazy { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)?.absolutePath ?: "/storage/emulated/0/Documents" }
 
     fun init(context: Context) {
