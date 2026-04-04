@@ -38,8 +38,8 @@ class GraphManager(
     private val _activeRepositorySet = MutableStateFlow<RepositorySet?>(null)
     val activeRepositorySet: StateFlow<RepositorySet?> = _activeRepositorySet.asStateFlow()
     
-    // Track current driver for lifecycle management
-    private var currentFactory: com.logseq.kmp.repository.RepositoryFactoryImpl? = null
+    // Track current factory for lifecycle management
+    private var currentFactory: com.logseq.kmp.repository.RepositoryFactory? = null
     
     // Track active coroutines for cleanup during graph switches
     private val activeGraphJobs = mutableMapOf<String, CoroutineScope>()
@@ -82,10 +82,10 @@ class GraphManager(
             val expandedPath = fileSystem.expandTilde(lastGraphPath)
             val graphId = graphIdFromPath(expandedPath)
             
-            // Get the database directory
-            val dbDir = getDatabaseDirectory()
+            // Get the database directory (platform-specific)
+            val dbDir = driverFactory.getDatabaseDirectory()
             val oldDbPath = "$dbDir/logseq.db"
-            val newDbPath = "$dbDir/logseq-graph-$graphId.db"
+            val newDbPath = driverFactory.getDatabaseUrl(graphId).substringAfter("jdbc:sqlite:")
             
             // Check if old database exists and rename it
             if (fileSystem.fileExists(oldDbPath)) {
@@ -126,28 +126,6 @@ class GraphManager(
     }
     
     /**
-     * Get the platform-specific database directory
-     */
-    private fun getDatabaseDirectory(): String {
-        val os = System.getProperty("os.name").lowercase()
-        val userHome = System.getProperty("user.home")
-        
-        return when {
-            os.contains("win") -> {
-                val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
-                "$appData\\Logseq"
-            }
-            os.contains("mac") -> {
-                "$userHome/Library/Application Support/Logseq"
-            }
-            else -> { // Linux and others
-                val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
-                "$xdgData/logseq"
-            }
-        }
-    }
-    
-    /**
      * Migrate the database file from old path to new path.
      * Returns true if successful.
      */
@@ -180,13 +158,13 @@ class GraphManager(
     private fun migrateWalShmFiles(dbDir: String, graphId: String) {
         try {
             val walOld = java.io.File("$dbDir/logseq.db-wal")
-            val walNew = java.io.File("$dbDir/logseq-graph-$graphId.db-wal")
+            val walNew = java.io.File(driverFactory.getDatabaseUrl(graphId).substringAfter("jdbc:sqlite:") + "-wal")
             if (walOld.exists() && !walNew.exists()) {
                 walOld.renameTo(walNew)
             }
             
             val shmOld = java.io.File("$dbDir/logseq.db-shm")
-            val shmNew = java.io.File("$dbDir/logseq-graph-$graphId.db-shm")
+            val shmNew = java.io.File(driverFactory.getDatabaseUrl(graphId).substringAfter("jdbc:sqlite:") + "-shm")
             if (shmOld.exists() && !shmNew.exists()) {
                 shmOld.renameTo(shmNew)
             }
@@ -273,12 +251,13 @@ class GraphManager(
         val currentGraphId = registry.activeGraphId
         currentGraphId?.let { activeGraphJobs.remove(it)?.cancel() }
         
-        // Close current driver/factory
+        // Close current factory and its database connection
+        currentFactory?.close()
         currentFactory = null
         _activeRepositorySet.value = null
         
-        // Create new database for this graph
-        val dbUrl = databaseUrlForGraph(id)
+        // Create new database for this graph (platform-agnostic URL)
+        val dbUrl = driverFactory.getDatabaseUrl(id)
         val factory = com.logseq.kmp.repository.RepositoryFactoryImpl(driverFactory, dbUrl)
         currentFactory = factory
         val repoSet = factory.createRepositorySet(GraphBackend.SQLDELIGHT)
@@ -320,34 +299,11 @@ class GraphManager(
         activeGraphJobs.values.forEach { it.cancel() }
         activeGraphJobs.clear()
         
+        // Close database connection
+        currentFactory?.close()
+        
         // Clear repository set
         _activeRepositorySet.value = null
         currentFactory = null
-    }
-    
-    companion object {
-        /**
-         * Compute the database URL for a given graph ID.
-         * Each graph gets its own SQLite file: logseq-graph-{id}.db
-         */
-        fun databaseUrlForGraph(graphId: String): String {
-            val os = System.getProperty("os.name").lowercase()
-            val userHome = System.getProperty("user.home")
-
-            val basePath = when {
-                os.contains("win") -> {
-                    val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
-                    "$appData\\Logseq"
-                }
-                os.contains("mac") -> {
-                    "$userHome/Library/Application Support/Logseq"
-                }
-                else -> { // Linux and others
-                    val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
-                    "$xdgData/logseq"
-                }
-            }
-            return "jdbc:sqlite:$basePath/logseq-graph-$graphId.db"
-        }
     }
 }

@@ -11,6 +11,16 @@ expect class DriverFactory() {
      * @param jdbcUrl The JDBC connection string (e.g. "jdbc:sqlite:logseq.db" or "jdbc:sqlite::memory:")
      */
     fun createDriver(jdbcUrl: String): SqlDriver
+
+    /**
+     * Get the database URL for a specific graph.
+     */
+    fun getDatabaseUrl(graphId: String): String
+
+    /**
+     * Get the directory where databases are stored.
+     */
+    fun getDatabaseDirectory(): String
 }
 
 /**
