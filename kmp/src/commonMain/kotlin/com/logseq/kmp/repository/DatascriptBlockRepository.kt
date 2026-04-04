@@ -25,8 +25,8 @@ class DatascriptBlockRepository : BlockRepository {
      * Datalog-style index for fast lookups
      */
     private val byUuid = MutableStateFlow<Map<String, Block>>(emptyMap())
-    private val byPageId = MutableStateFlow<Map<Long, List<Block>>>(emptyMap())
-    private val byParentId = MutableStateFlow<Map<Long?, List<Block>>>(emptyMap())
+    private val byPageUuid = MutableStateFlow<Map<String, List<Block>>>(emptyMap())
+    private val byParentUuid = MutableStateFlow<Map<String?, List<Block>>>(emptyMap())
 
     override fun getBlockByUuid(uuid: String): Flow<Result<Block?>> {
         return blocks.map { map ->
@@ -35,13 +35,8 @@ class DatascriptBlockRepository : BlockRepository {
     }
 
     override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> {
-        return byParentId.map { map ->
-            val block = blocks.value[blockUuid]
-            if (block == null) {
-                success(emptyList())
-            } else {
-                success(map[block.id]?.sortedBy { it.position } ?: emptyList())
-            }
+        return byParentUuid.map { map ->
+            success(map[blockUuid]?.sortedBy { it.position } ?: emptyList())
         }
     }
 
@@ -61,7 +56,7 @@ class DatascriptBlockRepository : BlockRepository {
     ) {
         val block = allBlocks[uuid] ?: return
         result.add(BlockWithDepth(block, depth))
-        val children = byParentId.value[block.id]?.sortedBy { it.position } ?: emptyList()
+        val children = byParentUuid.value[block.uuid]?.sortedBy { it.position } ?: emptyList()
         children.forEach { child ->
             collectHierarchy(allBlocks, child.uuid, depth + 1, result)
         }
@@ -73,8 +68,8 @@ class DatascriptBlockRepository : BlockRepository {
             var currentUuid: String? = blockUuid
             while (currentUuid != null) {
                 val block = map[currentUuid] ?: break
-                if (block.parentId != null) {
-                    val parent = map.values.find { it.id == block.parentId }
+                if (block.parentUuid != null) {
+                    val parent = map[block.parentUuid]
                     if (parent != null) {
                         ancestors.add(parent)
                         currentUuid = parent.uuid
@@ -92,9 +87,7 @@ class DatascriptBlockRepository : BlockRepository {
     override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> {
         return blocks.map { map ->
             val block = map[blockUuid] ?: return@map success(null)
-            val parent = if (block.parentId != null) {
-                map.values.find { it.id == block.parentId }
-            } else null
+            val parent = block.parentUuid?.let { map[it] }
             success(parent)
         }
     }
@@ -102,19 +95,18 @@ class DatascriptBlockRepository : BlockRepository {
     override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> {
         return blocks.map { map ->
             val block = map[blockUuid] ?: return@map success(emptyList())
-            // Filter by BOTH parentId AND pageId to avoid mixing blocks from different pages
-            val siblings = if (block.parentId != null) {
-                map.values.filter { it.parentId == block.parentId && it.pageId == block.pageId && it.uuid != blockUuid }
+            val siblings = if (block.parentUuid != null) {
+                map.values.filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid && it.uuid != blockUuid }
             } else {
-                map.values.filter { it.parentId == null && it.pageId == block.pageId && it.uuid != blockUuid }
+                map.values.filter { it.parentUuid == null && it.pageUuid == block.pageUuid && it.uuid != blockUuid }
             }
             success(siblings.sortedBy { it.position })
         }
     }
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> {
-        return byPageId.map { map ->
-            val blocks = map[pageId] ?: emptyList()
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> {
+        return byPageUuid.map { map ->
+            val blocks = map[pageUuid] ?: emptyList()
             success(blocks.sortedBy { it.position })
         }
     }
@@ -125,7 +117,7 @@ class DatascriptBlockRepository : BlockRepository {
             val linkedBlocks = map.values.filter { block ->
                 wikiLinkPattern.containsMatchIn(block.content)
             }
-            success(linkedBlocks.sortedBy { it.pageId })
+            success(linkedBlocks.sortedBy { it.pageUuid })
         }
     }
 
@@ -134,11 +126,10 @@ class DatascriptBlockRepository : BlockRepository {
         val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
         return blocks.map { map ->
             val unlinkedBlocks = map.values.filter { block ->
-                // Contains the page name as plain text but NOT as a wiki link
                 plainTextPattern.containsMatchIn(block.content) &&
                     !wikiLinkPattern.containsMatchIn(block.content)
             }
-            success(unlinkedBlocks.sortedBy { it.pageId })
+            success(unlinkedBlocks.sortedBy { it.pageUuid })
         }
     }
 
@@ -188,8 +179,7 @@ class DatascriptBlockRepository : BlockRepository {
                     var index = 0
                     while (index < uuidsToDelete.size) {
                         val currentUuid = uuidsToDelete[index]
-                        val blockData = current[currentUuid] ?: continue
-                        val children = current.values.filter { it.parentId == blockData.id }
+                        val children = current.values.filter { it.parentUuid == currentUuid }
                         children.forEach { child ->
                             uuidsToDelete.add(child.uuid)
                         }
@@ -218,22 +208,21 @@ class DatascriptBlockRepository : BlockRepository {
             try {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
-                val newParentId = newParentUuid?.let { currentBlocks[it]?.id }
 
-                if (block.parentId == newParentId && block.position == newPosition) {
+                if (block.parentUuid == newParentUuid && block.position == newPosition) {
                     return@withLock success(Unit)
                 }
 
-                val oldParentId = block.parentId
+                val oldParentUuid = block.parentUuid
                 val oldSiblings = currentBlocks.values
-                    .filter { it.parentId == oldParentId && it.uuid != blockUuid }
+                    .filter { it.parentUuid == oldParentUuid && it.uuid != blockUuid }
                     .sortedBy { it.position }
 
-                val newSiblings = if (oldParentId == newParentId) {
+                val newSiblings = if (oldParentUuid == newParentUuid) {
                     oldSiblings.toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
                 } else {
                     currentBlocks.values
-                        .filter { it.parentId == newParentId }
+                        .filter { it.parentUuid == newParentUuid }
                         .sortedBy { it.position }
                         .toMutableList().apply { add(newPosition.coerceIn(0, size), block) }
                 }
@@ -241,27 +230,27 @@ class DatascriptBlockRepository : BlockRepository {
                 val updatedBlocks = mutableMapOf<String, Block>()
 
                 // Update moved block and its descendants
-                val newLevel = if (newParentId == null) 0 else (currentBlocks.values.find { it.id == newParentId }?.level ?: -1) + 1
+                val newLevel = if (newParentUuid == null) 0 else (currentBlocks[newParentUuid]?.level ?: -1) + 1
                 val levelOffset = newLevel - block.level
                 val hierarchy = mutableListOf<BlockWithDepth>()
                 collectHierarchy(currentBlocks, block.uuid, block.level, hierarchy)
 
                 hierarchy.forEach { (b, _) ->
                     updatedBlocks[b.uuid] = b.copy(
-                        parentId = if (b.uuid == blockUuid) newParentId else b.parentId,
+                        parentUuid = if (b.uuid == blockUuid) newParentUuid else b.parentUuid,
                         level = b.level + levelOffset
                     )
                 }
 
                 // Update siblings in old parent
-                if (oldParentId != newParentId) {
+                if (oldParentUuid != newParentUuid) {
                     TreeOperations.reorderSiblings(oldSiblings).forEach { updatedBlocks[it.uuid] = it }
                 }
 
                 // Update siblings in new parent
                 TreeOperations.reorderSiblings(newSiblings).forEach {
                     val existing = updatedBlocks[it.uuid]
-                    updatedBlocks[it.uuid] = existing?.copy(position = it.position, leftId = it.leftId) ?: it
+                    updatedBlocks[it.uuid] = existing?.copy(position = it.position, leftUuid = it.leftUuid) ?: it
                 }
 
                 batchUpdateBlocks(updatedBlocks)
@@ -277,17 +266,16 @@ class DatascriptBlockRepository : BlockRepository {
             try {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
-                // Filter by BOTH parentId AND pageId to avoid mixing blocks from different pages
                 val siblings = currentBlocks.values
-                    .filter { it.parentId == block.parentId && it.pageId == block.pageId }
+                    .filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
 
-                val index = siblings.indexOfFirst { it.id == block.id }
+                val index = siblings.indexOfFirst { it.uuid == block.uuid }
                 if (index <= 0) return@withLock success(Unit)
 
                 val newParent = siblings[index - 1]
                 val newParentChildren = currentBlocks.values
-                    .filter { it.parentId == newParent.id && it.pageId == block.pageId }
+                    .filter { it.parentUuid == newParent.uuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
 
                 val result = TreeOperations.indent(block, siblings, newParentChildren.lastOrNull())
@@ -295,13 +283,13 @@ class DatascriptBlockRepository : BlockRepository {
                 if (result != null) {
                     val updates = result.associateBy { it.uuid }.toMutableMap()
                     
-                    val remainingSiblings = siblings.filter { it.id != block.id }.toMutableList()
+                    val remainingSiblings = siblings.filter { it.uuid != block.uuid }.toMutableList()
                     result.forEach { updated -> 
-                        val idx = remainingSiblings.indexOfFirst { it.id == updated.id }
+                        val idx = remainingSiblings.indexOfFirst { it.uuid == updated.uuid }
                         if (idx != -1) remainingSiblings[idx] = updated
                     }
                     
-                    val movedBlock = result.find { it.id == block.id }!!
+                    val movedBlock = result.find { it.uuid == block.uuid }!!
                     val newSiblings = newParentChildren + movedBlock
                     
                     TreeOperations.reorderSiblings(remainingSiblings).forEach { updates[it.uuid] = it }
@@ -323,34 +311,29 @@ class DatascriptBlockRepository : BlockRepository {
             try {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
-                if (block.parentId == null) return@withLock success(Unit)
+                val parentUuid = block.parentUuid ?: return@withLock success(Unit)
 
-                val parent = currentBlocks.values.find { it.id == block.parentId }
+                val parent = currentBlocks[parentUuid]
 
-                // Filter by BOTH parentId AND pageId to avoid mixing blocks from different pages
                 val siblings = currentBlocks.values
-                    .filter { it.parentId == block.parentId && it.pageId == block.pageId }
+                    .filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
 
                 val parentSiblings = currentBlocks.values
-                    .filter { it.parentId == parent?.parentId && it.pageId == block.pageId }
+                    .filter { it.parentUuid == parent?.parentUuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
 
                 val result = TreeOperations.outdent(block, parent, siblings, parentSiblings)
                 if (result != null) {
                     val updates = result.associateBy { it.uuid }.toMutableMap()
 
-                    // Get the outdented block from result
-                    val movedBlock = result.find { it.id == block.id }!!
+                    val movedBlock = result.find { it.uuid == block.uuid }!!
 
-                    // Reorder old siblings (closing the gap where block was removed)
-                    val remainingOldSiblings = siblings.filter { it.id != block.id }
+                    val remainingOldSiblings = siblings.filter { it.uuid != block.uuid }
                     TreeOperations.reorderSiblings(remainingOldSiblings).forEach { updates[it.uuid] = it }
 
-                    // Reorder new siblings (parent's siblings + the moved block inserted after parent)
-                    val parentIndex = parentSiblings.indexOfFirst { it.id == parent?.id }
+                    val parentIndex = parentSiblings.indexOfFirst { it.uuid == parent?.uuid }
                     val newSiblingsList = parentSiblings.toMutableList()
-                    // Insert the moved block right after the parent
                     newSiblingsList.add(parentIndex + 1, movedBlock)
                     TreeOperations.reorderSiblings(newSiblingsList).forEach { updates[it.uuid] = it }
 
@@ -371,19 +354,17 @@ class DatascriptBlockRepository : BlockRepository {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
                 val siblings = currentBlocks.values
-                    .filter { it.parentId == block.parentId && it.pageId == block.pageId }
+                    .filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
                     .toMutableList()
 
-                val index = siblings.indexOfFirst { it.id == block.id }
+                val index = siblings.indexOfFirst { it.uuid == block.uuid }
                 if (index <= 0) return@withLock success(Unit)
 
-                // Swap in the list
                 val prev = siblings[index - 1]
                 siblings[index - 1] = siblings[index]
                 siblings[index] = prev
 
-                // Re-sequence everyone
                 val updates = TreeOperations.reorderSiblings(siblings).associateBy { it.uuid }
                 batchUpdateBlocks(updates)
                 success(Unit)
@@ -399,19 +380,17 @@ class DatascriptBlockRepository : BlockRepository {
                 val currentBlocks = blocks.value
                 val block = currentBlocks[blockUuid] ?: return@withLock success(Unit)
                 val siblings = currentBlocks.values
-                    .filter { it.parentId == block.parentId && it.pageId == block.pageId }
+                    .filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid }
                     .sortedBy { it.position }
                     .toMutableList()
 
-                val index = siblings.indexOfFirst { it.id == block.id }
+                val index = siblings.indexOfFirst { it.uuid == block.uuid }
                 if (index < 0 || index >= siblings.size - 1) return@withLock success(Unit)
 
-                // Swap in the list
                 val next = siblings[index + 1]
                 siblings[index + 1] = siblings[index]
                 siblings[index] = next
 
-                // Re-sequence everyone
                 val updates = TreeOperations.reorderSiblings(siblings).associateBy { it.uuid }
                 batchUpdateBlocks(updates)
                 success(Unit)
@@ -422,18 +401,43 @@ class DatascriptBlockRepository : BlockRepository {
     }
 
     override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> {
+        val current = blocks.value.toMutableMap()
+        val blockA = current[blockUuid] ?: return success(Unit)
+        val blockB = current[nextBlockUuid] ?: return success(Unit)
+        
+        current[blockUuid] = blockA.copy(content = blockA.content + separator + blockB.content)
+        current.remove(nextBlockUuid)
+        refreshIndexes(current)
+        blocks.value = current
         return success(Unit)
     }
 
     override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> {
-        return Result.failure(NotImplementedError())
+        val current = blocks.value.toMutableMap()
+        val block = current[blockUuid] ?: return Result.failure(Exception("Block not found"))
+        
+        val firstPart = block.content.substring(0, cursorPosition).trim()
+        val secondPart = block.content.substring(cursorPosition).trim()
+        
+        val updatedBlock = block.copy(content = firstPart)
+        val newBlock = block.copy(
+            uuid = java.util.UUID.randomUUID().toString(),
+            content = secondPart,
+            position = block.position + 1
+        )
+        
+        current[blockUuid] = updatedBlock
+        current[newBlock.uuid] = newBlock
+        refreshIndexes(current)
+        blocks.value = current
+        return Result.success(newBlock)
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> {
         return writeMutex.withLock {
             try {
                 val current = blocks.value.toMutableMap()
-                val toRemove = current.values.filter { it.pageId == pageId }.map { it.uuid }
+                val toRemove = current.values.filter { it.pageUuid == pageUuid }.map { it.uuid }
                 toRemove.forEach { current.remove(it) }
                 blocks.value = current
                 refreshIndexes(current)
@@ -448,8 +452,8 @@ class DatascriptBlockRepository : BlockRepository {
         writeMutex.withLock {
             blocks.value = emptyMap()
             byUuid.value = emptyMap()
-            byPageId.value = emptyMap()
-            byParentId.value = emptyMap()
+            byPageUuid.value = emptyMap()
+            byParentUuid.value = emptyMap()
         }
     }
 
@@ -463,7 +467,7 @@ class DatascriptBlockRepository : BlockRepository {
     private fun refreshIndexes(currentBlocks: Map<String, Block>) {
         val allBlocks = currentBlocks.values
         byUuid.value = currentBlocks
-        byPageId.value = allBlocks.groupBy { it.pageId }
-        byParentId.value = allBlocks.groupBy { it.parentId }
+        byPageUuid.value = allBlocks.groupBy { it.pageUuid }
+        byParentUuid.value = allBlocks.groupBy { it.parentUuid }
     }
 }

@@ -4,30 +4,14 @@ import com.logseq.kmp.model.Page
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
-import com.logseq.kmp.coroutines.PlatformDispatcher
 import kotlin.Result.Companion.success
 
 /**
- * Datalog-style in-memory repository for pages that mirrors Datascript behavior.
- * Uses Datalog query patterns similar to Logseq's Clojure implementation.
- * Cross-platform compatible - doesn't use JVM-specific Dispatchers.IO.
+ * Datalog-style in-memory repository for pages.
  */
 class DatascriptPageRepository : PageRepository {
 
     private val pages = MutableStateFlow<Map<String, Page>>(emptyMap())
-
-    /**
-     * Datalog-style indexes for fast lookups
-     */
-    private val byUuid = MutableStateFlow<Map<String, Page>>(emptyMap())
-    private val byName = MutableStateFlow<Map<String, Page>>(emptyMap())
-    private val byNamespace = MutableStateFlow<Map<String, List<Page>>>(emptyMap())
-
-    override fun getPageById(id: Long): Flow<Result<Page?>> {
-        return byUuid.map { map ->
-            Result.success(map.values.find { it.id == id })
-        }
-    }
 
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return pages.map { map ->
@@ -36,14 +20,18 @@ class DatascriptPageRepository : PageRepository {
     }
 
     override fun getPageByName(name: String): Flow<Result<Page?>> {
-        return byName.map { map ->
-            success(map[name])
+        return pages.map { map ->
+            val page = map.values.find { page ->
+                page.name.equals(name, ignoreCase = true) ||
+                    page.properties["alias"]?.split(",")?.any { it.trim().equals(name, ignoreCase = true) } == true
+            }
+            success(page)
         }
     }
 
     override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> {
-        return byNamespace.map { map ->
-            success(map[namespace] ?: emptyList())
+        return pages.map { map ->
+            success(map.values.filter { it.namespace == namespace })
         }
     }
 
@@ -70,50 +58,34 @@ class DatascriptPageRepository : PageRepository {
         }
     }
 
-    override suspend fun savePage(page: Page): Result<Long> {
-        return try {
-            val current = pages.value.toMutableMap()
-            current[page.uuid] = page
-            pages.value = current
-
-            // Update indexes
-            refreshIndexes(current)
-            success(page.id)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    override suspend fun savePage(page: Page): Result<Unit> {
+        val current = pages.value.toMutableMap()
+        current[page.uuid] = page
+        pages.value = current
+        return success(Unit)
     }
 
     override suspend fun toggleFavorite(pageUuid: String): Result<Unit> {
-        return try {
-            val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
-            val newPage = page.copy(isFavorite = !page.isFavorite)
-            savePage(newPage).map { Unit }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        val current = pages.value.toMutableMap()
+        val page = current[pageUuid] ?: return Result.failure(Exception("Page not found"))
+        current[pageUuid] = page.copy(isFavorite = !page.isFavorite)
+        pages.value = current
+        return success(Unit)
     }
 
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
-        return try {
-            val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
-            val newPage = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
-            savePage(newPage).map { Unit }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        val current = pages.value.toMutableMap()
+        val page = current[pageUuid] ?: return Result.failure(Exception("Page not found"))
+        current[pageUuid] = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
+        pages.value = current
+        return success(Unit)
     }
 
     override suspend fun deletePage(pageUuid: String): Result<Unit> {
-        return try {
-            val current = pages.value.toMutableMap()
-            current.remove(pageUuid)
-            pages.value = current
-            refreshIndexes(current)
-            success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        val current = pages.value.toMutableMap()
+        current.remove(pageUuid)
+        pages.value = current
+        return success(Unit)
     }
 
     override fun countPages(): Flow<Result<Long>> {
@@ -122,13 +94,5 @@ class DatascriptPageRepository : PageRepository {
 
     override suspend fun clear() {
         pages.value = emptyMap()
-        refreshIndexes(emptyMap())
-    }
-
-    private fun refreshIndexes(currentPages: Map<String, Page>) {
-        val allPages = currentPages.values
-        byUuid.value = currentPages
-        byName.value = allPages.associateBy { it.name }
-        byNamespace.value = allPages.filter { it.namespace != null }.groupBy { it.namespace!! }
     }
 }

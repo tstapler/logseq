@@ -27,7 +27,6 @@ class PageCache(
     sealed class Key {
         data class ByUuid(val uuid: String) : Key()
         data class ByName(val name: String) : Key()
-        data class ById(val id: Long) : Key()
     }
 
     fun start() {
@@ -162,7 +161,7 @@ class PageCache(
     /**
      * Save page - invalidates cache.
      */
-    suspend fun savePage(page: Page): Result<Long> {
+    suspend fun savePage(page: Page): Result<Unit> {
         invalidatePage(page.uuid)
         return delegate.savePage(page)
     }
@@ -221,12 +220,13 @@ class PageCache(
         )
         pageCache.put(Key.ByUuid(page.uuid), cached)
         pageCache.put(Key.ByName(page.name), cached)
-        pageCache.put(Key.ById(page.id), cached)
 
         nameIndex[page.name] = page.uuid
         page.namespace?.let { ns ->
             val list = namespaceIndex.getOrPut(ns) { mutableListOf<String>() }
-            list.add(page.uuid)
+            if (!list.contains(page.uuid)) {
+                list.add(page.uuid)
+            }
         }
     }
 }

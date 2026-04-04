@@ -5,6 +5,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.performance.PerformanceMonitor
 import com.logseq.kmp.repository.BlockWithDepth
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -23,18 +24,10 @@ class BlockOperations(
     private val _blockHierarchy = MutableStateFlow<Map<String, List<String>>>(emptyMap())
     
     // Helper functions
-    private fun generateBlockUuid(): String {
-        val chars = "0123456789abcdef"
-        fun randomHex(length: Int) = (1..length).map { chars.random() }.joinToString("")
-        return "${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}"
-    }
-
-    private suspend fun getBlockIdByUuid(uuid: String): Long? {
-        return blockRepository.getBlockByUuid(uuid).first().getOrNull()?.id
-    }
+    private fun generateBlockUuid(): String = UuidGenerator.generateV7()
 
     override suspend fun createBlock(
-        pageId: Long,
+        pageUuid: String,
         content: String,
         parentId: String?,
         leftId: String?,
@@ -46,19 +39,12 @@ class BlockOperations(
         try {
             val traceId = PerformanceMonitor.startTrace("create-block")
             
-            // Resolve parent UUID to ID
-            val parentDbId = if (parentId != null) getBlockIdByUuid(parentId) else null
-            
-            // Resolve left sibling UUID to ID
-            val leftDbId = if (leftId != null) getBlockIdByUuid(leftId) else null
-
             val newBlock = Block(
-                id = 0L, // Repository should assign ID
                 uuid = uuid ?: generateBlockUuid(),
                 content = content,
-                pageId = pageId,
-                parentId = parentDbId,
-                leftId = leftDbId,
+                pageUuid = pageUuid,
+                parentUuid = parentId,
+                leftUuid = leftId,
                 position = position ?: 0, // Should be calculated if not provided, but simplified for now
                 level = 0, // Should be calculated
                 createdAt = createdAt ?: kotlinx.datetime.Clock.System.now(),
@@ -185,7 +171,6 @@ class BlockOperations(
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
             val duplicate = originalBlock.copy(
-                id = 0L,
                 uuid = generateBlockUuid(),
                 content = originalBlock.content + " (copy)",
                 createdAt = kotlinx.datetime.Clock.System.now(),
@@ -225,8 +210,8 @@ class BlockOperations(
             val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            val siblings = if (currentBlock.parentId == null) {
-                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            val siblings = if (currentBlock.parentUuid == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageUuid).first().getOrNull()?.filter { it.parentUuid == null } ?: emptyList()
             } else {
                 blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
             }
@@ -259,8 +244,8 @@ class BlockOperations(
             val currentBlock = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
                 ?: return Result.failure(IllegalArgumentException("Block not found: $blockUuid"))
             
-            val siblings = if (currentBlock.parentId == null) {
-                blockRepository.getBlocksForPage(currentBlock.pageId).first().getOrNull()?.filter { it.parentId == null } ?: emptyList()
+            val siblings = if (currentBlock.parentUuid == null) {
+                blockRepository.getBlocksForPage(currentBlock.pageUuid).first().getOrNull()?.filter { it.parentUuid == null } ?: emptyList()
             } else {
                 blockRepository.getBlockSiblings(currentBlock.uuid).first().getOrNull() ?: emptyList()
             }

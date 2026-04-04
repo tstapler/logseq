@@ -13,14 +13,14 @@ object TreeOperations {
      *
      * @param block The block to indent
      * @param siblings The list of blocks at the current level (must include [block] and its predecessor)
-     * @param lastChildOfNewParent The last child of the new parent (the preceding sibling), used to set the correct leftId.
+     * @param lastChildOfNewParent The last child of the new parent (the preceding sibling), used to set the correct leftUuid.
      */
     fun indent(
         block: Block,
         siblings: List<Block>,
         lastChildOfNewParent: Block? = null
     ): List<Block>? {
-        val index = siblings.indexOfFirst { it.id == block.id }
+        val index = siblings.indexOfFirst { it.uuid == block.uuid }
         if (index <= 0) return null // Cannot indent the first sibling
 
         val newParent = siblings[index - 1]
@@ -32,9 +32,9 @@ object TreeOperations {
         // It becomes the last child of the new parent
         updates.add(
             block.copy(
-                parentId = newParent.id,
+                parentUuid = newParent.uuid,
                 level = newParent.level + 1,
-                leftId = lastChildOfNewParent?.id // If null, it becomes the first child
+                leftUuid = lastChildOfNewParent?.uuid // If null, it becomes the first child
             )
         )
 
@@ -43,7 +43,7 @@ object TreeOperations {
         if (nextSibling != null) {
             updates.add(
                 nextSibling.copy(
-                    leftId = newParent.id // newParent was the block's left sibling
+                    leftUuid = newParent.uuid // newParent was the block's left sibling
                 )
             )
         }
@@ -72,17 +72,17 @@ object TreeOperations {
         val updates = mutableListOf<Block>()
         
         // Find current next sibling to close the gap
-        val index = siblings.indexOfFirst { it.id == block.id }
+        val index = siblings.indexOfFirst { it.uuid == block.uuid }
         val nextSibling = siblings.getOrNull(index + 1)
-        val prevSibling = siblings.getOrNull(index - 1) // Should match block.leftId
+        val prevSibling = siblings.getOrNull(index - 1) // Should match block.leftUuid
 
         // 1. Update the outdented block
         // It moves to be after the parent
         updates.add(
             block.copy(
-                parentId = parent.parentId,
+                parentUuid = parent.parentUuid,
                 level = parent.level,
-                leftId = parent.id
+                leftUuid = parent.uuid
             )
         )
 
@@ -90,20 +90,20 @@ object TreeOperations {
         if (nextSibling != null) {
             updates.add(
                 nextSibling.copy(
-                    leftId = prevSibling?.id // Points to whatever was before the block (or null if block was first)
+                    leftUuid = prevSibling?.uuid // Points to whatever was before the block (or null if block was first)
                 )
             )
         }
 
         // 3. Open gap in new list (siblings of parent)
         // We need to update the block that currently follows the parent
-        val parentIndex = parentSiblings.indexOfFirst { it.id == parent.id }
+        val parentIndex = parentSiblings.indexOfFirst { it.uuid == parent.uuid }
         val parentNextSibling = parentSiblings.getOrNull(parentIndex + 1)
         
         if (parentNextSibling != null) {
             updates.add(
                 parentNextSibling.copy(
-                    leftId = block.id // Now points to the outdented block
+                    leftUuid = block.uuid // Now points to the outdented block
                 )
             )
         }
@@ -118,7 +118,7 @@ object TreeOperations {
         block: Block,
         siblings: List<Block>
     ): List<Block>? {
-        val index = siblings.indexOfFirst { it.id == block.id }
+        val index = siblings.indexOfFirst { it.uuid == block.uuid }
         if (index <= 0) return null
 
         val prevSibling = siblings[index - 1]
@@ -126,23 +126,23 @@ object TreeOperations {
         
         val updates = mutableListOf<Block>()
         
-        // Swap positions and leftIds
-        // Current block (B) takes previous sibling's (A) leftId and position
+        // Swap positions and leftUuids
+        // Current block (B) takes previous sibling's (A) leftUuid and position
         updates.add(block.copy(
-            leftId = prevSibling.leftId,
+            leftUuid = prevSibling.leftUuid,
             position = prevSibling.position
         ))
         
         // Previous sibling (A) now follows current block (B)
         updates.add(prevSibling.copy(
-            leftId = block.id,
+            leftUuid = block.uuid,
             position = block.position
         ))
         
         // If there was a next sibling (C) following B, it now follows A
         if (nextSibling != null) {
             updates.add(nextSibling.copy(
-                leftId = prevSibling.id
+                leftUuid = prevSibling.uuid
             ))
         }
         
@@ -156,7 +156,7 @@ object TreeOperations {
         block: Block,
         siblings: List<Block>
     ): List<Block>? {
-        val index = siblings.indexOfFirst { it.id == block.id }
+        val index = siblings.indexOfFirst { it.uuid == block.uuid }
         if (index < 0 || index >= siblings.size - 1) return null
 
         val nextSibling = siblings[index + 1]
@@ -166,20 +166,20 @@ object TreeOperations {
 
         // Current block (A) now follows next sibling (B)
         updates.add(block.copy(
-            leftId = nextSibling.id,
+            leftUuid = nextSibling.uuid,
             position = nextSibling.position
         ))
         
-        // Next sibling (B) takes current block's (A) leftId and position
+        // Next sibling (B) takes current block's (A) leftUuid and position
         updates.add(nextSibling.copy(
-            leftId = block.leftId,
+            leftUuid = block.leftUuid,
             position = block.position
         ))
         
         // If there was a block (C) following B, it now follows A
         if (afterNextSibling != null) {
             updates.add(afterNextSibling.copy(
-                leftId = block.id
+                leftUuid = block.uuid
             ))
         }
         
@@ -192,10 +192,10 @@ object TreeOperations {
     fun updateLevels(
         block: Block,
         newLevel: Int,
-        childrenProvider: (Long) -> List<Block>
+        childrenProvider: (String) -> List<Block>
     ): List<Block> {
         val updatedBlock = block.copy(level = newLevel)
-        val children = childrenProvider(block.id!!)
+        val children = childrenProvider(block.uuid)
         
         val updatedChildren = children.flatMap { child ->
             updateLevels(child, newLevel + 1, childrenProvider)
@@ -205,16 +205,16 @@ object TreeOperations {
     }
 
     /**
-     * Reorders a list of siblings to ensure consistent leftId and position values.
+     * Reorders a list of siblings to ensure consistent leftUuid and position values.
      */
     fun reorderSiblings(siblings: List<Block>): List<Block> {
-        var currentLeftId: Long? = null
+        var currentLeftUuid: String? = null
         return siblings.mapIndexed { index, b ->
             val updated = b.copy(
-                leftId = currentLeftId,
+                leftUuid = currentLeftUuid,
                 position = index
             )
-            currentLeftId = updated.id
+            currentLeftUuid = updated.uuid
             updated
         }
     }

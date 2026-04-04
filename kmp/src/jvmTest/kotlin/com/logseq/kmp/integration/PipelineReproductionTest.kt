@@ -2,7 +2,6 @@ package com.logseq.kmp.integration
 
 import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.outliner.BlockSorter
-import com.logseq.kmp.parsing.LogseqParser
 import com.logseq.kmp.parser.MarkdownParser
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.repository.InMemoryBlockRepository
@@ -59,7 +58,7 @@ class PipelineReproductionTest {
         
         val pages = pageRepository.getAllPages().first().getOrNull()!!
         val page = pages[0]
-        val blocks = blockRepository.getBlocksForPage(page.id).first().getOrNull()!!
+        val blocks = blockRepository.getBlocksForPage(page.uuid).first().getOrNull()!!
         
         println("Loaded ${blocks.size} blocks from repository")
         
@@ -69,11 +68,11 @@ class PipelineReproductionTest {
         
         val root = blocks.find { it.content.startsWith("Till Listening") }!!
         
-        println("Root ID: ${root.id}")
-        println("Rediscovering ID: ${rediscovering.id}, Parent ID: ${rediscovering.parentId}")
+        println("Root UUID: ${root.uuid}")
+        println("Rediscovering UUID: ${rediscovering.uuid}, Parent UUID: ${rediscovering.parentUuid}")
         
         // Verify parentage in DB
-        assertEquals(root.id, rediscovering.parentId, "Rediscovering Paper should be child of Root in DB")
+        assertEquals(root.uuid, rediscovering.parentUuid, "Rediscovering Paper should be child of Root in DB")
         
         // Verify Sorting
         val sorted = BlockSorter.sort(blocks)
@@ -81,7 +80,7 @@ class PipelineReproductionTest {
         println("Sorted Order:")
         sorted.forEach { 
             val indent = "  ".repeat(it.level)
-            println("$indent- ${it.content} (ID: ${it.id}, Parent: ${it.parentId})")
+            println("$indent- ${it.content} (UUID: ${it.uuid}, Parent: ${it.parentUuid})")
         }
         
         // Verify position in sorted list
@@ -113,15 +112,15 @@ class PipelineReproductionTest {
         val movableIndex = sorted.indexOf(movable)
         
         assert(bathingIndex > rediscoveringIndex)
-        assertEquals(rediscovering.id, bathing.parentId, "Bathing should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, bathing.parentUuid, "Bathing should be child of Rediscovering")
         assertEquals(2, bathing.level, "Bathing should be level 2")
         
         assert(ironGallIndex > bathingIndex)
-        assertEquals(rediscovering.id, ironGall.parentId, "Iron Gall should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, ironGall.parentUuid, "Iron Gall should be child of Rediscovering")
         assertEquals(2, ironGall.level, "Iron Gall should be level 2")
         
         assert(movableIndex > ironGallIndex)
-        assertEquals(rediscovering.id, movable.parentId, "Movable should be child of Rediscovering")
+        assertEquals(rediscovering.uuid, movable.parentUuid, "Movable should be child of Rediscovering")
         assertEquals(2, movable.level, "Movable should be level 2")
     }
 }

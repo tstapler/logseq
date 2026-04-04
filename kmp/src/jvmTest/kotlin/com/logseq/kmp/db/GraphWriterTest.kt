@@ -29,7 +29,6 @@ class GraphWriterTest {
             try {
                 // Create a page
                 val page = Page(
-                    id = 1,
                     uuid = "00000000-0000-0000-0000-000000000001", // Valid UUID
                     name = "TestPage", // No spaces to be safe with validation
                     createdAt = now,
@@ -45,52 +44,48 @@ class GraphWriterTest {
                 //   B1 (pos 0, parent B)
                 
                 val blockA = Block(
-                    id = 10,
                     uuid = "00000000-0000-0000-0000-000000000010",
-                    pageId = 1,
+                    pageUuid = page.uuid,
                     content = "Block A",
                     level = 0,
                     position = 0, // Sibling index 0
-                    parentId = null,
+                    parentUuid = null,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
                 val blockA1 = Block(
-                    id = 11,
                     uuid = "00000000-0000-0000-0000-000000000011",
-                    pageId = 1,
+                    pageUuid = page.uuid,
                     content = "Block A1",
                     level = 1,
                     position = 0, // Sibling index 0 (under A)
-                    parentId = 10,
+                    parentUuid = blockA.uuid,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
                 val blockB = Block(
-                    id = 12,
                     uuid = "00000000-0000-0000-0000-000000000012",
-                    pageId = 1,
+                    pageUuid = page.uuid,
                     content = "Block B",
                     level = 0,
                     position = 1, // Sibling index 1
-                    parentId = null,
+                    parentUuid = null,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()
                 )
                 
                 val blockB1 = Block(
-                    id = 13,
                     uuid = "00000000-0000-0000-0000-000000000013",
-                    pageId = 1,
+                    pageUuid = page.uuid,
                     content = "Block B1",
                     level = 1,
                     position = 0, // Sibling index 0 (under B)
-                    parentId = 12,
+                    parentUuid = blockB.uuid,
                     createdAt = now,
                     updatedAt = now,
                     properties = emptyMap()

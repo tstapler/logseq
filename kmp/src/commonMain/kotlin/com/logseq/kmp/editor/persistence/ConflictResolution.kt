@@ -185,7 +185,7 @@ class ConflictDetector {
     ) {
         // Move conflicts if the block structure changed since last known state
         val expectedParent = change.metadata.moveTarget
-        val actualParent = existingBlock.parentId?.toString()
+        val actualParent = existingBlock.parentUuid
         
         if (expectedParent != null && expectedParent != actualParent) {
             conflicts.add(ConflictInfo(

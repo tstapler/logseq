@@ -61,12 +61,12 @@ class GraphLoaderTest {
 
         // Verify blocks
         val contentsPage = pages.find { it.name == "contents" }!!
-        val blocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()
+        val blocksResult = blockRepository.getBlocksForPage(contentsPage.uuid).first()
         assertTrue(blocksResult.isSuccess, "Failed to get blocks for 'contents' page")
         val blocks = blocksResult.getOrNull() ?: emptyList()
         
         val newPage = pages.find { it.name == "new page" }!!
-        val newPageBlocksResult = blockRepository.getBlocksForPage(newPage.id).first()
+        val newPageBlocksResult = blockRepository.getBlocksForPage(newPage.uuid).first()
         val newPageBlocks = newPageBlocksResult.getOrNull() ?: emptyList()
         
         assertTrue(blocks.isNotEmpty() || newPageBlocks.isNotEmpty(), "No blocks loaded for 'contents' or 'new page'")
@@ -120,7 +120,7 @@ class GraphLoaderTest {
             val contentsPage = pages.find { it.name == "contents" }
             assertNotNull(contentsPage, "contents page should exist")
             
-            val blocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()
+            val blocksResult = blockRepository.getBlocksForPage(contentsPage.uuid).first()
             val blocks = blocksResult.getOrNull() ?: emptyList()
             assertTrue(blocks.isNotEmpty(), "Blocks should be loaded for contents page")
             
@@ -134,7 +134,7 @@ class GraphLoaderTest {
             graphLoader.loadFullPage(contentsPage.uuid)
             
             // Verify blocks are now loaded
-            val reloadedBlocksResult = blockRepository.getBlocksForPage(contentsPage.id).first()
+            val reloadedBlocksResult = blockRepository.getBlocksForPage(contentsPage.uuid).first()
             val reloadedBlocks = reloadedBlocksResult.getOrNull() ?: emptyList()
             val reloadedFirstBlock = reloadedBlocks.firstOrNull()
             assertNotNull(reloadedFirstBlock, "Reloaded first block should not be null")

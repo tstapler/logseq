@@ -9,15 +9,6 @@ import kotlinx.coroutines.flow.first
 import kotlin.Result
 import kotlin.Result.Companion.success
 
-import com.logseq.kmp.editor.blocks.IBlockOperations
-import com.logseq.kmp.editor.blocks.DeleteStrategy
-import com.logseq.kmp.editor.blocks.PositioningMode
-import com.logseq.kmp.editor.blocks.IndentMode
-import com.logseq.kmp.editor.blocks.BlockOperation
-import com.logseq.kmp.editor.blocks.ValidationResult
-import com.logseq.kmp.editor.blocks.BulkOperation
-import com.logseq.kmp.editor.blocks.HistoricalOperation
-
 /**
  * Enhanced block operations with tree traversal and manipulation capabilities.
  * Provides efficient algorithms for hierarchical block structures.
@@ -50,15 +41,15 @@ class BlockTreeOperations(
      * Get all visible blocks in a page (respecting collapsed states).
      */
     suspend fun getVisibleBlocks(
-        pageId: Long,
+        pageUuid: String,
         includeCollapsed: Boolean = false
     ): Result<List<BlockWithDepth>> {
         return try {
             // Get current blocks snapshot
-            val pageBlocksResult = blockOperations.getBlocksForPage(pageId).first()
+            val pageBlocksResult = blockOperations.getBlocksForPage(pageUuid).first()
             val pageBlocks = pageBlocksResult.getOrNull() ?: emptyList()
             
-            val rootBlocks = pageBlocks.filter { it.parentId == null }
+            val rootBlocks = pageBlocks.filter { it.parentUuid == null }
             val visibleBlocks = mutableListOf<BlockWithDepth>()
             
             rootBlocks.forEach { rootBlock ->
@@ -137,9 +128,9 @@ class BlockTreeOperations(
     /**
      * Get all collapsed blocks in a page.
      */
-    suspend fun getCollapsedBlocks(pageId: Long): Result<List<String>> {
+    suspend fun getCollapsedBlocks(pageUuid: String): Result<List<String>> {
         return try {
-            val pageBlocksResult = blockOperations.getBlocksForPage(pageId).first()
+            val pageBlocksResult = blockOperations.getBlocksForPage(pageUuid).first()
             val pageBlocks = pageBlocksResult.getOrNull() ?: emptyList()
             
             val collapsed = pageBlocks.filter { block ->
@@ -170,10 +161,6 @@ class BlockTreeOperations(
                 }
             }
             
-            // This requires updateBlock/saveBlock which is in BlockRepository but we need to modify the block
-            // BlockRepository has saveBlock(block).
-            // BlockTreeOperations only has blockOperations: BlockRepository.
-            // So we can do:
             val updatedBlock = block.copy(properties = newProperties)
             blockOperations.saveBlock(updatedBlock)
         } catch (e: Exception) {
@@ -222,13 +209,8 @@ class BlockTreeOperations(
             blockOperations.moveBlockEnhanced(rootUuid, targetParentUuid, positioning, targetUuid)
                 .getOrNull() ?: return Result.failure(Exception("Failed to move root block"))
             
-            // Update levels for all descendants
-            val descendants = subtree.filter { it.block.uuid != rootUuid }
-            descendants.forEach { blockWithDepth ->
-                val newLevel = blockWithDepth.depth + levelOffset
-                // This would need a custom operation to update level directly
-                // For now, we'll rely on the existing moveBlock operation
-            }
+            // Note: The repository implementation of moveBlock should ideally handle children levels.
+            // In a full implementation, we'd ensure all descendants are updated.
             
             success(Unit)
         } catch (e: Exception) {
@@ -247,7 +229,7 @@ class BlockTreeOperations(
             val block = blockOperations.getBlockByUuid(rootUuid).first().getOrNull()
                 ?: return Result.failure(Exception("Block not found"))
             
-            if (block.parentId == null) {
+            if (block.parentUuid == null) {
                 return Result.failure(Exception("Cannot promote root-level block"))
             }
             

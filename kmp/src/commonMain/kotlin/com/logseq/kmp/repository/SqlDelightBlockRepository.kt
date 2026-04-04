@@ -196,29 +196,26 @@ class SqlDelightBlockRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = 
-        queries.selectBlocksByPageIdUnpaginated(pageId)
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> = 
+        queries.selectBlocksByPageUuidUnpaginated(pageUuid)
             .asFlow()
             .mapToList(PlatformDispatcher.IO)
             .map { list -> success(list.map { it.toBlockModel() }) }
+
+    private fun resolveUuidToId(uuid: String?): Long? {
+        if (uuid == null) return null
+        return queries.selectBlockIdByUuid(uuid).executeAsOneOrNull()?.id
+    }
+
+    private fun resolvePageUuidToId(uuid: String): Long {
+        return queries.selectPageIdByUuid(uuid).executeAsOneOrNull()?.id ?: -1L
+    }
 
     override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
             queries.transaction {
                 blocks.forEach { block ->
-                    queries.insertBlock(
-                        block.uuid,
-                        block.pageId,
-                        block.parentId,
-                        block.leftId,
-                        block.content,
-                        block.level.toLong(),
-                        block.position.toLong(),
-                        block.createdAt.toEpochMilliseconds(),
-                        block.updatedAt.toEpochMilliseconds(),
-                        block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
-                        block.version
-                    )
+                    saveBlockInternal(block)
                 }
             }
             success(Unit)
@@ -229,23 +226,27 @@ class SqlDelightBlockRepository(
 
     override suspend fun saveBlock(block: Block): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            queries.insertBlock(
-                block.uuid,
-                block.pageId,
-                block.parentId,
-                block.leftId,
-                block.content,
-                block.level.toLong(),
-                block.position.toLong(),
-                block.createdAt.toEpochMilliseconds(),
-                block.updatedAt.toEpochMilliseconds(),
-                block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
-                block.version
-            )
+            saveBlockInternal(block)
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun saveBlockInternal(block: Block) {
+        queries.insertBlock(
+            block.uuid,
+            resolvePageUuidToId(block.pageUuid),
+            resolveUuidToId(block.parentUuid),
+            resolveUuidToId(block.leftUuid),
+            block.content,
+            block.level.toLong(),
+            block.position.toLong(),
+            block.createdAt.toEpochMilliseconds(),
+            block.updatedAt.toEpochMilliseconds(),
+            block.properties.entries.joinToString(",") { "${it.key}:${it.value}" },
+            block.version
+        )
     }
 
     override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = withContext(PlatformDispatcher.IO) {
@@ -649,13 +650,21 @@ class SqlDelightBlockRepository(
                 success(list.drop(offset).take(limit).map { it.toBlockModel() })
             }
 
+    private fun resolveIdToUuid(id: Long?): String? {
+        if (id == null) return null
+        return queries.selectBlockByInternalId(id).executeAsOneOrNull()?.uuid
+    }
+
+    private fun resolvePageIdToUuid(id: Long): String {
+        return queries.selectPageByInternalId(id).executeAsOneOrNull()?.uuid ?: ""
+    }
+
     private fun com.logseq.kmp.db.Blocks.toBlockModel(): Block {
         return Block(
-            id = this.id,
             uuid = this.uuid,
-            pageId = this.page_id,
-            parentId = this.parent_id,
-            leftId = this.left_id,
+            pageUuid = resolvePageIdToUuid(this.page_id),
+            parentUuid = resolveIdToUuid(this.parent_id),
+            leftUuid = resolveIdToUuid(this.left_id),
             content = this.content,
             level = this.level.toInt(),
             position = this.position.toInt(),
@@ -688,9 +697,9 @@ class SqlDelightBlockRepository(
         return System.currentTimeMillis() - timestamp > hierarchyTtlMs
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = withContext(PlatformDispatcher.IO) {
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            queries.deleteBlocksByPageId(pageId)
+            queries.deleteBlocksByPageUuid(pageUuid)
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

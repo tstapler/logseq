@@ -16,10 +16,10 @@ import com.logseq.kmp.editor.state.EditorState
 import com.logseq.kmp.editor.state.EditorConfig
 import com.logseq.kmp.editor.state.EditorMode
 import com.logseq.kmp.editor.blocks.IBlockOperations
+import com.logseq.kmp.editor.blocks.DeleteStrategy
 import com.logseq.kmp.editor.format.IFormatProcessor
 import com.logseq.kmp.performance.PerformanceMonitor
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.Result
 
@@ -54,8 +54,7 @@ class Editor(
             _currentPage.value = page
             
             // Load blocks for this page
-            // Use getBlocksForPage instead of findRootBlocks/getItems which don't exist
-            val blocks = blockRepository.getBlocksForPage(page.id).first().getOrNull().orEmpty()
+            val blocks = blockRepository.getBlocksForPage(page.uuid).first().getOrNull().orEmpty()
             
             // Update editor state
             _editorState.update { it.copy(
@@ -84,12 +83,6 @@ class Editor(
     }
 
     override fun handleKeyEvent(keyEvent: KeyEvent): Boolean {
-        // Handle global keyboard shortcuts
-        // Key events in Compose usually use Key object directly for comparison
-        // But the previous error 'Operator == cannot be applied to Int and Key' suggests Key.S is Key but keyEvent.key might be treated differently?
-        // Actually keyEvent.key is a Key. 
-        // The error might be because Key.S is a companion object property returning Key?
-        // Let's rely on Key.<Code> directly.
         val key = keyEvent.key
         when {
             keyEvent.isCtrlPressed && key == Key.S -> {
@@ -153,21 +146,6 @@ class Editor(
             
             val result = command.execute(context)
             
-            if (result is CommandResult.Success) {
-                // Update cursor state based on command result
-                when (command.id) {
-                    "text.insert" -> {
-                        // Cursor position handled by text operations
-                    }
-                    "block.new" -> {
-                        // Focus new block
-                    }
-                    "block.delete" -> {
-                        // Move focus to next sibling
-                    }
-                }
-            }
-            
             com.logseq.kmp.performance.PerformanceMonitor.endTrace(traceId)
             if (result is CommandResult.Success) Result.success(Unit) else Result.failure(Exception((result as CommandResult.Error).message))
         } catch (e: Exception) {
@@ -229,18 +207,11 @@ class Editor(
             if (focusedBlockId != null) {
                 val focusedBlock = blockRepository.getBlockByUuid(focusedBlockId).first().getOrNull()
                 // If we have a focused block, we likely want to create a sibling (same parent)
-                // We need the PARENT's UUID to pass to createBlock (which expects String parentId = UUID).
-                val parentIdLong = focusedBlock?.parentId
-                if (parentIdLong != null) {
-                    // We have the parent's DB ID. Need its UUID.
-                    // Use blockOperations to get the parent block which contains the UUID.
-                    val parentBlock = blockOperations.getBlockParent(focusedBlockId).first().getOrNull()
-                    parentUuid = parentBlock?.uuid
-                }
+                parentUuid = focusedBlock?.parentUuid
             }
             
             blockOperations.createBlock(
-                pageId = currentPage.id,
+                pageUuid = currentPage.uuid,
                 content = content,
                 parentId = parentUuid
             ).also { result ->
@@ -382,7 +353,7 @@ class Editor(
     private suspend fun refreshBlocks() {
         val currentPage = _currentPage.value
         if (currentPage != null) {
-            val blocks = blockRepository.getBlocksForPage(currentPage.id).first().getOrNull().orEmpty()
+            val blocks = blockRepository.getBlocksForPage(currentPage.uuid).first().getOrNull().orEmpty()
             _editorState.update { it.copy(blocks = blocks) }
         }
     }

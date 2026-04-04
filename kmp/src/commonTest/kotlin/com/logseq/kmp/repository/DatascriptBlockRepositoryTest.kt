@@ -22,19 +22,19 @@ class DatascriptBlockRepositoryTest {
         repository = DatascriptBlockRepository()
     }
 
-    private fun createBlock(id: Long, parentId: Long? = null, position: Int, content: String = "Block $id"): Block {
-        // Pad ID to make valid UUID: 00000000-0000-0000-0000-000000000001
+    private fun uuid(id: Long): String {
         val uuidSuffix = id.toString().padStart(12, '0')
-        val uuid = "00000000-0000-0000-0000-$uuidSuffix"
-        
+        return "00000000-0000-0000-0000-$uuidSuffix"
+    }
+
+    private fun createBlock(id: Long, parentUuid: String? = null, position: Int, content: String = "Block $id"): Block {
         return Block(
-            id = id,
-            uuid = uuid,
-            pageId = 1,
+            uuid = uuid(id),
+            pageUuid = "page-1",
             content = content,
-            parentId = parentId,
+            parentUuid = parentUuid,
             position = position,
-            leftId = null, // simplified for helper, logic should handle it
+            leftUuid = null, // simplified for helper, logic should handle it
             createdAt = now,
             updatedAt = now
         )
@@ -60,7 +60,7 @@ class DatascriptBlockRepositoryTest {
         val res = repository.getBlockByUuid(uuid2).first()
         val block = res.getOrNull()
         assertNotNull(block)
-        assertEquals(1L, block.parentId) // Should now be child of B1
+        assertEquals(uuid(1), block.parentUuid) // Should now be child of B1
     }
 
     @Test
@@ -79,7 +79,7 @@ class DatascriptBlockRepositoryTest {
         assertTrue(result.isSuccess)
         
         // Verify positions
-        val res = repository.getBlocksForPage(1).first()
+        val res = repository.getBlocksForPage("page-1").first()
         val blocks = res.getOrNull() ?: emptyList()
         assertEquals(2, blocks.size)
         assertEquals(uuid2, blocks[0].uuid) // B2 first
@@ -102,7 +102,7 @@ class DatascriptBlockRepositoryTest {
         assertTrue(result.isSuccess)
         
         // Verify positions
-        val res = repository.getBlocksForPage(1).first()
+        val res = repository.getBlocksForPage("page-1").first()
         val blocks = res.getOrNull() ?: emptyList()
         assertEquals(2, blocks.size)
         assertEquals(uuid2, blocks[0].uuid) // B2 first

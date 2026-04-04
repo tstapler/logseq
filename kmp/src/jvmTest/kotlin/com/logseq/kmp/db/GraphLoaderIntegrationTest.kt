@@ -46,7 +46,7 @@ class GraphLoaderIntegrationTest {
 - Root 2
         """.trimIndent()
         
-        val path = "/graph/pages/TestPage.md"
+        val path = "/graph/pages/testpage.md"
         fileSystem.files[path] = content
         
         graphLoader.loadGraph("/graph") { _ -> }
@@ -55,10 +55,10 @@ class GraphLoaderIntegrationTest {
         val pages = pageRepository.getAllPages().first().getOrNull() ?: emptyList()
         assertEquals(1, pages.size)
         val page = pages[0]
-        assertEquals("TestPage", page.name)
+        assertEquals("testpage", page.name)
         
         // Verify Blocks
-        val blocks = blockRepository.getBlocksForPage(page.id).first().getOrNull() ?: emptyList()
+        val blocks = blockRepository.getBlocksForPage(page.uuid).first().getOrNull() ?: emptyList()
         
         // Should have: Parent, Child 1, Grandchild 1, Child 2, Root 2 (5 blocks)
         assertEquals(5, blocks.size, "Should have 5 blocks saved")
@@ -70,11 +70,11 @@ class GraphLoaderIntegrationTest {
         val root2 = blocks.find { it.content == "Root 2" }!!
         
         // Verify Hierarchy
-        assertEquals(null, parent.parentId)
-        assertEquals(parent.id, child1.parentId)
-        assertEquals(child1.id, grandchild.parentId)
-        assertEquals(parent.id, child2.parentId)
-        assertEquals(null, root2.parentId)
+        assertEquals(null, parent.parentUuid)
+        assertEquals(parent.uuid, child1.parentUuid)
+        assertEquals(child1.uuid, grandchild.parentUuid)
+        assertEquals(parent.uuid, child2.parentUuid)
+        assertEquals(null, root2.parentUuid)
         
         // Verify Levels
         assertEquals(0, parent.level)

@@ -19,6 +19,7 @@ import com.logseq.kmp.editor.commands.EditorCommand
 import com.logseq.kmp.editor.commands.CommandResult
 import com.logseq.kmp.performance.DebounceManager
 import com.logseq.kmp.ui.screens.SearchResultItem
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.Clock
@@ -46,7 +47,7 @@ class LogseqViewModel(
     private val logger = Logger("LogseqViewModel")
     
     // Track recent pages manually to avoid "recently loaded" issues
-    private var recentPageIds: MutableList<String> = platformSettings.getString("recent_pages", "")
+    private var recentPageUuids: MutableList<String> = platformSettings.getString("recent_pages", "")
         .split(",")
         .filter { it.isNotEmpty() }
         .toMutableList()
@@ -92,7 +93,7 @@ class LogseqViewModel(
     private fun updateUiStateWithPages(pages: List<Page>) {
         _uiState.update { state ->
             // Map recent UUIDs to actual Page objects, preserving order
-            val recent = recentPageIds.mapNotNull { uuid -> 
+            val recent = recentPageUuids.mapNotNull { uuid -> 
                 pages.find { it.uuid == uuid } 
             }
             
@@ -107,16 +108,16 @@ class LogseqViewModel(
 
     private fun addToRecent(page: Page) {
         // Remove if exists to move to top
-        recentPageIds.remove(page.uuid)
-        recentPageIds.add(0, page.uuid)
+        recentPageUuids.remove(page.uuid)
+        recentPageUuids.add(0, page.uuid)
         
         // Keep max 20 items
-        if (recentPageIds.size > 20) {
-            recentPageIds.removeAt(recentPageIds.lastIndex)
+        if (recentPageUuids.size > 20) {
+            recentPageUuids.removeAt(recentPageUuids.lastIndex)
         }
         
         // Save to settings
-        platformSettings.putString("recent_pages", recentPageIds.joinToString(","))
+        platformSettings.putString("recent_pages", recentPageUuids.joinToString(","))
         
         // Update UI
         updateUiStateWithPages(cachedAllPages)
@@ -301,11 +302,10 @@ class LogseqViewModel(
 
             val now = kotlinx.datetime.Clock.System.now()
             val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = currentBlock.pageId,
-                parentId = currentBlock.parentId,
-                leftId = currentBlock.id,
+                uuid = UuidGenerator.generateV7(),
+                pageUuid = currentBlock.pageUuid,
+                parentUuid = currentBlock.parentUuid,
+                leftUuid = currentBlock.uuid,
                 content = "",
                 level = currentBlock.level,
                 position = newPosition,
@@ -330,22 +330,21 @@ class LogseqViewModel(
             val pageResult = pageRepository.getPageByUuid(pageUuid).first()
             val page = pageResult.getOrNull() ?: return@launch
 
-            val blocksResult = blockRepository.getBlocksForPage(page.id).first()
+            val blocksResult = blockRepository.getBlocksForPage(page.uuid).first()
             val blocks = blocksResult.getOrNull() ?: emptyList()
             
             // Filter only top-level blocks (no parent)
-            val topLevelBlocks = blocks.filter { it.parentId == null }.sortedBy { it.position }
+            val topLevelBlocks = blocks.filter { it.parentUuid == null }.sortedBy { it.position }
             val lastBlock = topLevelBlocks.lastOrNull()
             
             val newPosition = (lastBlock?.position ?: 0) + 1
             val now = kotlinx.datetime.Clock.System.now()
             
             val newBlock = Block(
-                id = generateBlockId(),
-                uuid = generateUuid(),
-                pageId = page.id,
-                parentId = null,
-                leftId = lastBlock?.id,
+                uuid = UuidGenerator.generateV7(),
+                pageUuid = page.uuid,
+                parentUuid = null,
+                leftUuid = lastBlock?.uuid,
                 content = "",
                 level = 0,
                 position = newPosition,
@@ -374,10 +373,10 @@ class LogseqViewModel(
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
 
             // Get ALL siblings including current block
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageUuid).first()
             val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
             val siblings = allBlocks
-                .filter { it.parentId == currentBlock.parentId }
+                .filter { it.parentUuid == currentBlock.parentUuid }
                 .sortedBy { it.position }
 
             val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
@@ -396,10 +395,10 @@ class LogseqViewModel(
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
 
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageUuid).first()
             val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
             val siblings = allBlocks
-                .filter { it.parentId == currentBlock.parentId }
+                .filter { it.parentUuid == currentBlock.parentUuid }
                 .sortedBy { it.position }
 
             val currentIndex = siblings.indexOfFirst { it.uuid == currentBlock.uuid }
@@ -408,8 +407,8 @@ class LogseqViewModel(
                 val previousBlock = siblings[currentIndex - 1]
                 blockRepository.deleteBlock(blockUuid)
                 requestEditBlock(previousBlock.uuid, previousBlock.content.length)
-            } else if (currentBlock.parentId != null) {
-                val parent = allBlocks.find { it.id == currentBlock.parentId }
+            } else if (currentBlock.parentUuid != null) {
+                val parent = allBlocks.find { it.uuid == currentBlock.parentUuid }
                 blockRepository.deleteBlock(blockUuid)
                 if (parent != null) {
                     requestEditBlock(parent.uuid, parent.content.length)
@@ -427,7 +426,7 @@ class LogseqViewModel(
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
 
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageUuid).first()
             val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
             val sortedBlocks = com.logseq.kmp.outliner.BlockSorter.sort(allBlocks)
 
@@ -445,7 +444,7 @@ class LogseqViewModel(
             val currentBlockResult = blockRepository.getBlockByUuid(blockUuid).first()
             val currentBlock = currentBlockResult.getOrNull() ?: return@launch
 
-            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageId).first()
+            val pageBlocksResult = blockRepository.getBlocksForPage(currentBlock.pageUuid).first()
             val allBlocks = pageBlocksResult.getOrNull() ?: return@launch
             val sortedBlocks = com.logseq.kmp.outliner.BlockSorter.sort(allBlocks)
 
@@ -583,7 +582,7 @@ class LogseqViewModel(
         scope.launch {
             val block = blockRepository.getBlockByUuid(blockUuid).first().getOrNull()
             if (block != null) {
-                val page = cachedAllPages.find { it.id == block.pageId }
+                val page = cachedAllPages.find { it.uuid == block.pageUuid }
                 if (page != null) {
                     navigateTo(Screen.PageView(page))
                     // TODO: Scroll to block
@@ -598,14 +597,12 @@ class LogseqViewModel(
     private suspend fun createPage(pageName: String): Page? {
         return try {
             val now = kotlinx.datetime.Clock.System.now()
-            val uuid = generateUuid()
-            val pageId = generatePageId()
+            val uuid = UuidGenerator.generateV7()
 
             // Detect if this is a journal page (matches date patterns like 2026-01-21 or 2026_01_21)
             val isJournal = pageName.matches(Regex("^\\d{4}[-_]\\d{2}[-_]\\d{2}$"))
 
             val newPage = Page(
-                id = pageId,
                 uuid = uuid,
                 name = pageName,
                 namespace = null,
@@ -629,21 +626,7 @@ class LogseqViewModel(
     /**
      * Generate a UUID for new entities
      */
-    private fun generateUuid(): String {
-        // Simple UUID-like generation (could use platform-specific UUID)
-        val chars = "0123456789abcdef"
-        fun randomHex(length: Int) = (1..length).map { chars.random() }.joinToString("")
-        return "${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}"
-    }
-
-    /**
-     * Generate a unique page ID
-     */
-    private var pageIdCounter = Clock.System.now().toEpochMilliseconds()
-    private fun generatePageId(): Long = pageIdCounter++
-
-    private var blockIdCounter = Clock.System.now().toEpochMilliseconds()
-    private fun generateBlockId(): Long = blockIdCounter++
+    private fun generateUuid(): String = UuidGenerator.generateV7()
 
     /**
      * Get the content of a block by its UUID
@@ -672,7 +655,7 @@ class LogseqViewModel(
                 blockRepository.saveBlock(updatedBlock)
 
                 // 3. Get all blocks for the page to save to disk
-                val allBlocksResult = blockRepository.getBlocksForPage(page.id).first()
+                val allBlocksResult = blockRepository.getBlocksForPage(page.uuid).first()
                 val allBlocks = allBlocksResult.getOrNull() ?: emptyList()
 
                 // 4. Queue save to disk (debounced)
@@ -721,7 +704,7 @@ class LogseqViewModel(
 
     fun setCommandPaletteVisible(visible: Boolean) {
         _uiState.update { it.copy(commandPaletteVisible = visible) }
-    }
+    }Refactor
     
     fun setSearchDialogVisible(visible: Boolean) {
         _uiState.update { it.copy(searchDialogVisible = visible) }

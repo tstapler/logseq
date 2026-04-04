@@ -21,7 +21,7 @@ interface IBlockOperations : BlockRepository {
     /**
      * Create a new block with enhanced validation and positioning support.
      * 
-     * @param pageId The page where the block will be created
+     * @param pageUuid The page UUID where the block will be created
      * @param content The block content
      * @param parentId Optional parent block UUID for hierarchy
      * @param leftId Optional left sibling block UUID for positioning
@@ -32,7 +32,7 @@ interface IBlockOperations : BlockRepository {
      * @return Result containing the created block or error
      */
     suspend fun createBlock(
-        pageId: Long,
+        pageUuid: String,
         content: String,
         parentId: String? = null,
         leftId: String? = null,

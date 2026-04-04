@@ -103,11 +103,11 @@ private fun ReferenceSection(
         AnimatedVisibility(visible = expanded) {
             Column {
                 // Group blocks by page for display
-                val blocksByPage = blocks.groupBy { it.pageId }
+                val blocksByPage = blocks.groupBy { it.pageUuid }
 
-                blocksByPage.forEach { (pageId, pageBlocks) ->
+                blocksByPage.forEach { (pageUuid, pageBlocks) ->
                     ReferencePageGroup(
-                        pageId = pageId,
+                        pageUuid = pageUuid,
                         blocks = pageBlocks,
                         pageRepository = pageRepository,
                         onLinkClick = onLinkClick
@@ -120,7 +120,7 @@ private fun ReferenceSection(
 
 @Composable
 private fun ReferencePageGroup(
-    pageId: Long,
+    pageUuid: String,
     blocks: List<Block>,
     pageRepository: PageRepository,
     onLinkClick: (String) -> Unit
@@ -128,9 +128,9 @@ private fun ReferencePageGroup(
     // Look up the page name
     var pageName by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(pageId) {
-        val allPages = pageRepository.getAllPages().first().getOrNull() ?: emptyList()
-        pageName = allPages.find { it.id == pageId }?.name
+    LaunchedEffect(pageUuid) {
+        val page = pageRepository.getPageByUuid(pageUuid).first().getOrNull()
+        pageName = page?.name
     }
 
     Card(

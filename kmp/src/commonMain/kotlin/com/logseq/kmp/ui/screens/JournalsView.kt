@@ -35,14 +35,12 @@ fun JournalsView(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val editingBlockId = uiState.editingBlockId
+    val editingBlockUuid = uiState.editingBlockUuid
     val editingCursorIndex = uiState.editingCursorIndex
-    val collapsedBlockIds = uiState.collapsedBlockIds
+    val collapsedBlockUuids = uiState.collapsedBlockUuids
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope() // For repository calls
     val focusManager = LocalFocusManager.current
-
-    // Infinite scroll detection
 
     // Infinite scroll detection
     val shouldLoadMore = remember {
@@ -78,17 +76,17 @@ fun JournalsView(
         ) {
             items(
                 items = uiState.pages,
-                key = { page -> page.id }
+                key = { page -> page.uuid }
             ) { page ->
-                val blockList = uiState.blocks[page.id] ?: emptyList()
+                val blockList = uiState.blocks[page.uuid] ?: emptyList()
                 
                 JournalEntry(
                     page = page,
                     blocks = blockList,
                     isDebugMode = isDebugMode,
-                    editingBlockId = editingBlockId,
+                    editingBlockId = editingBlockUuid,
                     editingCursorIndex = editingCursorIndex,
-                    collapsedBlocks = collapsedBlockIds,
+                    collapsedBlocks = collapsedBlockUuids,
                     onStartEditing = { blockId -> viewModel.requestEditBlock(blockId) },
                     onStopEditing = { viewModel.requestEditBlock(null) },
                     onContentChange = { blockId, newContent, version ->
@@ -110,7 +108,7 @@ fun JournalsView(
                     onMoveDown = { blockUuid ->
                         viewModel.moveBlockDown(blockUuid)
                     },
-                    onLoadContent = { pageId -> viewModel.loadPageContent(pageId) },
+                    onLoadContent = { pageUuid -> viewModel.loadPageContent(pageUuid) },
                     onBackspace = { blockUuid -> viewModel.handleBackspace(blockUuid) },
                     onAddBlockToPage = { pageUuid -> viewModel.addBlockToPage(pageUuid) },
                     onToggleCollapse = { blockId -> viewModel.toggleBlockCollapse(blockId) },
@@ -135,7 +133,7 @@ fun JournalsView(
         }
 
         MobileBlockToolbar(
-            editingBlockId = editingBlockId,
+            editingBlockId = editingBlockUuid,
             onIndent = { blockId -> scope.launch { viewModel.indentBlock(blockId) } },
             onOutdent = { blockId -> scope.launch { viewModel.outdentBlock(blockId) } },
             onMoveUp = { blockId -> scope.launch { viewModel.moveBlockUp(blockId) } },
@@ -158,7 +156,7 @@ private fun JournalEntry(
     isDebugMode: Boolean,
     editingBlockId: String?,
     editingCursorIndex: Int?,
-    collapsedBlocks: Set<Long>,
+    collapsedBlocks: Set<String>,
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String, String, Long) -> Unit,
@@ -170,10 +168,10 @@ private fun JournalEntry(
     onOutdent: (String) -> Unit,
     onMoveUp: (String) -> Unit,
     onMoveDown: (String) -> Unit,
-    onLoadContent: (Long) -> Unit,
+    onLoadContent: (String) -> Unit,
     onBackspace: (String) -> Unit,
     onAddBlockToPage: (String) -> Unit,
-    onToggleCollapse: (Long) -> Unit,
+    onToggleCollapse: (String) -> Unit,
     onFocusUp: (String) -> Unit,
     onFocusDown: (String) -> Unit,
     onSearchPages: (String) -> kotlinx.coroutines.flow.Flow<List<SearchResultItem>> = { kotlinx.coroutines.flow.emptyFlow() },

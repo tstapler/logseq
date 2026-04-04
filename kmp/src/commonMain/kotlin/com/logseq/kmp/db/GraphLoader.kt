@@ -30,11 +30,6 @@ class GraphLoader(
     private val outlinerPipeline = OutlinerPipeline()
     private val markdownParser = MarkdownParser()
 
-    // ID Generation
-    private val idMutex = Mutex()
-    // Start with a time-based offset to reduce collision risk and ensure positivity
-    private var idCounter = Clock.System.now().toEpochMilliseconds()
-    
     // Platform-agnostic parallelism configuration
     // Use conservative defaults that work well across all platforms
     private val ioThreads = 4  // Conservative for mobile/desktop/web
@@ -42,12 +37,6 @@ class GraphLoader(
     
     // Platform-agnostic coroutine scope for parallel processing
     private val parallelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
-    private suspend fun generateId(): Long = idMutex.withLock {
-        // Ensure strictly positive and monotonically increasing
-        if (idCounter <= 0) idCounter = 1L
-        idCounter++
-    }
 
     private fun generateUuid(
         parsedBlock: ParsedBlock, 
@@ -422,8 +411,8 @@ class GraphLoader(
                         try {
                             // Collect all parsed pages and blocks first, then batch save
                             val pagesToSave = mutableListOf<Page>()
-                            val blocksToSaveByPage = mutableMapOf<Long, MutableList<Block>>()
-                            val pageIdsToDelete = mutableSetOf<Long>()
+                            val blocksToSaveByPage = mutableMapOf<String, MutableList<Block>>()
+                            val pageUuidsToDelete = mutableSetOf<String>()
                             
                             val count = chunk.count { fileName ->
                                 val filePath = "$path/$fileName"
@@ -445,7 +434,7 @@ class GraphLoader(
                                 
                                 // Check if blocks exist for this page to handle partially loaded/failed states
                                 val hasBlocks = if (existingPage != null) {
-                                    val blocksResult = blockRepository.getBlocksForPage(existingPage.id).first()
+                                    val blocksResult = blockRepository.getBlocksForPage(existingPage.uuid).first()
                                     val blocks = blocksResult.getOrNull() ?: emptyList()
                                     blocks.isNotEmpty()
                                 } else false
@@ -474,9 +463,9 @@ class GraphLoader(
                                     val updatedPage = parseResult.page // Keep as is for now
                                     pagesToSave.add(updatedPage)
                                     if (parseResult.blocks.isNotEmpty()) {
-                                        blocksToSaveByPage[updatedPage.id] = parseResult.blocks.toMutableList()
+                                        blocksToSaveByPage[updatedPage.uuid] = parseResult.blocks.toMutableList()
                                     }
-                                    pageIdsToDelete.add(updatedPage.id)
+                                    pageUuidsToDelete.add(updatedPage.uuid)
                                     true
                                 } catch (e: Exception) {
                                     logger.error("Failed to parse file: $filePath", e)
@@ -493,10 +482,10 @@ class GraphLoader(
                                 PerformanceMonitor.endTrace("batchSavePages")
                             }
                             
-                            if (pageIdsToDelete.isNotEmpty()) {
+                            if (pageUuidsToDelete.isNotEmpty()) {
                                 PerformanceMonitor.startTrace("batchDeleteBlocks")
-                                pageIdsToDelete.forEach { pageId ->
-                                    blockRepository.deleteBlocksForPage(pageId)
+                                pageUuidsToDelete.forEach { pageUuid ->
+                                    blockRepository.deleteBlocksForPage(pageUuid)
                                 }
                                 PerformanceMonitor.endTrace("batchDeleteBlocks")
                             }
@@ -585,19 +574,13 @@ class GraphLoader(
         val fileModTime = fileSystem.getLastModifiedTime(filePath)
         val updatedAt = fileModTime?.let { Instant.fromEpochMilliseconds(it) } ?: Clock.System.now()
         
-        // Check if page already exists to preserve ID and UUID
+        // Check if page already exists to preserve UUID
         val existingPageResult = pageRepository.getPageByName(name).first()
         val existingPage = existingPageResult.getOrNull()
         
-        val pageId = existingPage?.id ?: generateId()
         val pageUuid = existingPage?.uuid ?: UuidGenerator.generateV7()
         val createdAt = existingPage?.createdAt ?: updatedAt
         val currentVersion = existingPage?.version ?: 0L
-        
-        if (pageId <= 0) {
-            logger.error("Generated invalid pageId: $pageId for $filePath")
-            throw IllegalArgumentException("Generated invalid pageId: $pageId")
-        }
         
         // Parse markdown content
         val parsedPage = markdownParser.parsePage(content)
@@ -622,21 +605,21 @@ class GraphLoader(
         }
 
         val pageWithMetadata = Page(
-            id = pageId,
             uuid = pageUuid,
             name = name,
-            title = title,
             namespace = null,
             filePath = filePath,
             createdAt = createdAt,
             updatedAt = updatedAt,
             version = currentVersion,
             properties = properties,
-            journalDay = journalDate?.toEpochDays()?.toLong()
+            isJournal = isJournal,
+            journalDate = journalDate,
+            isContentLoaded = isLoaded
         )
         
         // Fetch existing blocks to preserve versions
-        val existingBlocksResult = blockRepository.getBlocksForPage(pageId).first()
+        val existingBlocksResult = blockRepository.getBlocksForPage(pageUuid).first()
         val existingBlocks = existingBlocksResult.getOrNull() ?: emptyList()
         val existingVersions = existingBlocks.associate { it.uuid to it.version }
         val existingContent = existingBlocks.associate { it.uuid to it.content }
@@ -646,9 +629,16 @@ class GraphLoader(
         val blocksList = mutableListOf<Block>()
 
         processParsedBlocks(
-            rootBlocks, filePath, pageId, null, 0, updatedAt,
-            blocksList, mode,
-            existingVersions, existingContent
+            parsedBlocks = rootBlocks, 
+            pagePath = filePath, 
+            pageUuid = pageUuid, 
+            parentUuid = null, 
+            baseLevel = 0, 
+            now = updatedAt,
+            destinationList = blocksList, 
+            mode = mode,
+            existingVersions = existingVersions, 
+            existingContent = existingContent
         )
         
         return ParseResult(page = pageWithMetadata, blocks = blocksList)
@@ -812,8 +802,8 @@ class GraphLoader(
     private suspend fun processParsedBlocks(
         parsedBlocks: List<ParsedBlock>,
         pagePath: String,
-        pageId: Long,
-        parentId: Long?,
+        pageUuid: String,
+        parentUuid: String?,
         baseLevel: Int,
         now: kotlinx.datetime.Instant,
         destinationList: MutableList<Block>,
@@ -821,10 +811,9 @@ class GraphLoader(
         existingVersions: Map<String, Long> = emptyMap(),
         existingContent: Map<String, String> = emptyMap()
     ) {
-        var previousSiblingId: Long? = null
+        var previousSiblingUuid: String? = null
         
         parsedBlocks.forEachIndexed { index, parsedBlock ->
-            val blockId = generateId()
             val blockUuid = generateUuid(parsedBlock, pagePath, index)
             
             // Version Preservation:
@@ -848,11 +837,10 @@ class GraphLoader(
             
             // Create Block entity
             val block = Block(
-                id = blockId,
                 uuid = blockUuid,
-                pageId = pageId,
-                parentId = parentId,
-                leftId = previousSiblingId,
+                pageUuid = pageUuid,
+                parentUuid = parentUuid,
+                leftUuid = previousSiblingUuid,
                 content = parsedBlock.content, // Content usually includes properties text in Logseq
                 level = baseLevel, // Or use parsedBlock.level if relative to root
                 position = index,
@@ -864,15 +852,15 @@ class GraphLoader(
             )
             
             destinationList.add(block)
-            previousSiblingId = blockId
+            previousSiblingUuid = blockUuid
             
             // Process children
             if (parsedBlock.children.isNotEmpty()) {
                 processParsedBlocks(
                     parsedBlocks = parsedBlock.children,
                     pagePath = pagePath,
-                    pageId = pageId,
-                    parentId = blockId,
+                    pageUuid = pageUuid,
+                    parentUuid = blockUuid,
                     baseLevel = baseLevel + 1,
                     now = now,
                     destinationList = destinationList,

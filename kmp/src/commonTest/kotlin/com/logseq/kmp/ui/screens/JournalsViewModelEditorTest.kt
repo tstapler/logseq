@@ -4,11 +4,8 @@ import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.FileSystem
-import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.BlockReferences
-import com.logseq.kmp.repository.BlockWithDepth
-import com.logseq.kmp.repository.BlockWithReferenceCount
-import com.logseq.kmp.repository.PageRepository
+import com.logseq.kmp.repository.*
+import com.logseq.kmp.platform.EncryptionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -68,9 +65,9 @@ class JournalsViewModelEditorTest {
 
         fun getAllBlocks(): List<Block> = blocks.value.values.toList()
 
-        override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> {
+        override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> {
             return blocks.map { map ->
-                val pageBlocks = map.values.filter { it.pageId == pageId }.sortedBy { it.position }
+                val pageBlocks = map.values.filter { it.pageUuid == pageUuid }.sortedBy { it.position }
                 Result.success(pageBlocks)
             }
         }
@@ -81,13 +78,8 @@ class JournalsViewModelEditorTest {
 
         override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> {
             return blocks.map { map ->
-                val block = map[blockUuid]
-                if (block == null) {
-                    Result.success(emptyList())
-                } else {
-                    val children = map.values.filter { it.parentId == block.id }.sortedBy { it.position }
-                    Result.success(children)
-                }
+                val children = map.values.filter { it.parentUuid == blockUuid }.sortedBy { it.position }
+                Result.success(children)
             }
         }
 
@@ -100,12 +92,7 @@ class JournalsViewModelEditorTest {
         override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> {
             return blocks.map { map ->
                 val block = map[blockUuid]
-                if (block?.parentId == null) {
-                    Result.success(null)
-                } else {
-                    val parent = map.values.find { it.id == block.parentId }
-                    Result.success(parent)
-                }
+                Result.success(block?.parentUuid?.let { map[it] })
             }
         }
 
@@ -113,7 +100,7 @@ class JournalsViewModelEditorTest {
             return blocks.map { map ->
                 val block = map[blockUuid] ?: return@map Result.success(emptyList<Block>())
                 val siblings = map.values
-                    .filter { it.parentId == block.parentId && it.pageId == block.pageId && it.uuid != blockUuid }
+                    .filter { it.parentUuid == block.parentUuid && it.pageUuid == block.pageUuid && it.uuid != blockUuid }
                     .sortedBy { it.position }
                 Result.success(siblings)
             }
@@ -147,8 +134,7 @@ class JournalsViewModelEditorTest {
             if (deleteChildren) {
                 // Recursively delete children
                 fun deleteRecursive(uuid: String) {
-                    val b = newMap[uuid] ?: return
-                    newMap.values.filter { it.parentId == b.id }.forEach { deleteRecursive(it.uuid) }
+                    newMap.values.filter { it.parentUuid == uuid }.forEach { deleteRecursive(it.uuid) }
                     newMap.remove(uuid)
                 }
                 deleteRecursive(blockUuid)
@@ -160,8 +146,8 @@ class JournalsViewModelEditorTest {
             return Result.success(Unit)
         }
 
-        override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
-            blocks.value = blocks.value.filterValues { it.pageId != pageId }
+        override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> {
+            blocks.value = blocks.value.filterValues { it.pageUuid != pageUuid }
             return Result.success(Unit)
         }
 
@@ -199,7 +185,7 @@ class JournalsViewModelEditorTest {
             
             // Shift siblings
             val siblingsToShift = currentMap.values.filter { 
-                it.pageId == block.pageId && it.parentId == block.parentId && it.position >= newPosition 
+                it.pageUuid == block.pageUuid && it.parentUuid == block.parentUuid && it.position >= newPosition 
             }
             siblingsToShift.forEach { sibling ->
                 currentMap[sibling.uuid] = sibling.copy(position = sibling.position + 1)
@@ -207,7 +193,6 @@ class JournalsViewModelEditorTest {
             
             val newBlock = block.copy(
                 uuid = java.util.UUID.randomUUID().toString(),
-                id = (currentMap.values.maxOfOrNull { it.id } ?: 0L) + 1,
                 content = secondPart,
                 position = newPosition
             )
@@ -219,6 +204,33 @@ class JournalsViewModelEditorTest {
         }
 
         override suspend fun clear() { blocks.value = emptyMap() }
+        
+        // Unimplemented members
+        override fun getBlocksForPageHierarchy(pageUuid: String): Flow<Result<List<BlockWithDepth>>> = flowOf(Result.success(emptyList()))
+        override suspend fun createBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
+        override suspend fun updateBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlocks(blockUuids: List<String>): Result<Unit> = Result.success(Unit)
+        override fun getBlockMetadata(blockUuid: String): Flow<Result<Map<String, String>>> = flowOf(Result.success(emptyMap()))
+        override suspend fun updateBlockMetadata(blockUuid: String, metadata: Map<String, String>): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlockMetadata(blockUuid: String, key: String): Result<Unit> = Result.success(Unit)
+        override fun getBlockProperties(blockUuid: String): Flow<Result<List<com.logseq.kmp.model.Property>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockProperty(blockUuid: String, key: String): Flow<Result<com.logseq.kmp.model.Property?>> = flowOf(Result.success(null))
+        override suspend fun saveBlockProperty(property: com.logseq.kmp.model.Property): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlockProperty(blockUuid: String, key: String): Result<Unit> = Result.success(Unit)
+        override fun getBlocksWithPropertyKey(key: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksWithPropertyValue(key: String, value: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockVersionHistory(blockUuid: String): Flow<Result<List<BlockVersion>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockVersion(blockUuid: String, version: Long): Flow<Result<BlockVersion?>> = flowOf(Result.success(null))
+        override suspend fun createBlockVersion(blockUuid: String, changeDescription: String): Result<Unit> = Result.success(Unit)
+        override suspend fun getStatistics(): Result<BlockRepositoryStatistics> = Result.success(BlockRepositoryStatistics(0, 0, 0, 0f, 0, Clock.System.now(), 0))
+        override suspend fun optimize(): Result<Unit> = Result.success(Unit)
+        override suspend fun validateIntegrity(): Result<ValidationReport> = Result.success(ValidationReport(true, emptyList(), emptyList(), emptyList()))
+        override suspend fun setCachingEnabled(enabled: Boolean): Result<Unit> = Result.success(Unit)
+        override suspend fun clearCache(): Result<Unit> = Result.success(Unit)
+        override suspend fun getCacheStatistics(): Result<CacheStatistics> = Result.success(CacheStatistics(0, 0, 0f, 0, 0, 0))
+        override suspend fun setEncryptionManager(encryptionManager: EncryptionManager): Result<Unit> = Result.success(Unit)
+        override fun isEncrypted(): Boolean = false
+        override fun getBlocksByContentPattern(pattern: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
     }
 
     class FakePageRepository : PageRepository {
@@ -243,11 +255,8 @@ class JournalsViewModelEditorTest {
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> =
             flowOf(Result.success(pages.find { it.uuid == uuid }))
 
-        override fun getPageById(id: Long): Flow<Result<Page?>> =
-            flowOf(Result.success(pages.find { it.id == id }))
-
         override fun getPageByName(name: String): Flow<Result<Page?>> =
-            flowOf(Result.success(pages.find { it.name == name }))
+            flowOf(Result.success(pages.find { it.name.equals(name, ignoreCase = true) }))
 
         override suspend fun savePage(page: Page): Result<Unit> {
             pages.removeAll { it.uuid == page.uuid }
@@ -268,11 +277,14 @@ class JournalsViewModelEditorTest {
 
     private val now = Clock.System.now()
 
-    private fun createPage(id: Long, name: String = "TestPage"): Page {
+    private fun uuid(id: Long, prefix: String = "1"): String {
         val uuidSuffix = id.toString().padStart(12, '0')
+        return "00000000-0000-$prefix" + "000-0000-$uuidSuffix"
+    }
+
+    private fun createPage(id: Long, name: String = "TestPage"): Page {
         return Page(
-            id = id,
-            uuid = "00000000-0000-1000-0000-$uuidSuffix",  // Valid UUID format (hex only)
+            uuid = uuid(id, "1"),
             name = name,
             createdAt = now,
             updatedAt = now,
@@ -283,22 +295,20 @@ class JournalsViewModelEditorTest {
 
     private fun createBlock(
         id: Long,
-        pageId: Long = 1L,
-        parentId: Long? = null,
+        pageUuid: String = uuid(1, "1"),
+        parentUuid: String? = null,
         position: Int,
         content: String = "Block $id",
         level: Int = 0
     ): Block {
-        val uuidSuffix = id.toString().padStart(12, '0')
         return Block(
-            id = id,
-            uuid = "00000000-0000-2000-0000-$uuidSuffix",  // Valid UUID format (hex only)
-            pageId = pageId,
-            parentId = parentId,
+            uuid = uuid(id, "2"),
+            pageUuid = pageUuid,
+            parentUuid = parentUuid,
             content = content,
             position = position,
             level = level,
-            leftId = null,
+            leftUuid = null,
             createdAt = now,
             updatedAt = now
         )
@@ -326,15 +336,15 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "Hello ")
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "World")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "Hello ")
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "World")
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
 
         // Load the page blocks into the ViewModel state
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Merge block2 into block1
         viewModel.mergeBlock(block2.uuid)
@@ -360,11 +370,11 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "First block")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "First block")
         blockRepo.addBlock(block1)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Try to merge the first block (should do nothing - no previous block)
         viewModel.mergeBlock(block1.uuid)
@@ -385,15 +395,15 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "A")
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "B")
-        val block3 = createBlock(3, pageId = 1, position = 2, content = "C")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "A")
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "B")
+        val block3 = createBlock(3, pageUuid = page.uuid, position = 2, content = "C")
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
         blockRepo.addBlock(block3)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Merge block2 into block1
         viewModel.mergeBlock(block2.uuid)
@@ -401,7 +411,7 @@ class JournalsViewModelEditorTest {
         kotlinx.coroutines.delay(50)
 
         // Verify remaining blocks have correct positions
-        val remainingBlocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val remainingBlocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -422,13 +432,13 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "Previous block")
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "")  // Empty block
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "Previous block")
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "")  // Empty block
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Handle backspace on empty block2
         viewModel.handleBackspace(block2.uuid)
@@ -452,13 +462,13 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "")  // Empty first block
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "Second block")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "")  // Empty first block
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "Second block")
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Handle backspace on first empty root block
         viewModel.handleBackspace(block1.uuid)
@@ -482,11 +492,11 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "")  // Only block
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "")  // Only block
         blockRepo.addBlock(block1)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Handle backspace on the only root block
         viewModel.handleBackspace(block1.uuid)
@@ -506,13 +516,13 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val parent = createBlock(1, pageId = 1, position = 0, content = "Parent", level = 0)
-        val child = createBlock(2, pageId = 1, parentId = 1, position = 0, content = "", level = 1)  // Empty child
+        val parent = createBlock(1, pageUuid = page.uuid, position = 0, content = "Parent", level = 0)
+        val child = createBlock(2, pageUuid = page.uuid, parentUuid = parent.uuid, position = 0, content = "", level = 1)  // Empty child
         blockRepo.addBlock(parent)
         blockRepo.addBlock(child)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Handle backspace on empty child
         viewModel.handleBackspace(child.uuid)
@@ -540,11 +550,11 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block = createBlock(1, pageId = 1, position = 0, content = "HelloWorld")
+        val block = createBlock(1, pageUuid = page.uuid, position = 0, content = "HelloWorld")
         blockRepo.addBlock(block)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Split at position 5 (after "Hello")
         viewModel.splitBlock(block.uuid, 5)
@@ -552,7 +562,7 @@ class JournalsViewModelEditorTest {
         kotlinx.coroutines.delay(50)
 
         // Verify the split
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -569,18 +579,18 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block = createBlock(1, pageId = 1, position = 0, content = "Full content")
+        val block = createBlock(1, pageUuid = page.uuid, position = 0, content = "Full content")
         blockRepo.addBlock(block)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Split at position 0 (start)
         viewModel.splitBlock(block.uuid, 0)
 
         kotlinx.coroutines.delay(50)
 
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -597,18 +607,18 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block = createBlock(1, pageId = 1, position = 0, content = "Full content")
+        val block = createBlock(1, pageUuid = page.uuid, position = 0, content = "Full content")
         blockRepo.addBlock(block)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Split at end (position = content length)
         viewModel.splitBlock(block.uuid, 12)  // "Full content".length = 12
 
         kotlinx.coroutines.delay(50)
 
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -625,22 +635,22 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "First")
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "HelloWorld")
-        val block3 = createBlock(3, pageId = 1, position = 2, content = "Third")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "First")
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "HelloWorld")
+        val block3 = createBlock(3, pageUuid = page.uuid, position = 2, content = "Third")
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
         blockRepo.addBlock(block3)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Split block2 at position 5
         viewModel.splitBlock(block2.uuid, 5)
 
         kotlinx.coroutines.delay(50)
 
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -668,18 +678,18 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "First")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "First")
         blockRepo.addBlock(block1)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Add new block after block1
         viewModel.addNewBlock(block1.uuid)
 
         kotlinx.coroutines.delay(50)
 
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -696,22 +706,22 @@ class JournalsViewModelEditorTest {
         val page = createPage(1)
         pageRepo.addPage(page)
 
-        val block1 = createBlock(1, pageId = 1, position = 0, content = "A")
-        val block2 = createBlock(2, pageId = 1, position = 1, content = "B")
-        val block3 = createBlock(3, pageId = 1, position = 2, content = "C")
+        val block1 = createBlock(1, pageUuid = page.uuid, position = 0, content = "A")
+        val block2 = createBlock(2, pageUuid = page.uuid, position = 1, content = "B")
+        val block3 = createBlock(3, pageUuid = page.uuid, position = 2, content = "C")
         blockRepo.addBlock(block1)
         blockRepo.addBlock(block2)
         blockRepo.addBlock(block3)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
+        viewModel.loadPageContent(page.uuid)
 
         // Add new block after block1
         viewModel.addNewBlock(block1.uuid)
 
         kotlinx.coroutines.delay(50)
 
-        val blocks = blockRepo.getBlocksForPage(1).first().getOrNull()
+        val blocks = blockRepo.getBlocksForPage(page.uuid).first().getOrNull()
             ?.sortedBy { it.position }
             ?: emptyList()
 
@@ -737,20 +747,20 @@ class JournalsViewModelEditorTest {
         pageRepo.addPage(page2)
 
         // Page 1 blocks
-        val p1Block1 = createBlock(1, pageId = 1, position = 0, content = "Page1-A")
-        val p1Block2 = createBlock(2, pageId = 1, position = 1, content = "Page1-B")
+        val p1Block1 = createBlock(1, pageUuid = page1.uuid, position = 0, content = "Page1-A")
+        val p1Block2 = createBlock(2, pageUuid = page1.uuid, position = 1, content = "Page1-B")
         blockRepo.addBlock(p1Block1)
         blockRepo.addBlock(p1Block2)
 
         // Page 2 blocks
-        val p2Block1 = createBlock(3, pageId = 2, position = 0, content = "Page2-A")
-        val p2Block2 = createBlock(4, pageId = 2, position = 1, content = "Page2-B")
+        val p2Block1 = createBlock(3, pageUuid = page2.uuid, position = 0, content = "Page2-A")
+        val p2Block2 = createBlock(4, pageUuid = page2.uuid, position = 1, content = "Page2-B")
         blockRepo.addBlock(p2Block1)
         blockRepo.addBlock(p2Block2)
 
         val viewModel = createViewModel(pageRepo, blockRepo)
-        viewModel.loadPageContent(1)
-        viewModel.loadPageContent(2)
+        viewModel.loadPageContent(page1.uuid)
+        viewModel.loadPageContent(page2.uuid)
 
         // Merge blocks on page 1
         viewModel.mergeBlock(p1Block2.uuid)
@@ -758,7 +768,7 @@ class JournalsViewModelEditorTest {
         kotlinx.coroutines.delay(50)
 
         // Page 2 blocks should be unchanged
-        val page2Blocks = blockRepo.getBlocksForPage(2).first().getOrNull() ?: emptyList()
+        val page2Blocks = blockRepo.getBlocksForPage(page2.uuid).first().getOrNull() ?: emptyList()
         assertEquals(2, page2Blocks.size)
         assertEquals("Page2-A", page2Blocks[0].content)
         assertEquals("Page2-B", page2Blocks[1].content)

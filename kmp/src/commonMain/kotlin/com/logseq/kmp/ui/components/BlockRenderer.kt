@@ -572,7 +572,7 @@ fun BlockList(
     blocks: List<Block>,
     isDebugMode: Boolean = false,
     editingBlockId: String?,
-    collapsedBlocks: Set<Long> = emptySet(),
+    collapsedBlocks: Set<String> = emptySet(),
     onStartEditing: (String) -> Unit,
     onStopEditing: () -> Unit,
     onContentChange: (String, String, Long) -> Unit,
@@ -582,8 +582,8 @@ fun BlockList(
     onMergeBlock: (String) -> Unit = {},
     editingCursorIndex: Int? = null,
     onBackspace: (String) -> Unit = {}, // uuid
-    onLoadContent: (Long) -> Unit = {},
-    onToggleCollapse: (Long) -> Unit = {},
+    onLoadContent: (String) -> Unit = {},
+    onToggleCollapse: (String) -> Unit = {},
     onIndent: (String) -> Unit = {},
     onOutdent: (String) -> Unit = {},
     onMoveUp: (String) -> Unit = {},
@@ -594,26 +594,26 @@ fun BlockList(
     onSearchPages: (String) -> Flow<List<SearchResultItem>> = { emptyFlow() },
     modifier: Modifier = Modifier
 ) {
-    // Build a map of parent ID to children for quick lookup
+    // Build a map of parent UUID to children for quick lookup
     val childrenByParent = remember(blocks) {
-        blocks.groupBy { it.parentId }
+        blocks.groupBy { it.parentUuid }
     }
 
-    // Get IDs of blocks that have children
+    // Get UUIDs of blocks that have children
     val blocksWithChildren = remember(blocks) {
-        blocks.mapNotNull { it.parentId }.toSet()
+        blocks.mapNotNull { it.parentUuid }.toSet()
     }
 
-    // Get all descendant IDs of a block (for hiding when collapsed)
-    fun getDescendantIds(blockId: Long): Set<Long> {
-        val descendants = mutableSetOf<Long>()
-        val queue = ArrayDeque<Long>()
-        queue.add(blockId)
+    // Get all descendant UUIDs of a block (for hiding when collapsed)
+    fun getDescendantUuids(blockUuid: String): Set<String> {
+        val descendants = mutableSetOf<String>()
+        val queue = ArrayDeque<String>()
+        queue.add(blockUuid)
         while (queue.isNotEmpty()) {
             val current = queue.removeFirst()
             childrenByParent[current]?.forEach { child ->
-                descendants.add(child.id)
-                queue.add(child.id)
+                descendants.add(child.uuid)
+                queue.add(child.uuid)
             }
         }
         return descendants
@@ -621,15 +621,15 @@ fun BlockList(
 
     // Calculate which blocks should be hidden due to collapsed ancestors
     val hiddenBlocks = remember(blocks, collapsedBlocks) {
-        collapsedBlocks.flatMap { getDescendantIds(it) }.toSet()
+        collapsedBlocks.flatMap { getDescendantUuids(it) }.toSet()
     }
 
     Column(modifier = modifier) {
         blocks.forEach { block ->
             // Only show if not hidden by a collapsed ancestor
-            if (block.id !in hiddenBlocks) {
-                val hasChildren = block.id in blocksWithChildren
-                val isCollapsed = block.id in collapsedBlocks
+            if (block.uuid !in hiddenBlocks) {
+                val hasChildren = block.uuid in blocksWithChildren
+                val isCollapsed = block.uuid in collapsedBlocks
                 
                 BlockRenderer(
                     block = block,
@@ -646,8 +646,8 @@ fun BlockList(
                     onMergeBlock = onMergeBlock,
                     initialCursorPosition = if (editingBlockId == block.uuid) editingCursorIndex else null,
                     onBackspace = { onBackspace(block.uuid) },
-                    onLoadContent = { onLoadContent(block.pageId) },
-                    onToggleCollapse = { onToggleCollapse(block.id) },
+                    onLoadContent = { onLoadContent(block.pageUuid) },
+                    onToggleCollapse = { onToggleCollapse(block.uuid) },
                     onIndent = { onIndent(block.uuid) },
                     onOutdent = { onOutdent(block.uuid) },
                     onMoveUp = { onMoveUp(block.uuid) },

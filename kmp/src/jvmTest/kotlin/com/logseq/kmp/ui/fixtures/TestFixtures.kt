@@ -16,7 +16,6 @@ object TestFixtures {
         val now = Clock.System.now()
         return (1..3).map { i ->
             Page(
-                id = i.toLong(),
                 uuid = uuid(i),
                 name = "2026-03-0$i",
                 createdAt = now,
@@ -27,14 +26,14 @@ object TestFixtures {
         }
     }
 
-    fun sampleBlocksForPage(pageId: Long, startId: Long = pageId * 100): List<Block> {
+    fun sampleBlocksForPage(pageUuid: String, startIndex: Int = 100): List<Block> {
         val now = Clock.System.now()
-        val baseId = startId.toInt()
+        val baseIdx = startIndex
+        val parentUuid = uuid(baseIdx)
         return listOf(
             Block(
-                id = baseId.toLong(),
-                uuid = uuid(baseId),
-                pageId = pageId,
+                uuid = parentUuid,
+                pageUuid = pageUuid,
                 content = "**Bold text** in journal entry",
                 level = 0,
                 position = 0,
@@ -42,9 +41,8 @@ object TestFixtures {
                 updatedAt = now
             ),
             Block(
-                id = (baseId + 1).toLong(),
-                uuid = uuid(baseId + 1),
-                pageId = pageId,
+                uuid = uuid(baseIdx + 1),
+                pageUuid = pageUuid,
                 content = "TODO A task to complete",
                 level = 0,
                 position = 1,
@@ -52,9 +50,8 @@ object TestFixtures {
                 updatedAt = now
             ),
             Block(
-                id = (baseId + 2).toLong(),
-                uuid = uuid(baseId + 2),
-                pageId = pageId,
+                uuid = uuid(baseIdx + 2),
+                pageUuid = pageUuid,
                 content = "See also [[Another Page]]",
                 level = 0,
                 position = 2,
@@ -62,10 +59,9 @@ object TestFixtures {
                 updatedAt = now
             ),
             Block(
-                id = (baseId + 3).toLong(),
-                uuid = uuid(baseId + 3),
-                pageId = pageId,
-                parentId = baseId.toLong(),
+                uuid = uuid(baseIdx + 3),
+                pageUuid = pageUuid,
+                parentUuid = parentUuid,
                 content = "Child block content",
                 level = 1,
                 position = 0,
@@ -78,7 +74,6 @@ object TestFixtures {
     fun samplePage(): Page {
         val now = Clock.System.now()
         return Page(
-            id = 999,
             uuid = uuid(999),
             name = "Test Page",
             createdAt = now,
@@ -87,13 +82,12 @@ object TestFixtures {
         )
     }
 
-    fun samplePageBlocks(pageId: Long = 999): List<Block> {
+    fun samplePageBlocks(pageUuid: String = uuid(999)): List<Block> {
         val now = Clock.System.now()
         return listOf(
             Block(
-                id = 9001,
                 uuid = uuid(9001),
-                pageId = pageId,
+                pageUuid = pageUuid,
                 content = "Introduction paragraph with regular text",
                 level = 0,
                 position = 0,
@@ -101,9 +95,8 @@ object TestFixtures {
                 updatedAt = now
             ),
             Block(
-                id = 9002,
                 uuid = uuid(9002),
-                pageId = pageId,
+                pageUuid = pageUuid,
                 content = "Second block with **bold** and *italic*",
                 level = 0,
                 position = 1,
@@ -115,6 +108,6 @@ object TestFixtures {
 
     fun sampleJournalData(): Map<Page, List<Block>> {
         val pages = sampleJournalPages()
-        return pages.associateWith { page -> sampleBlocksForPage(page.id) }
+        return pages.associateWith { page -> sampleBlocksForPage(page.uuid) }
     }
 }

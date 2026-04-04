@@ -38,11 +38,6 @@ object Validation {
         return validateString(content, MAX_CONTENT_LENGTH, allowWhitespace = true)
     }
 
-    fun validateId(id: Long): Long {
-        require(id > 0) { "ID must be positive" }
-        return id
-    }
-
     fun validateUuid(uuid: String?): String {
         val validated = validateString(uuid, 36)
         require(validated.matches(Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))) {
@@ -53,7 +48,6 @@ object Validation {
 }
 
 data class Page(
-    val id: Long,
     val uuid: String,
     val name: String,
     val namespace: String? = null,
@@ -69,7 +63,6 @@ data class Page(
     val isContentLoaded: Boolean = true
 ) {
     init {
-        Validation.validateId(id)
         Validation.validateUuid(uuid)
         Validation.validateName(name)
         namespace?.let { Validation.validateName(it) }
@@ -82,11 +75,10 @@ data class Page(
 }
 
 data class Block(
-    val id: Long,
     val uuid: String,
-    val pageId: Long,
-    val parentId: Long? = null,
-    val leftId: Long? = null,
+    val pageUuid: String,
+    val parentUuid: String? = null,
+    val leftUuid: String? = null,
     val content: String,
     val level: Int = 0,
     val position: Int,
@@ -97,11 +89,10 @@ data class Block(
     val isLoaded: Boolean = true // Indicates if the content is fully loaded
 ) {
     init {
-        Validation.validateId(id)
         Validation.validateUuid(uuid)
-        Validation.validateId(pageId)
-        parentId?.let { Validation.validateId(it) }
-        leftId?.let { Validation.validateId(it) }
+        Validation.validateUuid(pageUuid)
+        parentUuid?.let { Validation.validateUuid(it) }
+        leftUuid?.let { Validation.validateUuid(it) }
         Validation.validateContent(content)
         require(level >= 0) { "Level must be non-negative" }
         require(position >= 0) { "Position must be non-negative" }
@@ -113,15 +104,15 @@ data class Block(
 }
 
 data class Property(
-    val id: Long,
-    val blockId: Long,
+    val uuid: String,
+    val blockUuid: String,
     val key: String,
     val value: String,
     val createdAt: Instant
 ) {
     init {
-        Validation.validateId(id)
-        Validation.validateId(blockId)
+        Validation.validateUuid(uuid)
+        Validation.validateUuid(blockUuid)
         Validation.validateName(key)
         Validation.validateContent(value)
     }

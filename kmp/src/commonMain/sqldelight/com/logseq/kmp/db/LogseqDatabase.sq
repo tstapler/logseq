@@ -114,8 +114,17 @@ END;
 selectBlockById:
 SELECT * FROM blocks WHERE id = ?;
 
-selectBlockByUuid:
-SELECT * FROM blocks WHERE uuid = ?;
+selectBlockByInternalId:
+SELECT * FROM blocks WHERE id = ?;
+
+selectBlockIdByUuid:
+SELECT id FROM blocks WHERE uuid = ?;
+
+selectPageByInternalId:
+SELECT * FROM pages WHERE id = ?;
+
+selectPageIdByUuid:
+SELECT id FROM pages WHERE uuid = ?;
 
 existsBlockById:
 SELECT COUNT(*) FROM blocks WHERE id = ?;
@@ -131,6 +140,9 @@ SELECT * FROM blocks ORDER BY id LIMIT ? OFFSET ?;
 
 selectBlockChildren:
 SELECT * FROM blocks WHERE parent_id = ? ORDER BY position LIMIT ? OFFSET ?;
+
+selectBlockChildrenByUuid:
+SELECT * FROM blocks WHERE parent_id = (SELECT id FROM blocks WHERE uuid = ?) ORDER BY position;
 
 countBlockChildren:
 SELECT COUNT(*) FROM blocks WHERE parent_id = ?;
@@ -150,6 +162,9 @@ SELECT * FROM blocks WHERE page_id = ? ORDER BY position LIMIT ? OFFSET ?;
 selectBlocksByPageIdUnpaginated:
 SELECT * FROM blocks WHERE page_id = ? ORDER BY position;
 
+selectBlocksByPageUuidUnpaginated:
+SELECT * FROM blocks WHERE page_id = (SELECT id FROM pages WHERE uuid = ?) ORDER BY position;
+
 selectBlocksWithContentLike:
 SELECT * FROM blocks WHERE content LIKE ?;
 
@@ -167,6 +182,9 @@ SELECT * FROM blocks WHERE parent_id IN ? ORDER BY parent_id, position;
 
 selectRootBlocksByPageIdOrdered:
 SELECT * FROM blocks WHERE parent_id IS NULL AND page_id = ? ORDER BY position;
+
+selectRootBlocksByPageUuidOrdered:
+SELECT * FROM blocks WHERE parent_id IS NULL AND page_id = (SELECT id FROM pages WHERE uuid = ?) ORDER BY position;
 
 updateBlockParentPositionAndLevel:
 UPDATE blocks SET parent_id = ?, position = ?, level = ? WHERE id = ?;
@@ -209,6 +227,9 @@ DELETE FROM blocks;
 
 deleteBlocksByPageId:
 DELETE FROM blocks WHERE page_id = ?;
+
+deleteBlocksByPageUuid:
+DELETE FROM blocks WHERE page_id = (SELECT id FROM pages WHERE uuid = ?);
 
 insertBlock:
 INSERT INTO blocks (uuid, page_id, parent_id, left_id, content, level, position, created_at, updated_at, properties, version)

@@ -15,10 +15,6 @@ class CachedPageRepository(
     private val cache: PageCache
 ) : PageRepository {
 
-    override fun getPageById(id: Long): Flow<Result<Page?>> {
-        return delegate.getPageById(id)
-    }
-
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> {
         return cache.getPageByUuid(uuid)
     }
@@ -43,7 +39,7 @@ class CachedPageRepository(
         return delegate.getJournalPages(limit, offset)
     }
 
-    override suspend fun savePage(page: Page): Result<Long> {
+    override suspend fun savePage(page: Page): Result<Unit> {
         return cache.savePage(page)
     }
 

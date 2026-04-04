@@ -22,12 +22,6 @@ class SqlDelightPageRepository(
 
     private val queries = database.logseqDatabaseQueries
 
-    override fun getPageById(id: Long): Flow<Result<Page?>> = 
-        queries.selectPageById(id)
-            .asFlow()
-            .mapToOneOrNull(PlatformDispatcher.IO)
-            .map { success(it?.toModel()) }
-
     override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = 
         queries.selectPageByUuid(uuid)
             .asFlow()
@@ -64,9 +58,8 @@ class SqlDelightPageRepository(
             .mapToList(PlatformDispatcher.IO)
             .map { list -> success(list.map { it.toModel() }) }
 
-    override suspend fun savePage(page: Page): Result<Long> = withContext(PlatformDispatcher.IO) {
+    override suspend fun savePage(page: Page): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            var finalId = 0L
             queries.transaction {
                 // 1. Try to insert (will ignore if UUID or NAME conflict exists)
                 queries.insertPage(
@@ -83,12 +76,7 @@ class SqlDelightPageRepository(
                     journal_date = page.journalDate?.toString()
                 )
                 
-                // 2. Resolve the actual ID (either newly inserted or existing)
-                // Use selectPageByName since we have a UNIQUE constraint on it.
-                // LIMIT 1 because we know names are unique now.
-                finalId = queries.selectPageByName(page.name).executeAsOne().id
-
-                // 3. Explicitly update fields to handle conflicts (without changing the ID)
+                // 2. Explicitly update fields to handle conflicts
                 queries.updatePage(
                     namespace = page.namespace,
                     file_path = page.filePath,
@@ -101,7 +89,7 @@ class SqlDelightPageRepository(
                     uuid = page.uuid
                 )
             }
-            success(finalId)
+            success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -122,9 +110,9 @@ class SqlDelightPageRepository(
 
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            val page = queries.selectPageByUuid(pageUuid).executeAsOneOrNull()
-            if (page != null) {
-                queries.updatePageName(newName, page.id)
+            val pageId = queries.selectPageIdByUuid(pageUuid).executeAsOneOrNull()?.id
+            if (pageId != null) {
+                queries.updatePageName(newName, pageId)
             }
             success(Unit)
         } catch (e: Exception) {
@@ -134,9 +122,9 @@ class SqlDelightPageRepository(
 
     override suspend fun deletePage(pageUuid: String): Result<Unit> = withContext(PlatformDispatcher.IO) {
         try {
-            val page = queries.selectPageByUuid(pageUuid).executeAsOneOrNull()
-            if (page != null) {
-                queries.deletePageById(page.id)
+            val pageId = queries.selectPageIdByUuid(pageUuid).executeAsOneOrNull()?.id
+            if (pageId != null) {
+                queries.deletePageById(pageId)
             }
             success(Unit)
         } catch (e: Exception) {
@@ -159,7 +147,6 @@ class SqlDelightPageRepository(
 
     private fun com.logseq.kmp.db.Pages.toModel(): Page {
         return Page(
-            id = this.id,
             uuid = this.uuid,
             name = this.name,
             namespace = this.namespace,
@@ -175,4 +162,5 @@ class SqlDelightPageRepository(
             journalDate = this.journal_date?.let { kotlinx.datetime.LocalDate.parse(it) }
         )
     }
+}
 }

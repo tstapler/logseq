@@ -42,12 +42,20 @@ class CachedBlockRepository(
         return delegate.getBlockSiblings(blockUuid)
     }
 
-    override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> {
-        return delegate.getBlocksForPage(pageId)
+    override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> {
+        return delegate.getBlocksForPage(pageUuid)
+    }
+
+    override fun getBlocksForPageHierarchy(pageUuid: String): Flow<Result<List<BlockWithDepth>>> {
+        return delegate.getBlocksForPageHierarchy(pageUuid)
     }
 
     override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
         return delegate.searchBlocksByContent(query, limit, offset)
+    }
+
+    override fun getBlocksByContentPattern(pattern: String): Flow<Result<List<Block>>> {
+        return delegate.getBlocksByContentPattern(pattern)
     }
 
     override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> {
@@ -146,11 +154,55 @@ class CachedBlockRepository(
         cache.start()
     }
 
-    override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> {
-        return delegate.deleteBlocksForPage(pageId).also {
-            // cache.invalidatePage(pageId)
+    override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> {
+        return delegate.deleteBlocksForPage(pageUuid).also {
+            // Invalidate all blocks from this page in cache
+            // Simplified: clear the cache if a whole page is deleted
+            cache.clear()
         }
     }
+
+    override suspend fun createBlocks(blocks: List<Block>): Result<Unit> {
+        return delegate.createBlocks(blocks).also {
+            blocks.forEach { cache.invalidateBlock(it.uuid) }
+        }
+    }
+
+    override suspend fun updateBlocks(blocks: List<Block>): Result<Unit> {
+        return delegate.updateBlocks(blocks).also {
+            blocks.forEach { cache.invalidateBlock(it.uuid) }
+        }
+    }
+
+    override suspend fun deleteBlocks(blockUuids: List<String>): Result<Unit> {
+        return delegate.deleteBlocks(blockUuids).also {
+            blockUuids.forEach { cache.invalidateBlock(it) }
+        }
+    }
+
+    override fun getBlockMetadata(blockUuid: String): Flow<Result<Map<String, String>>> = delegate.getBlockMetadata(blockUuid)
+    override suspend fun updateBlockMetadata(blockUuid: String, metadata: Map<String, String>): Result<Unit> = delegate.updateBlockMetadata(blockUuid, metadata)
+    override suspend fun deleteBlockMetadata(blockUuid: String, key: String): Result<Unit> = delegate.deleteBlockMetadata(blockUuid, key)
+    override fun getBlockProperties(blockUuid: String): Flow<Result<List<com.logseq.kmp.model.Property>>> = delegate.getBlockProperties(blockUuid)
+    override fun getBlockProperty(blockUuid: String, key: String): Flow<Result<com.logseq.kmp.model.Property?>> = delegate.getBlockProperty(blockUuid, key)
+    override suspend fun saveBlockProperty(property: com.logseq.kmp.model.Property): Result<Unit> = delegate.saveBlockProperty(property)
+    override suspend fun deleteBlockProperty(blockUuid: String, key: String): Result<Unit> = delegate.deleteBlockProperty(blockUuid, key)
+    override fun getBlocksWithPropertyKey(key: String): Flow<Result<List<Block>>> = delegate.getBlocksWithPropertyKey(key)
+    override fun getBlocksWithPropertyValue(key: String, value: String): Flow<Result<List<Block>>> = delegate.getBlocksWithPropertyValue(key, value)
+    override fun getBlockVersionHistory(blockUuid: String): Flow<Result<List<com.logseq.kmp.repository.BlockVersion>>> = delegate.getBlockVersionHistory(blockUuid)
+    override fun getBlockVersion(blockUuid: String, version: Long): Flow<Result<com.logseq.kmp.repository.BlockVersion?>> = delegate.getBlockVersion(blockUuid, version)
+    override suspend fun createBlockVersion(blockUuid: String, changeDescription: String): Result<Unit> = delegate.createBlockVersion(blockUuid, changeDescription)
+    override suspend fun getStatistics(): Result<com.logseq.kmp.repository.BlockRepositoryStatistics> = delegate.getStatistics()
+    override suspend fun optimize(): Result<Unit> = delegate.optimize()
+    override suspend fun validateIntegrity(): Result<com.logseq.kmp.repository.ValidationReport> = delegate.validateIntegrity()
+    override suspend fun setCachingEnabled(enabled: Boolean): Result<Unit> = delegate.setCachingEnabled(enabled)
+    override suspend fun clearCache(): Result<Unit> {
+        cache.clear()
+        return delegate.clearCache()
+    }
+    override suspend fun getCacheStatistics(): Result<com.logseq.kmp.repository.CacheStatistics> = delegate.getCacheStatistics()
+    override suspend fun setEncryptionManager(encryptionManager: com.logseq.kmp.platform.EncryptionManager): Result<Unit> = delegate.setEncryptionManager(encryptionManager)
+    override fun isEncrypted(): Boolean = delegate.isEncrypted()
 
     override suspend fun clear() {
         delegate.clear()

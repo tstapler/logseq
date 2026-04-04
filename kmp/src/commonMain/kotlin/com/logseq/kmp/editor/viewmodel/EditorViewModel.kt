@@ -14,6 +14,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.ui.i18n.Language
 import com.logseq.kmp.ui.theme.LogseqThemeMode
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -384,12 +385,6 @@ class EditorViewModel(
                         currentTextOperations.insertText(focusedBlockId, block.content)
                     } else {
                         // If no block was focused, we are loading a new one.
-                        // We should probably set the text operations to use this block ID.
-                        // But TextOperations manages state by block ID.
-                        // So we just need to update metadata to point to this block.
-                        // And then populate it.
-                        // However, we can't update metadata inside this let block easily if we need it for textOperations.
-                        // Actually, we should update metadata FIRST, then populate.
                     }
                     
                     updateEditorState { 
@@ -473,7 +468,7 @@ class EditorViewModel(
     /**
      * Create new block with current content.
      */
-    fun createNewBlock(pageId: Long) {
+    fun createNewBlock(pageUuid: String) {
         scope.launch {
             try {
                 val currentState = _editorState.value
@@ -482,12 +477,11 @@ class EditorViewModel(
                     currentTextOperations.getText(currentBlockUuid).getOrNull() ?: ""
                 } else ""
                 
-                val newUuid = generateUuid()
+                val newUuid = UuidGenerator.generateV7()
                 val now = Clock.System.now()
                 val newBlock = Block(
-                    id = now.toEpochMilliseconds(), // Temporary ID
                     uuid = newUuid,
-                    pageId = pageId,
+                    pageUuid = pageUuid,
                     content = content,
                     position = 0,
                     createdAt = now,
@@ -515,18 +509,6 @@ class EditorViewModel(
                 handleError(EditorError.BlockCreateError("Failed to create block", e))
             }
         }
-    }
-    
-    private fun generateUuid(): String {
-        val chars = "0123456789abcdef"
-        return (1..36).map { i ->
-            when (i) {
-                9, 14, 19, 24 -> '-'
-                15 -> '4'
-                20 -> chars[(0..3).random() + 8]
-                else -> chars.random()
-            }
-        }.joinToString("")
     }
     
     // ===== ERROR HANDLING =====

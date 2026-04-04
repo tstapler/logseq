@@ -4,11 +4,8 @@ import com.logseq.kmp.db.GraphLoader
 import com.logseq.kmp.platform.FileSystem
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
-import com.logseq.kmp.repository.BlockRepository
-import com.logseq.kmp.repository.PageRepository
-import com.logseq.kmp.repository.BlockReferences
-import com.logseq.kmp.repository.BlockWithDepth
-import com.logseq.kmp.repository.BlockWithReferenceCount
+import com.logseq.kmp.repository.*
+import com.logseq.kmp.platform.EncryptionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -37,7 +34,7 @@ class JournalsViewModelTest {
     }
 
     class FakeBlockRepository : BlockRepository {
-        override fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getBlockByUuid(uuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
         override fun getBlockChildren(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getBlockHierarchy(rootUuid: String): Flow<Result<List<BlockWithDepth>>> = flowOf(Result.success(emptyList()))
@@ -47,11 +44,13 @@ class JournalsViewModelTest {
         override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksByContentPattern(pattern: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksForPageHierarchy(pageUuid: String): Flow<Result<List<BlockWithDepth>>> = flowOf(Result.success(emptyList()))
         
         override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
         override suspend fun saveBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
         override suspend fun deleteBlock(blockUuid: String, deleteChildren: Boolean): Result<Unit> = Result.success(Unit)
-        override suspend fun deleteBlocksForPage(pageId: Long): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun moveBlock(blockUuid: String, newParentUuid: String?, newPosition: Int): Result<Unit> = Result.success(Unit)
         override suspend fun indentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun outdentBlock(blockUuid: String): Result<Unit> = Result.success(Unit)
@@ -59,6 +58,29 @@ class JournalsViewModelTest {
         override suspend fun moveBlockDown(blockUuid: String): Result<Unit> = Result.success(Unit)
         override suspend fun mergeBlocks(blockUuid: String, nextBlockUuid: String, separator: String): Result<Unit> = Result.success(Unit)
         override suspend fun splitBlock(blockUuid: String, cursorPosition: Int): Result<Block> = Result.failure(NotImplementedError())
+        override suspend fun createBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
+        override suspend fun updateBlocks(blocks: List<Block>): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlocks(blockUuids: List<String>): Result<Unit> = Result.success(Unit)
+        override fun getBlockMetadata(blockUuid: String): Flow<Result<Map<String, String>>> = flowOf(Result.success(emptyMap()))
+        override suspend fun updateBlockMetadata(blockUuid: String, metadata: Map<String, String>): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlockMetadata(blockUuid: String, key: String): Result<Unit> = Result.success(Unit)
+        override fun getBlockProperties(blockUuid: String): Flow<Result<List<com.logseq.kmp.model.Property>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockProperty(blockUuid: String, key: String): Flow<Result<com.logseq.kmp.model.Property?>> = flowOf(Result.success(null))
+        override suspend fun saveBlockProperty(property: com.logseq.kmp.model.Property): Result<Unit> = Result.success(Unit)
+        override suspend fun deleteBlockProperty(blockUuid: String, key: String): Result<Unit> = Result.success(Unit)
+        override fun getBlocksWithPropertyKey(key: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlocksWithPropertyValue(key: String, value: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockVersionHistory(blockUuid: String): Flow<Result<List<BlockVersion>>> = flowOf(Result.success(emptyList()))
+        override fun getBlockVersion(blockUuid: String, version: Long): Flow<Result<BlockVersion?>> = flowOf(Result.success(null))
+        override suspend fun createBlockVersion(blockUuid: String, changeDescription: String): Result<Unit> = Result.success(Unit)
+        override suspend fun getStatistics(): Result<BlockRepositoryStatistics> = Result.success(BlockRepositoryStatistics(0, 0, 0, 0f, 0, Clock.System.now(), 0))
+        override suspend fun optimize(): Result<Unit> = Result.success(Unit)
+        override suspend fun validateIntegrity(): Result<ValidationReport> = Result.success(ValidationReport(true, emptyList(), emptyList(), emptyList()))
+        override suspend fun setCachingEnabled(enabled: Boolean): Result<Unit> = Result.success(Unit)
+        override suspend fun clearCache(): Result<Unit> = Result.success(Unit)
+        override suspend fun getCacheStatistics(): Result<CacheStatistics> = Result.success(CacheStatistics(0, 0, 0f, 0, 0, 0))
+        override suspend fun setEncryptionManager(encryptionManager: EncryptionManager): Result<Unit> = Result.success(Unit)
+        override fun isEncrypted(): Boolean = false
         override suspend fun clear() {}
     }
 
@@ -79,8 +101,7 @@ class JournalsViewModelTest {
 
         override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.uuid == uuid }))
-        override fun getPageById(id: Long): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.id == id }))
-        override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.name == name }))
+        override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.name.equals(name, ignoreCase = true) }))
         override suspend fun savePage(page: Page): Result<Unit> {
             pages.add(page)
             return Result.success(Unit)
@@ -105,7 +126,6 @@ class JournalsViewModelTest {
             val date = LocalDate(2026, 1, i)
             repo.savePage(
                 Page(
-                    id = i.toLong(),
                     uuid = generateFakeUuid(i),
                     name = "2026-01-${i.toString().padStart(2, '0')}",
                     createdAt = Clock.System.now(),

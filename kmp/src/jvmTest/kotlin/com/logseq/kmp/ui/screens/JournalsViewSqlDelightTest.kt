@@ -38,7 +38,6 @@ class JournalsViewSqlDelightTest {
             val now = Clock.System.now()
             pageRepo.savePage(
                 Page(
-                    id = 1L,
                     uuid = "00000000-0000-0000-0000-000000000001",
                     name = "2026_03_14",
                     createdAt = now,

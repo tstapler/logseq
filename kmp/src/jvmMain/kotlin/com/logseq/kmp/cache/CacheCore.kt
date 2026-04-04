@@ -226,8 +226,8 @@ class LRUCache<K, V>(
  */
 data class CachedBlock(
     val block: Block,
-    val childrenIds: List<Long> = emptyList(),
-    val parentId: Long? = block.parentId,
+    val childrenUuids: List<String> = emptyList(),
+    val parentUuid: String? = block.parentUuid,
     val timestamp: Long = System.currentTimeMillis()
 )
 
