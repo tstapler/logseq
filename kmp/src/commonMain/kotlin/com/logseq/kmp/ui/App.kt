@@ -40,6 +40,7 @@ import com.logseq.kmp.ui.screens.PageView
 import com.logseq.kmp.ui.screens.JournalsView
 import com.logseq.kmp.ui.theme.LogseqTheme
 import com.logseq.kmp.ui.theme.LogseqThemeMode
+import kotlinx.coroutines.launch
 
 /**
  * Root Composable for the Logseq application.
@@ -71,7 +72,7 @@ fun LogseqApp(
     LaunchedEffect(graphPath) {
         if (graphPath.isNotEmpty() && activeGraphId == null) {
             val graphId = graphManager.addGraph(graphPath)
-            graphManager.switchGraph(graphId)
+            graphId?.let { graphManager.switchGraph(it) }
         } else if (activeGraphId != null) {
             // Re-switch to ensure repositories are initialized
             graphManager.switchGraph(activeGraphId)
@@ -194,9 +195,11 @@ private fun GraphContent(
                         viewModel.setOnboardingCompleted(true)
                     },
                     onGraphSelected = { path ->
-                        val graphId = graphManager.addGraph(path)
-                        graphManager.switchGraph(graphId)
-                        viewModel.setGraphPath(path)
+                        scope.launch {
+                            val graphId = graphManager.addGraph(path)
+                            graphId?.let { graphManager.switchGraph(it) }
+                            viewModel.setGraphPath(path)
+                        }
                     }
                 )
             } else {
@@ -300,17 +303,23 @@ private fun GraphContent(
                                     viewModel.toggleFavorite(page)
                                 },
                                 onGraphSelected = { graphId ->
-                                    graphManager.switchGraph(graphId)
+                                    scope.launch {
+                                        graphManager.switchGraph(graphId)
+                                    }
                                 },
                                 onAddGraph = {
                                     val selectedPath = fileSystem.pickDirectory()
                                     if (selectedPath != null) {
-                                        val newGraphId = graphManager.addGraph(selectedPath)
-                                        graphManager.switchGraph(newGraphId)
+                                        scope.launch {
+                                            val newGraphId = graphManager.addGraph(selectedPath)
+                                            newGraphId?.let { graphManager.switchGraph(it) }
+                                        }
                                     }
                                 },
                                 onRemoveGraph = { graphId ->
-                                    graphManager.removeGraph(graphId)
+                                    scope.launch {
+                                        graphManager.removeGraph(graphId)
+                                    }
                                 }
                             )
                         },

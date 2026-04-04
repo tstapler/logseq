@@ -6,6 +6,7 @@ import com.logseq.kmp.coroutines.PlatformDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlin.Result.Companion.success
 
@@ -49,7 +50,7 @@ class SqlDelightReferenceRepository(
 
     override suspend fun addReference(fromBlockUuid: String, toBlockUuid: String): Result<Unit> {
         return try {
-            queries.insertBlockReference(fromBlockUuid, toBlockUuid, System.currentTimeMillis())
+            queries.insertBlockReference(fromBlockUuid, toBlockUuid, Clock.System.now().toEpochMilliseconds())
             success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
