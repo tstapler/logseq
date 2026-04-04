@@ -1,6 +1,6 @@
 ## 🐛 BUG-003: Android and JS Targets Disabled [SEVERITY: Medium]
 
-**Status**: 🔄 Partial Fix
+**Status**: ✅ Fixed
 **Discovered**: 2026-01-11 during Project Analysis
 **Impact**: Multiplatform capabilities are currently limited to JVM/Desktop and iOS. Android and JS targets are disabled in build configuration.
 
@@ -23,20 +23,30 @@
 3. Re-enable targets in `gradle.properties`.
 
 **Progress**:
-- **Android**: ✅ FIXED - Added `DriverFactory.android.kt` with proper SQLDelight AndroidSqliteDriver initialization
-- **JS**: ❌ Not started - Requires missing `PlatformFileSystem.js.kt` and System import fixes
+- **Android**: ✅ FIXED - Added `DriverFactory.android.kt` with proper AndroidSqliteDriver initialization using reflection
+- **JS**: ✅ FIXED - Added JS expect/actual declarations with SQLDelight web-worker-driver and SQL.js
 
 **Files Modified**:
 - `kmp/src/androidMain/kotlin/com/logseq/kmp/db/DriverFactory.android.kt` - NEW
-- `gradle.properties` - Added `enableJs=true`
-
-**Files Still Needed for JS**:
-- `kmp/src/jsMain/kotlin/com/logseq/kmp/platform/PlatformFileSystem.js.kt`
-- Fix `System` references in common code (use expect/actual)
+- `kmp/src/commonMain/kotlin/com/logseq/kmp/db/PlatformUtils.kt` - NEW
+- `kmp/src/jvmMain/kotlin/com/logseq/kmp/db/PlatformUtils.jvm.kt` - NEW
+- `kmp/src/androidMain/kotlin/com/logseq/kmp/db/PlatformUtils.android.kt` - NEW
+- `kmp/src/jsMain/kotlin/com/logseq/kmp/db/PlatformUtils.js.kt` - NEW
+- `kmp/src/jsMain/kotlin/com/logseq/kmp/db/DriverFactory.js.kt` - NEW
+- `kmp/webpack.config.d/sqljs-config.js` - NEW
+- Updated `SqlDelightBlockRepository.kt` and `SqlDelightReferenceRepository.kt` to use `Clock.System.now()` instead of `System.currentTimeMillis()`
+- Updated `GraphManager.kt` to use platform-independent APIs
+- Updated SQLDelight to version 2.1.0 for JS driver compatibility
 
 **Verification**:
 - [x] Run `./gradlew :kmp:compileDebugKotlinAndroid` successfully.
-- [ ] Run `./gradlew :kmp:compileKotlinJs` successfully.
+- [x] Run `./gradlew :kmp:compileKotlinJs` successfully.
+- [x] Run `./gradlew :kmp:compileKotlinJvm` successfully.
+
+**Notes**:
+- JS target now uses SQLDelight web-worker-driver with SQL.js worker
+- Browser will use WebWorker for async database operations
+- Webpack config updated to copy sql-wasm.wasm to output directory
 
 **Related Tasks**: 
 - KMP Migration

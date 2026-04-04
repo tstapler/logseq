@@ -39,8 +39,8 @@ kotlin {
                 implementation("org.jetbrains:markdown:0.7.3")
 
                 // SQLDelight
-                implementation("app.cash.sqldelight:runtime:2.0.2")
-                implementation("app.cash.sqldelight:coroutines-extensions:2.0.2")
+                implementation("app.cash.sqldelight:runtime:2.1.0")
+                implementation("app.cash.sqldelight:coroutines-extensions:2.1.0")
 
                 // Compose Multiplatform
                 implementation(compose.runtime)
@@ -68,7 +68,7 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
-                implementation("app.cash.sqldelight:sqlite-driver:2.0.2")
+                implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
 
                 // Graph databases for performance evaluation
                 // implementation("com.kuzudb:kuzu-jdbc:0.7.0")
@@ -94,7 +94,10 @@ kotlin {
                 dependencies {
                     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-js:1.8.1")
                     implementation(compose.html.core)
-                    implementation("app.cash.sqldelight:web-worker-driver:2.0.2")
+                    implementation("app.cash.sqldelight:web-worker-driver:2.1.0")
+                    implementation(npm("@cashapp/sqldelight-sqljs-worker", "2.1.0"))
+                    implementation(npm("sql.js", "1.10.3"))
+                    implementation(devNpm("copy-webpack-plugin", "9.1.0"))
                 }
             }
 
@@ -134,7 +137,7 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-iosx64:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-iosarm64:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-iossimulatorarm64:1.8.1")
-                implementation("app.cash.sqldelight:native-driver:2.0.2")
+                implementation("app.cash.sqldelight:native-driver:2.1.0")
             }
         }
 

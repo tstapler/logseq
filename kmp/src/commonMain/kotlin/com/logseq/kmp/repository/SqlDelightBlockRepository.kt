@@ -4,6 +4,7 @@ import com.logseq.kmp.db.LogseqDatabase
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.coroutines.PlatformDispatcher
 import com.logseq.kmp.util.ContentHasher
+import com.logseq.kmp.util.UuidGenerator
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOne
@@ -11,7 +12,10 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.Result.Companion.success
 import kotlin.collections.mutableMapOf
 
@@ -105,7 +109,7 @@ class SqlDelightBlockRepository(
                     hierarchyCache.keys.take(100).forEach { hierarchyCache.remove(it) }
                 }
                 hierarchyCache[rootUuid] = resultList
-                hierarchyCacheTimestamps[rootUuid] = System.currentTimeMillis()
+                hierarchyCacheTimestamps[rootUuid] = Clock.System.now().toEpochMilliseconds()
 
                 emit(success(resultList))
             }
@@ -538,7 +542,7 @@ class SqlDelightBlockRepository(
                 val mergedContent = blockA.content + separator + blockB.content
                 queries.updateBlockContent(
                     mergedContent, 
-                    System.currentTimeMillis(), 
+                    Clock.System.now().toEpochMilliseconds(), 
                     blockA.uuid
                 )
                 
@@ -587,10 +591,10 @@ class SqlDelightBlockRepository(
                 val secondPart = content.substring(cursorPosition).trim()
                 
                 // 1. Update original block
-                queries.updateBlockContent(firstPart, System.currentTimeMillis(), block.uuid)
+                queries.updateBlockContent(firstPart, Clock.System.now().toEpochMilliseconds(), block.uuid)
                 
                 // 2. Create new block
-                val newUuid = java.util.UUID.randomUUID().toString()
+                val newUuid = UuidGenerator.generateV7()
                 val newPosition = block.position + 1L
                 
                 // Shift siblings' positions
@@ -617,8 +621,8 @@ class SqlDelightBlockRepository(
                     content = secondPart,
                     level = block.level,
                     position = newPosition,
-                    created_at = System.currentTimeMillis(),
-                    updated_at = System.currentTimeMillis(),
+                    created_at = Clock.System.now().toEpochMilliseconds(),
+                    updated_at = Clock.System.now().toEpochMilliseconds(),
                     properties = null,
                     version = 0L,
                     content_hash = ContentHasher.sha256ForContent(secondPart)
@@ -741,7 +745,7 @@ class SqlDelightBlockRepository(
 
     private fun isHierarchyCacheExpired(rootUuid: String): Boolean {
         val timestamp = hierarchyCacheTimestamps[rootUuid] ?: return true
-        return System.currentTimeMillis() - timestamp > hierarchyTtlMs
+        return Clock.System.now().toEpochMilliseconds() - timestamp > hierarchyTtlMs
     }
 
     override suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit> = withContext(PlatformDispatcher.IO) {
@@ -753,7 +757,7 @@ class SqlDelightBlockRepository(
         }
     }
 
-    override suspend fun clear() = withContext(PlatformDispatcher.IO) {
+    override suspend fun clear(): Unit = withContext(PlatformDispatcher.IO) {
         queries.deleteAllBlocks()
         blockCache.clear()
         hierarchyCache.clear()

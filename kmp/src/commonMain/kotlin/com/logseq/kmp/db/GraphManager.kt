@@ -18,6 +18,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.datetime.Clock
+
+expect class PlatformUtils() {
+    fun getDatabaseDirectory(): String
+    fun getDatabasePath(graphId: String? = null): String
+    fun migrateDatabaseFile(oldPath: String, newPath: String): Boolean
+}
 
 /**
  * Manages multiple graphs and their respective database connections.
@@ -49,305 +56,142 @@ class GraphManager(
     }
     
     private fun loadRegistry() {
-        val registryJson = platformSettings.getString("graph_registry", "")
-        if (registryJson.isNotEmpty()) {
+        val stored = platformSettings.getString("graph_registry", "")
+        if (stored.isNotEmpty()) {
             try {
-                val registry = json.decodeFromString<GraphRegistry>(registryJson)
-                _graphRegistry.value = registry
+                _graphRegistry.value = json.decodeFromString<GraphRegistry>(stored)
             } catch (e: Exception) {
-                // Corrupted registry - start fresh
-                _graphRegistry.value = GraphRegistry()
-                saveRegistry()
+                println("Failed to load graph registry: ${e.message}")
             }
-        } else {
-            // No registry exists - check for migration from single-graph setup
-            migrateFromSingleGraph()
         }
     }
     
-    /**
-     * Migrate from the old single-graph setup to multi-graph.
-     * - Checks for existing `lastGraphPath` setting
-     * - Renames `logseq.db` to `logseq-graph-{hash}.db`
-     * - Creates GraphRegistry with the migrated graph as active
-     */
-    private fun migrateFromSingleGraph() {
+    private suspend fun saveRegistry() {
+        mutex.withLock {
+            val jsonStr = json.encodeToString(_graphRegistry.value)
+            platformSettings.putString("graph_registry", jsonStr)
+        }
+    }
+    
+    private fun createGraphInfo(path: String): GraphInfo? {
+        val canonicalPath = fileSystem.expandTilde(path)
+        val graphId = ContentHasher.sha256(canonicalPath).substring(0, 16)
+        
+        // Check for duplicates
+        if (_graphRegistry.value.graphs.any { it.path == canonicalPath }) {
+            return null
+        }
+        
+        val info = GraphInfo(
+            id = graphId,
+            path = canonicalPath,
+            displayName = path.substringAfterLast("/").substringAfterLast("\\"),
+            addedAt = Clock.System.now().toEpochMilliseconds()
+        )
+        
+        return info
+    }
+    
+    suspend fun initialize(): Boolean {
         val lastGraphPath = platformSettings.getString("lastGraphPath", "")
-        if (lastGraphPath.isEmpty()) {
-            // No previous graph - fresh install
-            return
-        }
+        val stored = platformSettings.getString("graph_registry", "")
         
-        try {
-            val expandedPath = fileSystem.expandTilde(lastGraphPath)
-            val graphId = graphIdFromPath(expandedPath)
-            
-            // Get the database directory
-            val dbDir = getDatabaseDirectory()
-            val oldDbPath = "$dbDir/logseq.db"
-            val newDbPath = "$dbDir/logseq-graph-$graphId.db"
-            
-            // Check if old database exists and rename it
-            if (fileSystem.fileExists(oldDbPath)) {
-                // Try to rename the file (this is platform-specific)
-                val renamed = migrateDatabaseFile(oldDbPath, newDbPath)
-                if (renamed) {
-                    // Also try to migrate WAL and SHM files if they exist
-                    migrateWalShmFiles(dbDir, graphId)
-                }
+        return if (stored.isEmpty() && lastGraphPath.isNotEmpty()) {
+            // Migration: convert single-graph to multi-graph
+            val info = createGraphInfo(lastGraphPath)
+            if (info != null) {
+                _graphRegistry.value = _graphRegistry.value.copy(
+                    graphs = _graphRegistry.value.graphs + info,
+                    activeGraphId = info.id
+                )
+                switchGraph(info.id) != null
+            } else {
+                false
             }
-            
-            // Create graph registry with the migrated graph
-            val displayName = lastGraphPath.substringAfterLast("/")
-                .substringAfterLast("\\")
-                .ifEmpty { lastGraphPath }
-            
-            val graphInfo = GraphInfo(
-                id = graphId,
-                path = expandedPath,
-                displayName = displayName,
-                addedAt = System.currentTimeMillis()
-            )
-            
-            val registry = GraphRegistry(
-                activeGraphId = graphId,
-                graphs = listOf(graphInfo)
-            )
-            _graphRegistry.value = registry
-            saveRegistry()
-            
-            println("Migration complete: graph '$displayName' migrated to ID $graphId")
-        } catch (e: Exception) {
-            println("Migration failed: ${e.message}")
-            // Start fresh if migration fails
-            _graphRegistry.value = GraphRegistry()
-            saveRegistry()
-        }
-    }
-    
-    /**
-     * Get the platform-specific database directory
-     */
-    private fun getDatabaseDirectory(): String {
-        val os = System.getProperty("os.name").lowercase()
-        val userHome = System.getProperty("user.home")
-        
-        return when {
-            os.contains("win") -> {
-                val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
-                "$appData\\Logseq"
-            }
-            os.contains("mac") -> {
-                "$userHome/Library/Application Support/Logseq"
-            }
-            else -> { // Linux and others
-                val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
-                "$xdgData/logseq"
-            }
-        }
-    }
-    
-    /**
-     * Migrate the database file from old path to new path.
-     * Returns true if successful.
-     */
-    private fun migrateDatabaseFile(oldPath: String, newPath: String): Boolean {
-        return try {
-            // Use Java File for rename (works on JVM/Android)
-            val oldFile = java.io.File(oldPath)
-            val newFile = java.io.File(newPath)
-            
-            if (!oldFile.exists()) return false
-            if (newFile.exists()) return true // Already migrated
-            
-            // Try atomic rename first
-            val renamed = oldFile.renameTo(newFile)
-            if (!renamed) {
-                // Fall back to copy-and-delete
-                oldFile.copyTo(newFile)
-                oldFile.delete()
-            }
-            true
-        } catch (e: Exception) {
-            println("Failed to migrate database file: ${e.message}")
+        } else if (_graphRegistry.value.activeGraphId != null) {
+            switchGraph(_graphRegistry.value.activeGraphId!!) != null
+        } else {
             false
         }
     }
     
-    /**
-     * Migrate WAL and SHM files (SQLite write-ahead log files)
-     */
-    private fun migrateWalShmFiles(dbDir: String, graphId: String) {
-        try {
-            val walOld = java.io.File("$dbDir/logseq.db-wal")
-            val walNew = java.io.File("$dbDir/logseq-graph-$graphId.db-wal")
-            if (walOld.exists() && !walNew.exists()) {
-                walOld.renameTo(walNew)
-            }
-            
-            val shmOld = java.io.File("$dbDir/logseq.db-shm")
-            val shmNew = java.io.File("$dbDir/logseq-graph-$graphId.db-shm")
-            if (shmOld.exists() && !shmNew.exists()) {
-                shmOld.renameTo(shmNew)
-            }
-        } catch (e: Exception) {
-            // Non-critical - WAL/SHM files may not exist
-        }
-    }
+    fun getGraphs(): List<GraphInfo> = _graphRegistry.value.graphs
     
-    private fun saveRegistry() {
-        val registryJson = json.encodeToString(_graphRegistry.value)
-        platformSettings.putString("graph_registry", registryJson)
-    }
-    
-    fun graphIdFromPath(path: String): String = 
-        ContentHasher.sha256(path).take(16)
-    
-    fun addGraph(path: String): String {
-        // Use expanded path for consistent ID generation
-        val expandedPath = fileSystem.expandTilde(path)
-        val graphId = graphIdFromPath(expandedPath)
-        val displayName = path.substringAfterLast("/").substringAfterLast("\\").ifEmpty { path }
-        
-        val info = GraphInfo(
-            id = graphId,
-            path = expandedPath,
-            displayName = displayName,
-            addedAt = System.currentTimeMillis()
-        )
-        
-        val registry = _graphRegistry.value
-        if (!registry.graphIds.contains(graphId)) {
-            val updated = registry.copy(
-                graphs = registry.graphs + info
-            )
-            _graphRegistry.value = updated
-            saveRegistry()
-        }
-        
-        return graphId
-    }
-    
-    fun removeGraph(id: String): Boolean {
-        // Cancel any active coroutines for this graph
-        activeGraphJobs.remove(id)?.cancel()
-        
-        val registry = _graphRegistry.value
-        if (!registry.graphIds.contains(id)) return false
-        
-        // Don't allow removing active graph
-        if (registry.activeGraphId == id) return false
-        
-        val updated = registry.copy(
-            graphs = registry.graphs.filter { it.id != id }
-        )
-        _graphRegistry.value = updated
-        saveRegistry()
-        return true
-    }
-    
-    fun renameGraph(id: String, newName: String): Boolean {
-        val registry = _graphRegistry.value
-        val graphIndex = registry.graphs.indexOfFirst { it.id == id }
-        if (graphIndex == -1) return false
-        
-        val updatedGraphs = registry.graphs.toMutableList()
-        updatedGraphs[graphIndex] = updatedGraphs[graphIndex].copy(displayName = newName)
-        
-        val updated = registry.copy(graphs = updatedGraphs)
-        _graphRegistry.value = updated
-        saveRegistry()
-        return true
-    }
-    
-    /**
-     * Switch to a different graph.
-     * Closes the current database connection and opens a new one for the target graph.
-     */
-    fun switchGraph(id: String) {
-        val registry = _graphRegistry.value
-        val graphInfo = registry.graphs.firstOrNull { it.id == id }
-        if (graphInfo == null) return
-        
-        // Cancel any existing coroutines for the previous graph
-        val currentGraphId = registry.activeGraphId
-        currentGraphId?.let { activeGraphJobs.remove(it)?.cancel() }
-        
-        // Close current driver/factory
-        currentFactory = null
-        _activeRepositorySet.value = null
-        
-        // Create new database for this graph
-        val dbUrl = databaseUrlForGraph(id)
-        val factory = com.logseq.kmp.repository.RepositoryFactoryImpl(driverFactory, dbUrl)
-        currentFactory = factory
-        val repoSet = factory.createRepositorySet(GraphBackend.SQLDELIGHT)
-        _activeRepositorySet.value = repoSet
-        
-        // Update active graph
-        val updatedRegistry = registry.copy(activeGraphId = id)
-        _graphRegistry.value = updatedRegistry
-        saveRegistry()
-        
-        // Create a new scope for this graph's operations
-        val graphScope = CoroutineScope(coroutineScope.coroutineContext)
-        activeGraphJobs[id] = graphScope
-    }
-    
-    fun getGraphInfo(id: String): GraphInfo? {
-        return _graphRegistry.value.graphs.firstOrNull { it.id == id }
-    }
-    
-    fun getActiveGraphId(): String? {
-        return _graphRegistry.value.activeGraphId
-    }
+    fun getActiveGraphId(): String? = _graphRegistry.value.activeGraphId
     
     fun getActiveGraphInfo(): GraphInfo? {
-        val activeId = _graphRegistry.value.activeGraphId ?: return null
-        return getGraphInfo(activeId)
+        val id = _graphRegistry.value.activeGraphId ?: return null
+        return _graphRegistry.value.graphs.find { it.id == id }
     }
     
-    fun getGraphIds(): Set<String> = 
-        _graphRegistry.value.graphs.map { it.id }.toSet()
+    suspend fun addGraph(path: String): String? {
+        val info = createGraphInfo(path) ?: return null
+        _graphRegistry.value = _graphRegistry.value.copy(
+            graphs = _graphRegistry.value.graphs + info
+        )
+        saveRegistry()
+        return info.id
+    }
     
-    fun getActiveRepositorySet(): RepositorySet? = _activeRepositorySet.value
+    suspend fun addNewGraph(path: String): GraphInfo? {
+        val info = createGraphInfo(path) ?: return null
+        _graphRegistry.value = _graphRegistry.value.copy(
+            graphs = _graphRegistry.value.graphs + info
+        )
+        saveRegistry()
+        return info
+    }
     
-    /**
-     * Clean up all resources when shutting down
-     */
-    fun shutdown() {
-        // Cancel all graph-specific coroutines
+    suspend fun removeGraph(id: String) {
+        _graphRegistry.value = _graphRegistry.value.copy(
+            graphs = _graphRegistry.value.graphs.filter { it.id != id },
+            activeGraphId = if (_graphRegistry.value.activeGraphId == id) null else _graphRegistry.value.activeGraphId
+        )
+        saveRegistry()
+    }
+    
+    suspend fun renameGraph(id: String, newName: String) {
+        val graphs = _graphRegistry.value.graphs.map {
+            if (it.id == id) it.copy(displayName = newName) else it
+        }
+        _graphRegistry.value = _graphRegistry.value.copy(graphs = graphs)
+        saveRegistry()
+    }
+    
+    suspend fun switchGraph(id: String?): RepositorySet? {
+        if (id == null) {
+            _activeRepositorySet.value = null
+            return null
+        }
+        
+        val info = _graphRegistry.value.graphs.find { it.id == id } ?: return null
+        
+        // Cancel any active graph jobs
         activeGraphJobs.values.forEach { it.cancel() }
         activeGraphJobs.clear()
         
-        // Clear repository set
-        _activeRepositorySet.value = null
-        currentFactory = null
-    }
-    
-    companion object {
-        /**
-         * Compute the database URL for a given graph ID.
-         * Each graph gets its own SQLite file: logseq-graph-{id}.db
-         */
-        fun databaseUrlForGraph(graphId: String): String {
-            val os = System.getProperty("os.name").lowercase()
-            val userHome = System.getProperty("user.home")
-
-            val basePath = when {
-                os.contains("win") -> {
-                    val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
-                    "$appData\\Logseq"
-                }
-                os.contains("mac") -> {
-                    "$userHome/Library/Application Support/Logseq"
-                }
-                else -> { // Linux and others
-                    val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
-                    "$xdgData/logseq"
-                }
-            }
-            return "jdbc:sqlite:$basePath/logseq-graph-$graphId.db"
-        }
+        // Create new
+        val dbPath = PlatformUtils().getDatabasePath(id)
+        val jdbcUrl = "jdbc:sqlite:$dbPath"
+        
+        currentFactory = com.logseq.kmp.repository.RepositoryFactoryImpl(driverFactory, jdbcUrl)
+        
+        val repoSet = RepositorySet(
+            blockRepository = currentFactory!!.createBlockRepository(GraphBackend.SQLDELIGHT),
+            pageRepository = currentFactory!!.createPageRepository(GraphBackend.SQLDELIGHT),
+            propertyRepository = currentFactory!!.createPropertyRepository(GraphBackend.SQLDELIGHT),
+            referenceRepository = currentFactory!!.createReferenceRepository(GraphBackend.SQLDELIGHT),
+            searchRepository = currentFactory!!.createSearchRepository(GraphBackend.SQLDELIGHT)
+        )
+        
+        _activeRepositorySet.value = repoSet
+        _graphRegistry.value = _graphRegistry.value.copy(activeGraphId = id)
+        
+        // Update last path
+        platformSettings.putString("lastGraphPath", info.path)
+        
+        saveRegistry()
+        
+        return repoSet
     }
 }
