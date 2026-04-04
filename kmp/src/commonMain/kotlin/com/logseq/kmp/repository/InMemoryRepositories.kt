@@ -143,6 +143,8 @@ class InMemoryBlockRepository : BlockRepository {
                 index++
             }
             uuidsToDelete.forEach { current.remove(it) }
+            // Repair sibling chain: fix positions of remaining siblings after deletion
+            repairSiblingPositions(current, block.pageUuid, block.parentUuid)
         } else {
             // Orphan children - they become root blocks (parent = null, level = 0)
             val children = current.values.filter { it.parentUuid == blockUuid }
@@ -155,9 +157,29 @@ class InMemoryBlockRepository : BlockRepository {
                 adjustDescendantLevels(child.uuid, levelDelta, current)
             }
             current.remove(blockUuid)
+            // Repair sibling chain: fix positions of remaining siblings after deletion
+            repairSiblingPositions(current, block.pageUuid, block.parentUuid)
         }
         blocks.value = current
         return success(Unit)
+    }
+
+    private fun repairSiblingPositions(
+        current: MutableMap<String, Block>,
+        pageUuid: String,
+        parentUuid: String?
+    ) {
+        val siblings = current.values
+            .filter { it.pageUuid == pageUuid && it.parentUuid == parentUuid }
+            .sortedBy { it.position }
+        
+        var expectedPosition = 0
+        for (sibling in siblings) {
+            if (sibling.position != expectedPosition) {
+                current[sibling.uuid] = sibling.copy(position = expectedPosition)
+            }
+            expectedPosition++
+        }
     }
 
     override suspend fun moveBlock(
@@ -313,6 +335,9 @@ class InMemoryBlockRepository : BlockRepository {
         
         // 3. Remove block B
         current.remove(nextBlockUuid)
+        
+        // Repair sibling positions after deletion
+        repairSiblingPositions(current, blockA.pageUuid, blockA.parentUuid)
         
         blocks.value = current
         return success(Unit)
