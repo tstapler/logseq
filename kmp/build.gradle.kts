@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
@@ -167,6 +169,15 @@ tasks.named<Test>("jvmTest") {
     // Enable software rendering for CI environments
     environment("LIBGL_ALWAYS_SOFTWARE", System.getenv("LIBGL_ALWAYS_SOFTWARE") ?: "")
     environment("GALLIUM_DRIVER", System.getenv("GALLIUM_DRIVER") ?: "")
+
+    // Set a timeout for the entire test task
+    timeout.set(Duration.ofMinutes(2))
+
+    testLogging {
+        events("passed", "skipped", "failed", "standardOut", "standardError")
+        showStandardStreams = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 compose.desktop {
