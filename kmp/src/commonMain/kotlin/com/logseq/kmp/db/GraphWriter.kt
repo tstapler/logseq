@@ -229,7 +229,16 @@ class GraphWriter(
             writeBlocks(null)
         }
 
+        val startTime = kotlinx.datetime.Clock.System.now()
         val success = fileSystem.writeFile(filePath, content)
+        val duration = kotlinx.datetime.Clock.System.now() - startTime
+        
+        com.logseq.kmp.performance.Metrics.instance.recordLatency(
+            "graph.disk_write",
+            duration,
+            mapOf("page" to page.name, "success" to success.toString())
+        )
+
         if (success) {
             logger.debug("Saved page to: $filePath")
             

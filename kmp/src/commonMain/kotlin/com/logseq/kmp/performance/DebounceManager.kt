@@ -8,8 +8,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Manages debounced execution of tasks identified by a key.
- * Used to throttle high-frequency updates like text typing before they hit the database.
+ * Manages debounced execution of named tasks.
+ * Used to prevent excessive disk writes or heavy operations.
  */
 class DebounceManager(
     private val scope: CoroutineScope,
@@ -17,21 +17,36 @@ class DebounceManager(
 ) {
     private val jobs = mutableMapOf<String, Job>()
     private val actions = mutableMapOf<String, suspend () -> Unit>()
+    private val startTimes = mutableMapOf<String, kotlinx.datetime.Instant>()
     private val mutex = Mutex()
 
     fun debounce(key: String, action: suspend () -> Unit) {
+        val now = kotlinx.datetime.Clock.System.now()
         scope.launch {
             mutex.withLock {
                 jobs[key]?.cancel()
                 actions[key] = action
+                if (!startTimes.containsKey(key)) {
+                    startTimes[key] = now
+                }
                 jobs[key] = scope.launch {
                     delay(delayMs)
-                    val pendingAction = mutex.withLock {
-                        actions.remove(key).also {
-                            jobs.remove(key)
+                    val act = mutex.withLock {
+                        val a = actions.remove(key)
+                        jobs.remove(key)
+                        a
+                    }
+                    val startTime = mutex.withLock { startTimes.remove(key) }
+                    if (act != null) {
+                        act()
+                        if (startTime != null) {
+                            Metrics.instance.recordLatency(
+                                "debounce.latency",
+                                kotlinx.datetime.Clock.System.now() - startTime,
+                                mapOf("key" to key)
+                            )
                         }
                     }
-                    pendingAction?.invoke()
                 }
             }
         }
@@ -42,18 +57,29 @@ class DebounceManager(
             jobs.values.forEach { it.cancel() }
             jobs.clear()
             actions.clear()
+            startTimes.clear()
         }
     }
 
     suspend fun flushAll(): Int {
         val pending = mutex.withLock {
-            val snapshot = actions.values.toList()
+            val snapshot = actions.map { (k, v) -> k to (v to startTimes.remove(k)) }
             jobs.values.forEach { it.cancel() }
             jobs.clear()
             actions.clear()
             snapshot
         }
-        pending.forEach { it.invoke() }
+        pending.forEach { (key, pair) -> 
+            val (action, startTime) = pair
+            action.invoke()
+            if (startTime != null) {
+                Metrics.instance.recordLatency(
+                    "debounce.flush_latency",
+                    kotlinx.datetime.Clock.System.now() - startTime,
+                    mapOf("key" to key)
+                )
+            }
+        }
         return pending.size
     }
 }

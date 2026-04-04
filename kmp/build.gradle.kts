@@ -55,7 +55,14 @@ kotlin {
                 // Lifecycle
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
+
+                // OpenTelemetry API for common metrics
+                implementation("io.opentelemetry:opentelemetry-api:1.43.0")
             }
+        }
+
+        val jvmCommonMain by creating {
+            dependsOn(commonMain)
         }
 
         val commonTest by getting {
@@ -67,15 +74,16 @@ kotlin {
         }
 
         val jvmMain by getting {
+            dependsOn(jvmCommonMain)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
                 implementation("app.cash.sqldelight:sqlite-driver:2.0.2")
 
-                // Graph databases for performance evaluation
-                // implementation("com.kuzudb:kuzu-jdbc:0.7.0")
-                // implementation("org.neo4j.driver:neo4j-java-driver:5.21.0")
-                // implementation("org.neo4j:neo4j:5.21.0")
+                // OpenTelemetry SDK for JVM targets
+                implementation("io.opentelemetry:opentelemetry-sdk:1.43.0")
+                implementation("io.opentelemetry:opentelemetry-sdk-metrics:1.43.0")
+                implementation("io.opentelemetry:opentelemetry-exporter-logging:1.43.0")
             }
         }
 
@@ -108,6 +116,7 @@ kotlin {
         }
 
         val androidMain by getting {
+            dependsOn(jvmCommonMain)
             dependencies {
                 implementation("androidx.activity:activity-compose:1.9.2")
                 implementation("androidx.appcompat:appcompat:1.6.1")
