@@ -232,10 +232,20 @@ class GraphWriter(
         val success = fileSystem.writeFile(filePath, content)
         if (success) {
             logger.debug("Saved page to: $filePath")
-            // Update filePath in DB for new pages
-            if (page.filePath.isNullOrBlank()) {
-                pageRepository?.savePage(page.copy(filePath = filePath))
+            
+            // Get actual mtime from disk to synchronize updatedAt
+            val mtime = fileSystem.getLastModifiedTime(filePath)
+            val updatedPage = if (mtime != null) {
+                page.copy(
+                    filePath = filePath,
+                    updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(mtime)
+                )
+            } else {
+                page.copy(filePath = filePath)
             }
+            
+            // Update page in DB with correct filePath and synchronized updatedAt
+            pageRepository?.savePage(updatedPage)
         } else {
             logger.error("Failed to write file: $filePath")
         }

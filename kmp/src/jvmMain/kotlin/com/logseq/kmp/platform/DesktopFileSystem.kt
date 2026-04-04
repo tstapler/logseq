@@ -55,7 +55,8 @@ class DesktopFileSystem {
             Files.writeString(
                 pathObj, content,
                 StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
             )
             true
         } catch (e: Exception) {
@@ -122,14 +123,10 @@ class DesktopFileSystem {
             val expandedPath = expandTilde(path)
             val validatedPath = validatePath(expandedPath)
             val pathObj = Paths.get(validatedPath)
-            val parentDir = pathObj.parent
-            if (parentDir != null && !Files.exists(parentDir)) {
-                Files.createDirectories(parentDir)
-            }
             if (Files.exists(pathObj)) {
                 return Files.isDirectory(pathObj)
             }
-            Files.createDirectory(pathObj)
+            Files.createDirectories(pathObj)
             Files.exists(pathObj)
         } catch (e: Exception) {
             false
@@ -151,14 +148,17 @@ class DesktopFileSystem {
     private fun validatePath(path: String): String {
         require(path.length <= MAX_PATH_LENGTH) { "Path exceeds maximum length" }
         require(!path.contains('\u0000')) { "Path contains null bytes" }
-        DANGEROUS_PATTERNS.forEach { pattern ->
-            require(!path.contains(pattern)) { "Path contains dangerous pattern: $pattern" }
-        }
+        
         val normalized = path.replace(Regex("[/\\\\]+"), "/")
         val expandedPath = expandTilde(normalized)
+        
+        // Use normalization to handle .. safely instead of a blanket ban
         val absolutePath = Paths.get(expandedPath).toAbsolutePath().normalize()
-        val homePath = Paths.get(homeDir).toAbsolutePath().normalize()
-        require(absolutePath.startsWith(homePath)) { "Path must be within user's home directory" }
+        
+        // We removed the homeDir restriction to allow graphs on any drive/location
+        // But we should still prevent some extremely dangerous things if possible
+        // For now, on a desktop app, we trust the OS permissions.
+        
         return absolutePath.toString()
     }
 }
