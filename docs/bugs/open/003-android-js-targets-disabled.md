@@ -1,6 +1,6 @@
 ## 🐛 BUG-003: Android and JS Targets Disabled [SEVERITY: Medium]
 
-**Status**: 🐛 Open
+**Status**: 🔄 Partial Fix
 **Discovered**: 2026-01-11 during Project Analysis
 **Impact**: Multiplatform capabilities are currently limited to JVM/Desktop and iOS. Android and JS targets are disabled in build configuration.
 
@@ -22,9 +22,21 @@
 2. Fix memory settings and Node.js configuration for JS target.
 3. Re-enable targets in `gradle.properties`.
 
+**Progress**:
+- **Android**: ✅ FIXED - Added `DriverFactory.android.kt` with proper SQLDelight AndroidSqliteDriver initialization
+- **JS**: ❌ Not started - Requires missing `PlatformFileSystem.js.kt` and System import fixes
+
+**Files Modified**:
+- `kmp/src/androidMain/kotlin/com/logseq/kmp/db/DriverFactory.android.kt` - NEW
+- `gradle.properties` - Added `enableJs=true`
+
+**Files Still Needed for JS**:
+- `kmp/src/jsMain/kotlin/com/logseq/kmp/platform/PlatformFileSystem.js.kt`
+- Fix `System` references in common code (use expect/actual)
+
 **Verification**:
-- Run `./gradlew :kmp:compileKotlinAndroid` successfully.
-- Run `./gradlew :kmp:compileKotlinJs` successfully.
+- [x] Run `./gradlew :kmp:compileDebugKotlinAndroid` successfully.
+- [ ] Run `./gradlew :kmp:compileKotlinJs` successfully.
 
 **Related Tasks**: 
 - KMP Migration
