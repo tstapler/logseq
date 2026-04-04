@@ -26,11 +26,12 @@ class DebounceManager(
                 actions[key] = action
                 jobs[key] = scope.launch {
                     delay(delayMs)
-                    mutex.withLock {
-                        actions.remove(key)
-                        action()
-                        jobs.remove(key)
+                    val pendingAction = mutex.withLock {
+                        actions.remove(key).also {
+                            jobs.remove(key)
+                        }
                     }
+                    pendingAction?.invoke()
                 }
             }
         }
@@ -44,7 +45,7 @@ class DebounceManager(
         }
     }
 
-    suspend fun flushAll() {
+    suspend fun flushAll(): Int {
         val pending = mutex.withLock {
             val snapshot = actions.values.toList()
             jobs.values.forEach { it.cancel() }
@@ -53,5 +54,6 @@ class DebounceManager(
             snapshot
         }
         pending.forEach { it.invoke() }
+        return pending.size
     }
 }

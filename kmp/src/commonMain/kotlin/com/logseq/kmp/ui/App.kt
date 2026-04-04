@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.logseq.kmp.db.GraphManager
 import com.logseq.kmp.db.GraphWriter
 import com.logseq.kmp.logging.Logger
@@ -49,7 +50,8 @@ fun LogseqApp(
     fileSystem: PlatformFileSystem,
     graphPath: String,
     pluginHost: PluginHost = remember { PluginHost() },
-    encryptionManager: EncryptionManager = remember { DefaultEncryptionManager() }
+    encryptionManager: EncryptionManager = remember { DefaultEncryptionManager() },
+    onViewModelCreated: (LogseqViewModel) -> Unit = {}
 ) {
     val platformSettings = remember { PlatformSettings() }
     val scope = rememberCoroutineScope()
@@ -103,7 +105,8 @@ fun LogseqApp(
             pluginHost = pluginHost,
             encryptionManager = encryptionManager,
             graphManager = graphManager,
-            notificationManager = notificationManager
+            notificationManager = notificationManager,
+            onViewModelCreated = onViewModelCreated
         )
     }
 }
@@ -120,7 +123,8 @@ private fun GraphContent(
     pluginHost: PluginHost,
     encryptionManager: EncryptionManager,
     graphManager: GraphManager,
-    notificationManager: NotificationManager
+    notificationManager: NotificationManager,
+    onViewModelCreated: (LogseqViewModel) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val graphWriter = remember { GraphWriter(fileSystem, repos.pageRepository) }
@@ -138,6 +142,7 @@ private fun GraphContent(
             scope
         ).also {
             it.startAutoSave()
+            onViewModelCreated(it)
         }
     }
     
@@ -146,13 +151,13 @@ private fun GraphContent(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                viewModel.savePendingChanges()
+                scope.launch { viewModel.savePendingChanges() }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            viewModel.savePendingChanges()
+            scope.launch { viewModel.savePendingChanges() }
         }
     }
     

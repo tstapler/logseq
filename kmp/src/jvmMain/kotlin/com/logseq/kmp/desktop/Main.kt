@@ -10,6 +10,7 @@ import com.logseq.kmp.ui.theme.setSystemDarkTheme
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.error.JvmErrorTracker
+import kotlinx.coroutines.runBlocking
 import javax.swing.UIManager
 
 fun main() {
@@ -47,20 +48,22 @@ fun main() {
         Window(
             onCloseRequest = {
                 logger.info("Closing application - flushing pending changes")
-                viewModel?.savePendingChanges()
-                // Give it a short moment to start the flush before exit
-                // In a real app we might want to wait for the flush to complete
+                runBlocking {
+                    try {
+                        viewModel?.savePendingChanges()
+                    } catch (e: Exception) {
+                        logger.error("Error during shutdown flush", e)
+                    }
+                }
                 exitApplication()
             },
             state = windowState,
             title = "Logseq KMP"
         ) {
-            // We need a way to get the viewModel from LogseqApp or similar
-            // For now, LogseqApp creates its own ViewModel.
-            // A better architecture would be to hoist the ViewModel or use a GlobalRegistry.
             LogseqApp(
                 fileSystem = fileSystem,
-                graphPath = graphPath
+                graphPath = graphPath,
+                onViewModelCreated = { viewModel = it }
             )
         }
     }

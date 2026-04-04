@@ -827,10 +827,11 @@ class LogseqViewModel(
         }
     }
 
-    fun savePendingChanges() {
-        scope.launch {
-            debounceManager.flushAll()
-            graphWriter.flush()
+    suspend fun savePendingChanges() {
+        val flushedCount = debounceManager.flushAll()
+        if (flushedCount > 0) {
+            logger.info("Flushed $flushedCount pending block updates")
         }
+        graphWriter.flush()
     }
 }
