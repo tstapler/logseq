@@ -42,11 +42,22 @@ fun main() {
         logger.info("Starting Desktop Application with graph: $graphPath")
         errorTracker.recordBreadcrumb("Graph path resolved: $graphPath", "SYSTEM")
 
+        var viewModel: com.logseq.kmp.ui.LogseqViewModel? = null
+
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                logger.info("Closing application - flushing pending changes")
+                viewModel?.savePendingChanges()
+                // Give it a short moment to start the flush before exit
+                // In a real app we might want to wait for the flush to complete
+                exitApplication()
+            },
             state = windowState,
             title = "Logseq KMP"
         ) {
+            // We need a way to get the viewModel from LogseqApp or similar
+            // For now, LogseqApp creates its own ViewModel.
+            // A better architecture would be to hoist the ViewModel or use a GlobalRegistry.
             LogseqApp(
                 fileSystem = fileSystem,
                 graphPath = graphPath

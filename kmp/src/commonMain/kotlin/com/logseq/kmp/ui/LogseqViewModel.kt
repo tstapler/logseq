@@ -829,7 +829,7 @@ class LogseqViewModel(
 
     fun savePendingChanges() {
         scope.launch {
-            debounceManager.cancelAll()
+            debounceManager.flushAll()
             graphWriter.flush()
         }
     }

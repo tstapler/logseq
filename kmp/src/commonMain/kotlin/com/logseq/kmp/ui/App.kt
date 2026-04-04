@@ -152,6 +152,7 @@ private fun GraphContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.savePendingChanges()
         }
     }
     
