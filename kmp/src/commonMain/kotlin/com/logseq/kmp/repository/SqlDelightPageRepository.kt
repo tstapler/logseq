@@ -135,7 +135,7 @@ class SqlDelightPageRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
-    override suspend fun clear() = withContext(PlatformDispatcher.IO) {
+    override suspend fun clear(): Unit = withContext(PlatformDispatcher.IO) {
         queries.deleteAllPages()
     }
 
