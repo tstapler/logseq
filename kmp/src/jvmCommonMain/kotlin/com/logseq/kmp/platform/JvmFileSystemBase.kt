@@ -1,9 +1,7 @@
 package com.logseq.kmp.platform
 
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Paths
-import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -15,12 +13,15 @@ abstract class JvmFileSystemBase {
         const val MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
     }
 
-    val homeDir: String by lazy { System.getProperty("user.home") }
+    val homeDir: String by lazy { System.getProperty("user.home") ?: "" }
     
     // Whitelist to track allowed base directories. Using ConcurrentHashMap to ensure thread safety.
     private val whitelist = ConcurrentHashMap.newKeySet<String>().apply {
         // Initial whitelist includes home directory
-        add(Paths.get(System.getProperty("user.home")).toAbsolutePath().normalize().toString())
+        val home = System.getProperty("user.home")
+        if (home != null) {
+            add(Paths.get(home).toAbsolutePath().normalize().toString())
+        }
     }
 
     open fun getDefaultGraphPath(): String = "$homeDir/Documents/logseq"
@@ -72,7 +73,7 @@ abstract class JvmFileSystemBase {
             val file = File(validatedPath)
             if (!file.exists() || !file.isFile) return null
             if (file.length() > MAX_FILE_SIZE) return null
-            Files.readString(Paths.get(validatedPath))
+            file.readText()
         } catch (e: Exception) {
             null
         }
@@ -84,17 +85,12 @@ abstract class JvmFileSystemBase {
             // The root must be whitelisted via registerGraphRoot or pickDirectory.
             val validatedPath = validatePath(path, addToWhitelist = false)
             if (content.length > MAX_FILE_SIZE) return false
-            val pathObj = Paths.get(validatedPath)
-            val parentDir = pathObj.parent
-            if (parentDir != null && !Files.exists(parentDir)) {
-                Files.createDirectories(parentDir)
+            val file = File(validatedPath)
+            val parentDir = file.parentFile
+            if (parentDir != null && !parentDir.exists()) {
+                parentDir.mkdirs()
             }
-            Files.writeString(
-                pathObj, content,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE
-            )
+            file.writeText(content)
             true
         } catch (e: Exception) {
             false
@@ -155,12 +151,12 @@ abstract class JvmFileSystemBase {
         return try {
             // Security: We NO LONGER auto-whitelist here.
             val validatedPath = validatePath(path, addToWhitelist = false)
-            val pathObj = Paths.get(validatedPath)
-            if (Files.exists(pathObj)) {
-                return Files.isDirectory(pathObj)
+            val file = File(validatedPath)
+            if (file.exists()) {
+                return file.isDirectory
             }
-            Files.createDirectories(pathObj)
-            Files.exists(pathObj)
+            file.mkdirs()
+            file.exists()
         } catch (e: Exception) {
             false
         }

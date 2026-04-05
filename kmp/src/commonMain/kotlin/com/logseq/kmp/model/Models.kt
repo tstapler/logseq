@@ -27,10 +27,7 @@ object Validation {
     fun validateName(name: String?): String {
         val validated = validateString(name, MAX_NAME_LENGTH, allowWhitespace = false)
         require(validated.isNotBlank()) { "Name cannot be blank" }
-        
-        // Only block actual traversal segments
-        require(validated != "..") { "Name cannot be exactly '..'" }
-        
+        require(!validated.contains("..")) { "Name contains directory traversal patterns" }
         require(!validated.contains("/")) { "Name contains path separators" }
         // Use Char check for backslash to avoid string escaping issues in some compilers
         require(!validated.contains('\\')) { "Name contains backslashes" }

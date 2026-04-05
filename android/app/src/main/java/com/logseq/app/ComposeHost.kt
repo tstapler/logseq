@@ -31,6 +31,9 @@ import com.logseq.kmp.ui.LogseqApp
 import com.logseq.kmp.platform.PlatformFileSystem
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.getcapacitor.BridgeActivity
+import com.getcapacitor.PluginCall
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 private const val ROOT_ROUTE = "web/{encodedPath}"
@@ -53,17 +56,39 @@ object ComposeHost {
         navEvents.tryEmit(NavigationEvent(type, safePath))
     }
 
+    private suspend fun pickDirectory(activity: Activity): String? {
+        val mainActivity = activity as? MainActivity ?: return null
+        val deferred = CompletableDeferred<String?>()
+        
+        activity.runOnUiThread {
+            mainActivity.pickFolder(deferred)
+        }
+        
+        return deferred.await()
+    }
+
+    private fun hideSplashScreen(activity: Activity) {
+        val bridge = (activity as? BridgeActivity)?.bridge ?: return
+        val plugin = bridge.getPlugin("SplashScreen")?.instance as? SplashScreenPlugin ?: return
+        
+        activity.runOnUiThread {
+            plugin.hide(null)
+        }
+    }
+
     fun renderWithSystemInsets(
         activity: Activity,
-        webView: WebView,
+        webView: WebView?,
         onBackRequested: () -> Unit,
         onExit: () -> Unit = { activity.finish() }
     ) {
         WebViewSnapshotManager.registerWindow(activity.window)
         val root = activity.findViewById<FrameLayout>(android.R.id.content)
 
-        // WebView already created by BridgeActivity; just reparent it into Compose.
-        (webView.parent as? ViewGroup)?.removeView(webView)
+        // WebView already created by BridgeActivity; just reparent it into Compose if provided.
+        if (webView != null) {
+            (webView.parent as? ViewGroup)?.removeView(webView)
+        }
 
         val composeView = ComposeView(activity).apply {
             tag = "compose-host-webview"
@@ -72,10 +97,22 @@ object ComposeHost {
                 val context = LocalContext.current
                 val fileSystem = remember { 
                     PlatformFileSystem().apply {
+                        init(context, onPickDirectory = { pickDirectory(activity) })
+                    }
+                }
+                
+                // Initialize DriverFactory with Android Context
+                remember {
+                    com.logseq.kmp.db.DriverFactory().apply {
                         init(context)
                     }
                 }
                 
+                // Hide splash screen once we start rendering Compose
+                LaunchedEffect(Unit) {
+                    hideSplashScreen(activity)
+                }
+
                 // KMP Integration: Render the new KMP App instead of the WebView wrapper
                 LogseqApp(
                     fileSystem = fileSystem,

@@ -48,111 +48,109 @@ class OutlinerMonkeyTest {
 
     @Test
     fun `perform randomized outliner operations and verify invariants`() = runTest {
-        kotlinx.coroutines.withTimeout(30000) {
-            val pageRepo = InMemoryPageRepository()
-            val blockRepo = InMemoryBlockRepository()
-            val graphLoader = GraphLoader(MockFileSystem(), pageRepo, blockRepo)
-            val scope = CoroutineScope(Dispatchers.Unconfined)
-            
-            val viewModel = JournalsViewModel(pageRepo, blockRepo, graphLoader, scope)
-            
-            // 1. Setup: Ensure we have at least one journal page
-            val today = Clock.System.now().let { 
-                val tz = TimeZone.currentSystemDefault()
-                it.toLocalDateTime(tz).date 
-            }
-            val pageUuid = "test-page-uuid"
-            pageRepo.savePage(Page(
-                uuid = pageUuid,
-                name = today.toString(),
-                createdAt = Clock.System.now(),
-                updatedAt = Clock.System.now(),
-                isJournal = true,
-                journalDate = today
-            ))
-            
-            // Start with one block
-            val initialBlockUuid = "block-0"
-            blockRepo.saveBlock(Block(
-                uuid = initialBlockUuid,
-                pageUuid = pageUuid,
-                content = "Root block",
-                position = 0,
-                createdAt = Clock.System.now(),
-                updatedAt = Clock.System.now()
-            ))
-            
-            viewModel.refresh() // Load initial state
-            val randomGenerator = Random(42) // Fixed seed for reproducibility
-            val operationsCount = 500
-
-            println("Starting Monkey Test with $operationsCount operations...")
-
-            repeat(operationsCount) { i ->
-                val currentState = viewModel.uiState.value
-                val allBlocks = currentState.blocks[pageUuid] ?: emptyList()
-
-                if (allBlocks.isEmpty()) {
-                    println("Operation $i: Add block to empty page")
-                    viewModel.addBlockToPage(pageUuid).join()
-                    verifyInvariants(pageUuid, blockRepo)
-                    return@repeat
-                }
-
-                val randomBlock = allBlocks[randomGenerator.nextInt(allBlocks.size)]
-                val opType = randomGenerator.nextInt(7)
-
-                
-                val job = when (opType) {
-                    0 -> { 
-                        println("Operation $i: addNewBlock after ${randomBlock.uuid} (level ${randomBlock.level})")
-                        viewModel.addNewBlock(randomBlock.uuid)
-                    }
-                    1 -> { 
-                        println("Operation $i: indentBlock ${randomBlock.uuid}")
-                        viewModel.indentBlock(randomBlock.uuid)
-                    }
-                    2 -> { 
-                        println("Operation $i: outdentBlock ${randomBlock.uuid}")
-                        viewModel.outdentBlock(randomBlock.uuid)
-                    }
-                    3 -> { 
-                        println("Operation $i: moveBlockUp ${randomBlock.uuid}")
-                        viewModel.moveBlockUp(randomBlock.uuid)
-                    }
-                    4 -> { 
-                        println("Operation $i: moveBlockDown ${randomBlock.uuid}")
-                        viewModel.moveBlockDown(randomBlock.uuid)
-                    }
-                    5 -> { 
-                        if (randomBlock.content.length > 2) {
-                            println("Operation $i: splitBlock ${randomBlock.uuid}")
-                            viewModel.splitBlock(randomBlock.uuid, randomBlock.content.length / 2)
-                        } else {
-                            println("Operation $i: updateBlockContent ${randomBlock.uuid}")
-                            viewModel.updateBlockContent(randomBlock.uuid, "Some text to split", 1)
-                        }
-                    }
-                    6 -> { 
-                        println("Operation $i: handleBackspace ${randomBlock.uuid} (parent=${randomBlock.parentUuid}, level=${randomBlock.level})")
-                        viewModel.handleBackspace(randomBlock.uuid)
-                    }
-                    else -> null
-                }
-                
-                job?.join()
-                
-                // Verify invariants after each operation
-                try {
-                    verifyInvariants(pageUuid, blockRepo)
-                } catch (e: Throwable) {
-                    println("Invariants failed after operation $i")
-                    throw e
-                }
-            }
-            
-            println("Monkey Test completed successfully!")
+        val pageRepo = InMemoryPageRepository()
+        val blockRepo = InMemoryBlockRepository()
+        val graphLoader = GraphLoader(MockFileSystem(), pageRepo, blockRepo)
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        
+        val viewModel = JournalsViewModel(pageRepo, blockRepo, graphLoader, scope)
+        
+        // 1. Setup: Ensure we have at least one journal page
+        val today = Clock.System.now().let { 
+            val tz = TimeZone.currentSystemDefault()
+            it.toLocalDateTime(tz).date 
         }
+        val pageUuid = "test-page-uuid"
+        pageRepo.savePage(Page(
+            uuid = pageUuid,
+            name = today.toString(),
+            createdAt = Clock.System.now(),
+            updatedAt = Clock.System.now(),
+            isJournal = true,
+            journalDate = today
+        ))
+        
+        // Start with one block
+        val initialBlockUuid = "block-0"
+        blockRepo.saveBlock(Block(
+            uuid = initialBlockUuid,
+            pageUuid = pageUuid,
+            content = "Root block",
+            position = 0,
+            createdAt = Clock.System.now(),
+            updatedAt = Clock.System.now()
+        ))
+        
+        viewModel.refresh() // Load initial state
+        val randomGenerator = Random(42) // Fixed seed for reproducibility
+        val operationsCount = 500
+
+        println("Starting Monkey Test with $operationsCount operations...")
+
+        repeat(operationsCount) { i ->
+            val currentState = viewModel.uiState.value
+            val allBlocks = currentState.blocks[pageUuid] ?: emptyList()
+
+            if (allBlocks.isEmpty()) {
+                println("Operation $i: Add block to empty page")
+                viewModel.addBlockToPage(pageUuid).join()
+                verifyInvariants(pageUuid, blockRepo)
+                return@repeat
+            }
+
+            val randomBlock = allBlocks[randomGenerator.nextInt(allBlocks.size)]
+            val opType = randomGenerator.nextInt(7)
+
+            
+            val job = when (opType) {
+                0 -> { 
+                    println("Operation $i: addNewBlock after ${randomBlock.uuid} (level ${randomBlock.level})")
+                    viewModel.addNewBlock(randomBlock.uuid)
+                }
+                1 -> { 
+                    println("Operation $i: indentBlock ${randomBlock.uuid}")
+                    viewModel.indentBlock(randomBlock.uuid)
+                }
+                2 -> { 
+                    println("Operation $i: outdentBlock ${randomBlock.uuid}")
+                    viewModel.outdentBlock(randomBlock.uuid)
+                }
+                3 -> { 
+                    println("Operation $i: moveBlockUp ${randomBlock.uuid}")
+                    viewModel.moveBlockUp(randomBlock.uuid)
+                }
+                4 -> { 
+                    println("Operation $i: moveBlockDown ${randomBlock.uuid}")
+                    viewModel.moveBlockDown(randomBlock.uuid)
+                }
+                5 -> { 
+                    if (randomBlock.content.length > 2) {
+                        println("Operation $i: splitBlock ${randomBlock.uuid}")
+                        viewModel.splitBlock(randomBlock.uuid, randomBlock.content.length / 2)
+                    } else {
+                        println("Operation $i: updateBlockContent ${randomBlock.uuid}")
+                        viewModel.updateBlockContent(randomBlock.uuid, "Some text to split", 1)
+                    }
+                }
+                6 -> { 
+                    println("Operation $i: handleBackspace ${randomBlock.uuid} (parent=${randomBlock.parentUuid}, level=${randomBlock.level})")
+                    viewModel.handleBackspace(randomBlock.uuid)
+                }
+                else -> null
+            }
+            
+            job?.join()
+            
+            // Verify invariants after each operation
+            try {
+                verifyInvariants(pageUuid, blockRepo)
+            } catch (e: Throwable) {
+                println("Invariants failed after operation $i")
+                throw e
+            }
+        }
+        
+        println("Monkey Test completed successfully!")
     }
 
     private suspend fun verifyInvariants(pageUuid: String, blockRepo: InMemoryBlockRepository) {

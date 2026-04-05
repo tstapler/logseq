@@ -2,15 +2,15 @@ package com.logseq.kmp.platform
 
 import kotlinx.browser.window
 
-actual class PlatformFileSystem actual constructor() {
+actual class PlatformFileSystem actual constructor() : FileSystem {
     private val maxPathLength = 4096
     private val maxFileSize = 100 * 1024 * 1024
     private val dangerousPatterns = listOf("..", "../", "..\\", "\u0000")
     private val homeDir: String = "/logseq"
 
-    actual fun getDefaultGraphPath(): String = homeDir
+    actual override fun getDefaultGraphPath(): String = homeDir
 
-    actual fun expandTilde(path: String): String {
+    actual override fun expandTilde(path: String): String {
         return if (path.startsWith("~")) {
             path.replaceFirst("~", homeDir)
         } else {
@@ -18,61 +18,54 @@ actual class PlatformFileSystem actual constructor() {
         }
     }
 
-    actual fun readFile(path: String): String? {
-        // Browser environment - simulated
+    actual override fun readFile(path: String): String? {
         console.log("Reading file: $path")
         return null
     }
 
-    actual fun writeFile(path: String, content: String): Boolean {
-        // Browser environment - simulated
+    actual override fun writeFile(path: String, content: String): Boolean {
         console.log("Writing file: $path")
         return true
     }
 
-    actual fun listFiles(path: String): List<String> {
-        // Browser environment - simulated
+    actual override fun listFiles(path: String): List<String> {
         console.log("Listing files: $path")
         return emptyList()
     }
 
-    actual fun listDirectories(path: String): List<String> {
-        // Browser environment - simulated
+    actual override fun listDirectories(path: String): List<String> {
         console.log("Listing directories: $path")
         return emptyList()
     }
 
-    actual fun fileExists(path: String): Boolean {
-        // Browser environment - simulated
+    actual override fun fileExists(path: String): Boolean {
         console.log("Checking file exists: $path")
         return false
     }
 
-    actual fun directoryExists(path: String): Boolean {
-        // Browser environment - simulated
+    actual override fun directoryExists(path: String): Boolean {
         console.log("Checking directory exists: $path")
         return false
     }
 
-    actual fun createDirectory(path: String): Boolean {
-        // Browser environment - simulated
+    actual override fun createDirectory(path: String): Boolean {
         console.log("Creating directory: $path")
         return true
     }
 
-    actual fun deleteFile(path: String): Boolean {
-        // Browser environment - simulated
+    actual override fun deleteFile(path: String): Boolean {
         console.log("Deleting file: $path")
         return true
     }
 
-    actual fun pickDirectory(): String? {
+    actual override fun pickDirectory(): String? {
         console.log("Picking directory not supported in JS yet")
         return null
     }
 
-    actual fun getLastModifiedTime(path: String): Long? {
-        // Browser environment - not supported
+    actual override suspend fun pickDirectoryAsync(): String? = pickDirectory()
+
+    actual override fun getLastModifiedTime(path: String): Long? {
         console.log("Getting last modified time not supported in JS: $path")
         return null
     }

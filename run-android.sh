@@ -15,6 +15,11 @@ cd android
 
 # Launch the app
 echo "Launching app..."
-adb shell monkey -p com.logseq.app -c android.intent.category.LAUNCHER 1
+# If ADB_DEVICE_ID is set, use it. Otherwise, let adb decide (which might fail if multiple devices are connected)
+if [ -z "$ADB_DEVICE_ID" ]; then
+    adb shell monkey -p dev.stapler.logseq.app -c android.intent.category.LAUNCHER 1
+else
+    adb -s "$ADB_DEVICE_ID" shell monkey -p dev.stapler.logseq.app -c android.intent.category.LAUNCHER 1
+fi
 
 echo "Done! App should be running on your connected device/emulator."

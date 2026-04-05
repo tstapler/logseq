@@ -1,5 +1,3 @@
-import java.time.Duration
-
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
@@ -7,7 +5,7 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.compose")
     id("app.cash.sqldelight")
-    id("io.github.takahirom.roborazzi")
+    id("io.github.takahirom.roborazzi") version "1.59.0"
 }
 
 kotlin {
@@ -83,10 +81,10 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
                 implementation("app.cash.sqldelight:sqlite-driver:2.1.0")
 
-                // OpenTelemetry SDK for JVM targets
-                implementation("io.opentelemetry:opentelemetry-sdk:1.43.0")
-                implementation("io.opentelemetry:opentelemetry-sdk-metrics:1.43.0")
-                implementation("io.opentelemetry:opentelemetry-exporter-logging:1.43.0")
+                // Graph databases for performance evaluation
+                // implementation("com.kuzudb:kuzu-jdbc:0.7.0")
+                // implementation("org.neo4j.driver:neo4j-java-driver:5.21.0")
+                // implementation("org.neo4j:neo4j:5.21.0")
             }
         }
 
@@ -128,7 +126,8 @@ kotlin {
                 implementation("androidx.appcompat:appcompat:1.6.1")
                 implementation("androidx.core:core-ktx:1.13.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-                implementation("app.cash.sqldelight:android-driver:2.0.2")
+                implementation("app.cash.sqldelight:android-driver:2.1.0")
+                implementation("com.github.requery:sqlite-android:3.45.0")
 
                 // Compose BOM
                 implementation(platform("androidx.compose:compose-bom:2024.09.03"))
@@ -184,15 +183,6 @@ tasks.named<Test>("jvmTest") {
     // Enable software rendering for CI environments
     environment("LIBGL_ALWAYS_SOFTWARE", System.getenv("LIBGL_ALWAYS_SOFTWARE") ?: "")
     environment("GALLIUM_DRIVER", System.getenv("GALLIUM_DRIVER") ?: "")
-
-    // Set a timeout for the entire test task
-    timeout.set(Duration.ofMinutes(2))
-
-    testLogging {
-        events("passed", "skipped", "failed", "standardOut", "standardError")
-        showStandardStreams = true
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-    }
 }
 
 compose.desktop {

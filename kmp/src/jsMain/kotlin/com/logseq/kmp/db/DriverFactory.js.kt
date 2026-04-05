@@ -8,6 +8,10 @@ import org.w3c.dom.Worker
 external fun createWorker(url: dynamic): Worker
 
 actual class DriverFactory actual constructor() {
+    actual fun init(context: Any) {
+        // No-op on JS
+    }
+
     actual fun createDriver(jdbcUrl: String): SqlDriver {
         val dbName = jdbcUrl.substringAfter("jdbc:sqlite:")
         val url = js("new URL(\"@cashapp/sqldelight-sqljs-worker/sqljs.worker.js\", import.meta.url)")

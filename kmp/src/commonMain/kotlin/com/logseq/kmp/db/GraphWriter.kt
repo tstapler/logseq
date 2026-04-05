@@ -229,32 +229,13 @@ class GraphWriter(
             writeBlocks(null)
         }
 
-        val startTime = kotlinx.datetime.Clock.System.now()
         val success = fileSystem.writeFile(filePath, content)
-        val duration = kotlinx.datetime.Clock.System.now() - startTime
-        
-        com.logseq.kmp.performance.Metrics.instance.recordLatency(
-            "graph.disk_write",
-            duration,
-            mapOf("page" to page.name, "success" to success.toString())
-        )
-
         if (success) {
             logger.debug("Saved page to: $filePath")
-            
-            // Get actual mtime from disk to synchronize updatedAt
-            val mtime = fileSystem.getLastModifiedTime(filePath)
-            val updatedPage = if (mtime != null) {
-                page.copy(
-                    filePath = filePath,
-                    updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(mtime)
-                )
-            } else {
-                page.copy(filePath = filePath)
+            // Update filePath in DB for new pages
+            if (page.filePath.isNullOrBlank()) {
+                pageRepository?.savePage(page.copy(filePath = filePath))
             }
-            
-            // Update page in DB with correct filePath and synchronized updatedAt
-            pageRepository?.savePage(updatedPage)
         } else {
             logger.error("Failed to write file: $filePath")
         }

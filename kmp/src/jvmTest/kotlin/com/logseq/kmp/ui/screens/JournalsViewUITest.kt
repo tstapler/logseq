@@ -44,14 +44,14 @@ class JournalsViewUITest {
             }
         }
 
-        // Journal pages from TestFixtures have names "2026-03-28", "2026-03-02", "2026-03-03"
+        // Journal pages from TestFixtures have names "2026-03-01", "2026-03-02", "2026-03-03"
         composeTestRule.waitUntil(timeoutMillis = 3000) {
             composeTestRule.onAllNodes(
-                androidx.compose.ui.test.hasText("2026-03-28", substring = true)
+                androidx.compose.ui.test.hasText("2026-03-01", substring = true)
             ).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeTestRule.onNodeWithText("2026-03-28", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("2026-03-01", substring = true).assertIsDisplayed()
     }
 
     @Test

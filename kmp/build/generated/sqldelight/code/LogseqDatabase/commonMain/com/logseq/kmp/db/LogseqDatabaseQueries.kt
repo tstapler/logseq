@@ -1924,8 +1924,12 @@ public class LogseqDatabaseQueries(
     cursor.getLong(0)!!
   }
 
-  public fun updateBlockParent(parent_uuid: String?, uuid: String) {
-    driver.execute(-996_487_628, """UPDATE blocks SET parent_uuid = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updateBlockParent(parent_uuid: String?, uuid: String): QueryResult<Long> {
+    val result = driver.execute(-996_487_628,
+        """UPDATE blocks SET parent_uuid = ? WHERE uuid = ?""", 2) {
           bindString(0, parent_uuid)
           bindString(1, uuid)
         }
@@ -1933,15 +1937,19 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun updateBlockParentPositionAndLevel(
     parent_uuid: String?,
     position: Long,
     level: Long,
     uuid: String,
-  ) {
-    driver.execute(461_418_122,
+  ): QueryResult<Long> {
+    val result = driver.execute(461_418_122,
         """UPDATE blocks SET parent_uuid = ?, position = ?, level = ? WHERE uuid = ?""", 4) {
           bindString(0, parent_uuid)
           bindLong(1, position)
@@ -1952,16 +1960,20 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun updateBlockHierarchy(
     parent_uuid: String?,
     left_uuid: String?,
     position: Long,
     level: Long,
     uuid: String,
-  ) {
-    driver.execute(495_937_643,
+  ): QueryResult<Long> {
+    val result = driver.execute(495_937_643,
         """UPDATE blocks SET parent_uuid = ?, left_uuid = ?, position = ?, level = ? WHERE uuid = ?""",
         5) {
           bindString(0, parent_uuid)
@@ -1974,10 +1986,15 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun updateBlockPositionOnly(position: Long, uuid: String) {
-    driver.execute(-1_033_279_873, """UPDATE blocks SET position = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updateBlockPositionOnly(position: Long, uuid: String): QueryResult<Long> {
+    val result = driver.execute(-1_033_279_873, """UPDATE blocks SET position = ? WHERE uuid = ?""",
+        2) {
           bindLong(0, position)
           bindString(1, uuid)
         }
@@ -1985,14 +2002,18 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun updateBlockContent(
     content: String,
     updated_at: Long,
     uuid: String,
-  ) {
-    driver.execute(918_560_815,
+  ): QueryResult<Long> {
+    val result = driver.execute(918_560_815,
         """UPDATE blocks SET content = ?, updated_at = ?, version = version + 1 WHERE uuid = ?""",
         3) {
           bindString(0, content)
@@ -2003,10 +2024,15 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun updateBlockLevelOnly(level: Long, uuid: String) {
-    driver.execute(1_019_388_806, """UPDATE blocks SET level = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updateBlockLevelOnly(level: Long, uuid: String): QueryResult<Long> {
+    val result = driver.execute(1_019_388_806, """UPDATE blocks SET level = ? WHERE uuid = ?""", 2)
+        {
           bindLong(0, level)
           bindString(1, uuid)
         }
@@ -2014,10 +2040,15 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun updateBlockLeftUuid(left_uuid: String?, uuid: String) {
-    driver.execute(696_399_724, """UPDATE blocks SET left_uuid = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updateBlockLeftUuid(left_uuid: String?, uuid: String): QueryResult<Long> {
+    val result = driver.execute(696_399_724, """UPDATE blocks SET left_uuid = ? WHERE uuid = ?""",
+        2) {
           bindString(0, left_uuid)
           bindString(1, uuid)
         }
@@ -2025,10 +2056,15 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun updateBlockProperties(properties: String?, uuid: String) {
-    driver.execute(418_086_333, """UPDATE blocks SET properties = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updateBlockProperties(properties: String?, uuid: String): QueryResult<Long> {
+    val result = driver.execute(418_086_333, """UPDATE blocks SET properties = ? WHERE uuid = ?""",
+        2) {
           bindString(0, properties)
           bindString(1, uuid)
         }
@@ -2036,10 +2072,14 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun deleteBlockByUuid(uuid: String) {
-    driver.execute(-138_254_310, """DELETE FROM blocks WHERE uuid = ?""", 1) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteBlockByUuid(uuid: String): QueryResult<Long> {
+    val result = driver.execute(-138_254_310, """DELETE FROM blocks WHERE uuid = ?""", 1) {
           bindString(0, uuid)
         }
     notifyQueries(-138_254_310) { emit ->
@@ -2048,10 +2088,14 @@ public class LogseqDatabaseQueries(
       emit("blocks_fts")
       emit("properties")
     }
+    return result
   }
 
-  public fun deleteBlockChildren(parent_uuid: String?) {
-    driver.execute(null,
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteBlockChildren(parent_uuid: String?): QueryResult<Long> {
+    val result = driver.execute(null,
         """DELETE FROM blocks WHERE parent_uuid ${ if (parent_uuid == null) "IS" else "=" } ?""", 1)
         {
           bindString(0, parent_uuid)
@@ -2062,20 +2106,28 @@ public class LogseqDatabaseQueries(
       emit("blocks_fts")
       emit("properties")
     }
+    return result
   }
 
-  public fun deleteAllBlocks() {
-    driver.execute(-215_597_630, """DELETE FROM blocks""", 0)
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteAllBlocks(): QueryResult<Long> {
+    val result = driver.execute(-215_597_630, """DELETE FROM blocks""", 0)
     notifyQueries(-215_597_630) { emit ->
       emit("block_references")
       emit("blocks")
       emit("blocks_fts")
       emit("properties")
     }
+    return result
   }
 
-  public fun deleteBlocksByPageUuid(page_uuid: String) {
-    driver.execute(1_939_078_892, """DELETE FROM blocks WHERE page_uuid = ?""", 1) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteBlocksByPageUuid(page_uuid: String): QueryResult<Long> {
+    val result = driver.execute(1_939_078_892, """DELETE FROM blocks WHERE page_uuid = ?""", 1) {
           bindString(0, page_uuid)
         }
     notifyQueries(1_939_078_892) { emit ->
@@ -2084,8 +2136,12 @@ public class LogseqDatabaseQueries(
       emit("blocks_fts")
       emit("properties")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun insertBlock(
     uuid: String,
     page_uuid: String,
@@ -2099,8 +2155,8 @@ public class LogseqDatabaseQueries(
     properties: String?,
     version: Long,
     content_hash: String?,
-  ) {
-    driver.execute(1_684_331_770, """
+  ): QueryResult<Long> {
+    val result = driver.execute(1_684_331_770, """
         |INSERT INTO blocks (uuid, page_uuid, parent_uuid, left_uuid, content, level, position, created_at, updated_at, properties, version, content_hash)
         |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimMargin(), 12) {
@@ -2121,28 +2177,41 @@ public class LogseqDatabaseQueries(
       emit("blocks")
       emit("blocks_fts")
     }
+    return result
   }
 
-  public fun updatePageProperties(properties: String?, uuid: String) {
-    driver.execute(1_404_293_477, """UPDATE pages SET properties = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updatePageProperties(properties: String?, uuid: String): QueryResult<Long> {
+    val result = driver.execute(1_404_293_477, """UPDATE pages SET properties = ? WHERE uuid = ?""",
+        2) {
           bindString(0, properties)
           bindString(1, uuid)
         }
     notifyQueries(1_404_293_477) { emit ->
       emit("pages")
     }
+    return result
   }
 
-  public fun updatePageName(name: String, uuid: String) {
-    driver.execute(895_831_101, """UPDATE pages SET name = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updatePageName(name: String, uuid: String): QueryResult<Long> {
+    val result = driver.execute(895_831_101, """UPDATE pages SET name = ? WHERE uuid = ?""", 2) {
           bindString(0, name)
           bindString(1, uuid)
         }
     notifyQueries(895_831_101) { emit ->
       emit("pages")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun updatePage(
     namespace: String?,
     file_path: String?,
@@ -2153,8 +2222,8 @@ public class LogseqDatabaseQueries(
     is_journal: Long?,
     journal_date: String?,
     uuid: String,
-  ) {
-    driver.execute(455_210_642, """
+  ): QueryResult<Long> {
+    val result = driver.execute(455_210_642, """
         |UPDATE pages SET 
         |    namespace = ?, 
         |    file_path = ?, 
@@ -2179,18 +2248,26 @@ public class LogseqDatabaseQueries(
     notifyQueries(455_210_642) { emit ->
       emit("pages")
     }
+    return result
   }
 
-  public fun deletePageByUuid(uuid: String) {
-    driver.execute(1_340_979_270, """DELETE FROM pages WHERE uuid = ?""", 1) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deletePageByUuid(uuid: String): QueryResult<Long> {
+    val result = driver.execute(1_340_979_270, """DELETE FROM pages WHERE uuid = ?""", 1) {
           bindString(0, uuid)
         }
     notifyQueries(1_340_979_270) { emit ->
       emit("blocks")
       emit("pages")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun insertPage(
     uuid: String,
     name: String,
@@ -2203,8 +2280,8 @@ public class LogseqDatabaseQueries(
     is_favorite: Long?,
     is_journal: Long?,
     journal_date: String?,
-  ) {
-    driver.execute(1_717_307_522, """
+  ): QueryResult<Long> {
+    val result = driver.execute(1_717_307_522, """
         |INSERT OR IGNORE INTO pages (uuid, name, namespace, file_path, created_at, updated_at, properties, version, is_favorite, is_journal, journal_date)
         |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimMargin(), 11) {
@@ -2223,32 +2300,45 @@ public class LogseqDatabaseQueries(
     notifyQueries(1_717_307_522) { emit ->
       emit("pages")
     }
+    return result
   }
 
-  public fun updatePageFavorite(is_favorite: Long?, uuid: String) {
-    driver.execute(-28_347_826, """UPDATE pages SET is_favorite = ? WHERE uuid = ?""", 2) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun updatePageFavorite(is_favorite: Long?, uuid: String): QueryResult<Long> {
+    val result = driver.execute(-28_347_826, """UPDATE pages SET is_favorite = ? WHERE uuid = ?""",
+        2) {
           bindLong(0, is_favorite)
           bindString(1, uuid)
         }
     notifyQueries(-28_347_826) { emit ->
       emit("pages")
     }
+    return result
   }
 
-  public fun deleteAllPages() {
-    driver.execute(-1_102_739_448, """DELETE FROM pages""", 0)
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteAllPages(): QueryResult<Long> {
+    val result = driver.execute(-1_102_739_448, """DELETE FROM pages""", 0)
     notifyQueries(-1_102_739_448) { emit ->
       emit("blocks")
       emit("pages")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun insertBlockReference(
     from_block_uuid: String,
     to_block_uuid: String,
     created_at: Long,
-  ) {
-    driver.execute(962_100_081, """
+  ): QueryResult<Long> {
+    val result = driver.execute(962_100_081, """
         |INSERT OR REPLACE INTO block_references (from_block_uuid, to_block_uuid, created_at)
         |VALUES (?, ?, ?)
         """.trimMargin(), 3) {
@@ -2259,10 +2349,15 @@ public class LogseqDatabaseQueries(
     notifyQueries(962_100_081) { emit ->
       emit("block_references")
     }
+    return result
   }
 
-  public fun deleteBlockReference(from_block_uuid: String, to_block_uuid: String) {
-    driver.execute(-1_753_403_677,
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deleteBlockReference(from_block_uuid: String, to_block_uuid: String):
+      QueryResult<Long> {
+    val result = driver.execute(-1_753_403_677,
         """DELETE FROM block_references WHERE from_block_uuid = ? AND to_block_uuid = ?""", 2) {
           bindString(0, from_block_uuid)
           bindString(1, to_block_uuid)
@@ -2270,8 +2365,12 @@ public class LogseqDatabaseQueries(
     notifyQueries(-1_753_403_677) { emit ->
       emit("block_references")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun insertPluginData(
     plugin_id: String,
     entity_type: String,
@@ -2280,8 +2379,8 @@ public class LogseqDatabaseQueries(
     value_: String,
     created_at: Long,
     updated_at: Long?,
-  ) {
-    driver.execute(1_888_036_144, """
+  ): QueryResult<Long> {
+    val result = driver.execute(1_888_036_144, """
         |INSERT INTO plugin_data (plugin_id, entity_type, entity_uuid, key, value, created_at, updated_at)
         |VALUES (?, ?, ?, ?, ?, ?, ?)
         """.trimMargin(), 7) {
@@ -2296,8 +2395,12 @@ public class LogseqDatabaseQueries(
     notifyQueries(1_888_036_144) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun updatePluginData(
     value_: String,
     updated_at: Long?,
@@ -2305,8 +2408,8 @@ public class LogseqDatabaseQueries(
     entity_type: String,
     entity_uuid: String,
     key: String,
-  ) {
-    driver.execute(386_418_496,
+  ): QueryResult<Long> {
+    val result = driver.execute(386_418_496,
         """UPDATE plugin_data SET value = ?, updated_at = ? WHERE plugin_id = ? AND entity_type = ? AND entity_uuid = ? AND key = ?""",
         6) {
           bindString(0, value_)
@@ -2319,8 +2422,12 @@ public class LogseqDatabaseQueries(
     notifyQueries(386_418_496) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun upsertPluginData(
     plugin_id: String,
     entity_type: String,
@@ -2329,8 +2436,8 @@ public class LogseqDatabaseQueries(
     value_: String,
     created_at: Long,
     updated_at: Long?,
-  ) {
-    driver.execute(-1_223_270_362, """
+  ): QueryResult<Long> {
+    val result = driver.execute(-1_223_270_362, """
         |INSERT OR REPLACE INTO plugin_data (plugin_id, entity_type, entity_uuid, key, value, created_at, updated_at)
         |VALUES (?, ?, ?, ?, ?, ?, ?)
         """.trimMargin(), 7) {
@@ -2345,15 +2452,19 @@ public class LogseqDatabaseQueries(
     notifyQueries(-1_223_270_362) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
+  /**
+   * @return The number of rows updated.
+   */
   public fun deletePluginData(
     plugin_id: String,
     entity_type: String,
     entity_uuid: String,
     key: String,
-  ) {
-    driver.execute(149_250_466,
+  ): QueryResult<Long> {
+    val result = driver.execute(149_250_466,
         """DELETE FROM plugin_data WHERE plugin_id = ? AND entity_type = ? AND entity_uuid = ? AND key = ?""",
         4) {
           bindString(0, plugin_id)
@@ -2364,19 +2475,28 @@ public class LogseqDatabaseQueries(
     notifyQueries(149_250_466) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
-  public fun deletePluginDataByPlugin(plugin_id: String) {
-    driver.execute(1_825_476_140, """DELETE FROM plugin_data WHERE plugin_id = ?""", 1) {
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deletePluginDataByPlugin(plugin_id: String): QueryResult<Long> {
+    val result = driver.execute(1_825_476_140, """DELETE FROM plugin_data WHERE plugin_id = ?""", 1)
+        {
           bindString(0, plugin_id)
         }
     notifyQueries(1_825_476_140) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
-  public fun deletePluginDataByEntity(entity_type: String, entity_uuid: String) {
-    driver.execute(1_512_375_004,
+  /**
+   * @return The number of rows updated.
+   */
+  public fun deletePluginDataByEntity(entity_type: String, entity_uuid: String): QueryResult<Long> {
+    val result = driver.execute(1_512_375_004,
         """DELETE FROM plugin_data WHERE entity_type = ? AND entity_uuid = ?""", 2) {
           bindString(0, entity_type)
           bindString(1, entity_uuid)
@@ -2384,6 +2504,7 @@ public class LogseqDatabaseQueries(
     notifyQueries(1_512_375_004) { emit ->
       emit("plugin_data")
     }
+    return result
   }
 
   private inner class SelectBlockByUuidQuery<out T : Any>(

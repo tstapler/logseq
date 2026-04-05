@@ -17,11 +17,37 @@ import com.getcapacitor.BridgeActivity;
 import androidx.activity.OnBackPressedDispatcher;
 import android.util.Log;
 import android.view.View;
+import kotlinx.coroutines.CompletableDeferred;
 
 public class MainActivity extends BridgeActivity {
     private NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
     private boolean webViewLoaded = false;
+    private CompletableDeferred<String> folderPickerDeferred = null;
+
+    public void pickFolder(CompletableDeferred<String> deferred) {
+        this.folderPickerDeferred = deferred;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addCategory(Intent.CATEGORY_DEFAULT);
+        startActivityForResult(intent, 9999);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 9999 && folderPickerDeferred != null) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                android.net.Uri treeUri = data.getData();
+                android.net.Uri docUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri,
+                        android.provider.DocumentsContract.getTreeDocumentId(treeUri));
+                String path = FileUtil.getPath(this, docUri);
+                folderPickerDeferred.complete(path);
+            } else {
+                folderPickerDeferred.complete(null);
+            }
+            folderPickerDeferred = null;
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -68,18 +94,6 @@ public class MainActivity extends BridgeActivity {
         } else {
             registerReceiver(routeChangeReceiver, filter);
         }
-
-        // Listen for WebView load completion and dispatch intent event when ready
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                if (!webViewLoaded) {
-                    webViewLoaded = true;
-                    dispatchSendIntentEvent();
-                }
-            }
-        });
 
         // initNavigationBarBgColor();
     }
@@ -154,16 +168,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onBackPressed() {
         Log.d("onBackPressed", "Debug");
-
-        WebView webView = getBridge().getWebView();
-        if (webView != null) {
-            // Send "native back" into JS. JS will call your UILocal/route-change,
-            // which flows into ComposeHost.applyNavigation(...) and animates.
-            sendJsBack(webView);
-        } else {
-            // Fallback if for some reason there is no webview
-            super.onBackPressed();
-        }
+        super.onBackPressed();
     }
     @Override
     protected void onNewIntent(Intent intent) {
@@ -182,6 +187,18 @@ public class MainActivity extends BridgeActivity {
             unregisterReceiver(routeChangeReceiver);
             routeChangeReceiver = null;
         }
+        super.onDestroy();
+    }
+
+    private void sendJsBack(WebView webView) {
+        if (webView == null) return;
+        webView.post(() -> webView.evaluateJavascript(
+            "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();",
+            null
+        ));
+    }
+}
+ }
         super.onDestroy();
     }
 

@@ -25,6 +25,8 @@ actual class PlatformFileSystem actual constructor() : JvmFileSystemBase(), File
 
     actual override fun deleteFile(path: String): Boolean = super.deleteFile(path)
 
+    actual override fun getLastModifiedTime(path: String): Long? = super.getLastModifiedTime(path)
+
     actual override fun pickDirectory(): String? {
         var selectedPath: String? = null
         val task = Runnable {
@@ -33,7 +35,6 @@ actual class PlatformFileSystem actual constructor() : JvmFileSystemBase(), File
             val result = chooser.showOpenDialog(null)
             if (result == JFileChooser.APPROVE_OPTION) {
                 selectedPath = chooser.selectedFile.absolutePath
-                selectedPath?.let { registerGraphRoot(it) }
             }
         }
 
@@ -42,8 +43,12 @@ actual class PlatformFileSystem actual constructor() : JvmFileSystemBase(), File
         } else {
             SwingUtilities.invokeAndWait(task)
         }
+        
+        // Whitelist the picked directory
+        selectedPath?.let { registerGraphRoot(it) }
+        
         return selectedPath
     }
 
-    actual override fun getLastModifiedTime(path: String): Long? = super.getLastModifiedTime(path)
+    actual override suspend fun pickDirectoryAsync(): String? = pickDirectory()
 }

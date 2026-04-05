@@ -2,17 +2,11 @@ package com.logseq.kmp.db
 
 actual class PlatformUtils actual constructor() {
     actual fun getDatabaseDirectory(): String {
-        // On Android, use app-specific directory
-        return android.content.Context::class.java.let { ctxClass ->
-            try {
-                val activityThread = Class.forName("android.app.ActivityThread")
-                val app = activityThread.getMethod("getApplication").invoke(null)
-                val getFilesDir = app::class.java.getMethod("getFilesDir")
-                getFilesDir.invoke(app) as? String ?: "/data/data/files"
-            } catch (e: Exception) {
-                "/data/data/files"
-            }
-        }
+        // On Android, use app-specific directory from static context
+        val context = DriverFactory.staticContext 
+            ?: throw IllegalStateException("DriverFactory must be initialized with a Context before calling PlatformUtils.getDatabaseDirectory().")
+        
+        return context.filesDir.absolutePath
     }
     
     actual fun getDatabasePath(graphId: String?): String {

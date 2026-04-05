@@ -9,6 +9,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.logseq.kmp.ui.i18n.t
 import com.logseq.kmp.platform.PlatformFileSystem
+import kotlinx.coroutines.launch
 
 enum class OnboardingStep {
     WELCOME,
@@ -121,6 +122,7 @@ private fun GraphSelectionStep(
         Card(
             modifier = Modifier.fillMaxWidth()
         ) {
+            val scope = rememberCoroutineScope()
             Column(
                 modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -132,10 +134,12 @@ private fun GraphSelectionStep(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    val path = fileSystem.pickDirectory()
-                    if (path != null) {
-                        selectedPath = path
-                        onGraphSelected(path)
+                    scope.launch {
+                        val path = fileSystem.pickDirectoryAsync()
+                        if (path != null) {
+                            selectedPath = path
+                            onGraphSelected(path)
+                        }
                     }
                 }) {
                     Text("Select Graph Directory")

@@ -11,6 +11,11 @@ expect class DriverFactory() {
      * @param jdbcUrl The JDBC connection string (e.g. "jdbc:sqlite:logseq.db" or "jdbc:sqlite::memory:")
      */
     fun createDriver(jdbcUrl: String): SqlDriver
+
+    /**
+     * Platform-specific initialization (e.g. passing Android Context).
+     */
+    fun init(context: Any)
 }
 
 /**

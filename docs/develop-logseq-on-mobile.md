@@ -1,100 +1,113 @@
-# iOS development
+# Mobile Development (KMP & Compose Multiplatform)
 
-## Installation
-- Install Xcode 13 from App Store.
-- Install [CocoaPods](https://cocoapods.org/)
-  ```shell
-  sudo gem install cocoapods
-  ```
-  Note: use the following commands from *ios/App* directory to fix **ffi_c.bundle** related issue for M1 MacBook [^1].  
-  (Working directory: `ios/App`)
-  ```shell
-  arch -x86_64 sudo gem install ffi
-  arch -x86_64 pod install
-  ```
- 
-## Set up development environment
-### Build the development app
-- comment in `server` section in **capacitor.config.ts**, and replace `process.env.LOGSEQ_APP_ASERVER_URL` with your `http://your-local-ip-address:3001` (run `ifconfig` to check).
-    ```typescript
-    server: {
-        url: "process.env.LOGSEQ_APP_ASERVER_URL",
-        cleartext: true
-        } 
-    ```
-- Working directory: Logseq root directory
-- Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
-- Connect your iOS device to MacBook.
-- Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
+Logseq is currently migrating to a **Kotlin Multiplatform (KMP)** and **Compose Multiplatform** architecture. This is the modern way to develop for Logseq mobile.
 
-or, you can run `bb dev:ios-app` to do those steps with one command if you are on MacOS. To download bb, see https://github.com/babashka/babashka#installation. Also, in order to use mobile bb tasks on macOS, `gsed` needs to be installed in your system (run `brew install gnu-sed` to install).
+## Prerequisites
 
-Note: if the dev build isn't reflecting the change of code, restart `yarn app-watch` and run `npx cap sync ios` again.
+- **Java Development Kit (JDK) 21**: Required for Kotlin 2.0.
+- **Android Studio**: Latest version (Ladybug or newer recommended).
+- **Android SDK**: API Level 35 (Compile SDK) and 24+ (Min SDK).
+- **Xcode (macOS only)**: For iOS development.
+- **CocoaPods (macOS only)**: For iOS dependency management.
 
-### Build the release app
-- Comment out `server` section above in **capacitor.config.ts**.
-- Connect your iOS device to MacBook.
-- Run `yarn run-ios-release` to install the release app to your iOS device.
+---
 
-or, you can run `bb release:ios-app` to do those steps with one command.
+## Android Development (KMP)
 
-[^1] https://github.com/CocoaPods/CocoaPods/issues/10220#issuecomment-730963835
+The Android application is located in the `android/` directory and integrates the shared `:kmp` module.
 
+### 1. Build and Install
+You can use the provided helper script from the project root:
 
-# Android development  
-## Installation
-- Install Android studio [^1] and SDK (newer than 30) tools
-  Note: for M1 MacBook users.
-  - Download version **Mac with Apple Chip** 
-  - unzip it and move **Android Studio.app** file to **Applications**, or you will get the following error later.
-    ```
-     [error] Unable to launch Android Studio. Is it installed?
-        Attempted to open Android Studio at: /Applications/Android Studio.app
-        You can configure this with the CAPACITOR_ANDROID_STUDIO_PATH environment variable.
-     ```
-- In Android Studio, open **Tools** -> **SDK Manager** to install other SDK tools [^2].
-  > In the SDK Tools tab, make sure to install at least the following:
-  >> - Android SDK Build-Tools
-  >> - Android SDK Command-line Tools
-  >> - Android Emulator
-  >> - Android SDK Platform-Tools
+```bash
+./run-android.sh
+```
 
-## Set up development environment
-### Build the development app
-- comment in `server` section in **capacitor.config.ts**, and replace `process.env.LOGSEQ_APP_ASERVER_URL` with your `http://your-local-ip-address:3001` (run `ifconfig` to check).
-    ```typescript
-    server: {
-        url: "process.env.LOGSEQ_APP_ASERVER_URL",
-        cleartext: true
-        } 
-    ```
-- Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
+Or run the Gradle task directly:
+
+```bash
+cd android
+./gradlew :app:installDebug
+```
+
+### 2. Run with ADB
+Ensure your device is connected and recognized:
+
+```bash
+adb devices
+```
+
+If the app doesn't launch automatically, you can start it via ADB:
+
+```bash
+adb shell monkey -p dev.stapler.logseq.app -c android.intent.category.LAUNCHER 1
+```
+
+### 4. Wireless Debugging
+If you prefer not to use a USB cable, you can use Android Wireless Debugging:
+
+1.  **Enable Wireless Debugging**: In your phone's **Developer Options**, turn on **Wireless Debugging**.
+2.  **Pair Device**:
+    - Tap **Wireless Debugging > Pair device with pairing code**.
+    - From your terminal, run:
+      ```bash
+      adb pair <IP_ADDRESS>:<PAIRING_PORT> <PAIRING_CODE>
+      ```
+3.  **Connect**:
+    - Look at the **main Wireless Debugging screen** for the **IP address & Port** (this is usually different from the pairing port).
+    - Run:
+      ```bash
+      adb connect <IP_ADDRESS>:<CONNECTION_PORT>
+      ```
+4.  **Run Build**:
+    - If multiple devices are connected, you can specify your device ID:
+      ```bash
+      export ADB_DEVICE_ID="192.168.1.70:45015"
+      ./run-android.sh
+      ```
+
+---
+
+## Technical Note: Hybrid Architecture
+The current mobile app is in a **hybrid state**. It uses **Capacitor/Cordova** for native shell features and some legacy UI, but it integrates the **`:kmp` module** for shared business logic, data models, and the new **Compose Multiplatform** editor.
+
+### Key Implementation Details (Fixed during Migration):
+1.  **Context Initialization**: The `:kmp` module (specifically `DriverFactory` and `PlatformUtils`) must be initialized with an Android `Context` before use to avoid `NullPointerException`. This is handled in `ComposeHost.kt` via `DriverFactory().init(context)`.
+2.  **SQLite & FTS5**: Standard Android SQLite does not always bundle the `fts5` module required by Logseq. We use `com.github.requery:sqlite-android` via `RequerySQLiteOpenHelperFactory` in `DriverFactory.android.kt` to provide a modern SQLite with FTS5 support.
+3.  **Directory Picking**: Android requires using the Storage Access Framework (SAF) for directory selection. `PlatformFileSystem` provides a `pickDirectoryAsync()` method which is implemented in `ComposeHost.kt` by delegating to `MainActivity`'s SAF intent.
+
+---
+
+## iOS Development (KMP)
+
+The iOS application is located in `ios/App/`. It is currently a hybrid app transitioning to KMP.
+
+### 1. Setup
+```bash
+cd ios/App
+pod install
+```
+
+### 2. Build and Run
+1. Open `ios/App/App.xcworkspace` in Xcode.
+2. Select your device/simulator.
+3. Click **Run** (Cmd + R).
+
+*Note: The iOS UI is currently transitioning to Compose Multiplatform. Shared logic is already powered by the `:kmp` module.*
+
+---
+
+## Legacy Mobile Development (ClojureScript & Capacitor)
+
+> [!WARNING]
+> This workflow is for the older ClojureScript/Capacitor-based version of the app. New features should be developed in the KMP module.
+
+### Android (Legacy)
+- Run `yarn && yarn app-watch` from the root.
 - Run `npx cap sync android` in another terminal.
-- Run `npx cap run android` to install app into your device.
+- Run `npx cap run android` or use Android Studio.
 
-or, you can run `bb dev:android-app` to do those steps with one command if you are on macOS.
-
-Then,
-- In Android Studio, open **Tools** -> **AVD Manager** to create Android Virtual Device (AVD), and launch it in the emulator.
-- In Android Studio, open **Run** -> **Run** to run Logseq.
-- After logseq startup in Android virtual device, repl should be able to connect
-- For browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
-
-
-### Build a release and install it to your android device 
-- Comment out `server` section above in **capacitor.config.ts**.
-- Connect your device to PC.
-- Run `yarn run-android-release`.
-
-or, you can run `bb release:android-app` to do those steps with one command.
-
-### Build an apk
-- Comment out `server` section above in **capacitor.config.ts**.
-- Run `yarn run-android-release`
-
-or, you can run `bb release:android-app` to do those steps with one command.
-
-Then,
-- In Android Studio, open **Build** -> **Build Bundles / APKs** -> **Build APKs**.
-- Get your apk in `android/app/build/apk/debug`.
+### iOS (Legacy)
+- Run `yarn && yarn app-watch` from the root.
+- Run `npx cap sync ios` in another terminal.
+- Run `npx cap open ios` to open in Xcode.

@@ -12,5 +12,6 @@ interface FileSystem {
     fun createDirectory(path: String): Boolean
     fun deleteFile(path: String): Boolean
     fun pickDirectory(): String?
+    suspend fun pickDirectoryAsync(): String? = pickDirectory()
     fun getLastModifiedTime(path: String): Long?
 }

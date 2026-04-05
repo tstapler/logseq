@@ -10,7 +10,6 @@ import com.logseq.kmp.ui.theme.setSystemDarkTheme
 import com.logseq.kmp.platform.PlatformFileSystem
 import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.error.JvmErrorTracker
-import kotlinx.coroutines.runBlocking
 import javax.swing.UIManager
 
 fun main() {
@@ -40,33 +39,17 @@ fun main() {
         val fileSystem = PlatformFileSystem()
         val graphPath = fileSystem.getDefaultGraphPath()
         
-        // Register the active graph root in the whitelist
-        fileSystem.registerGraphRoot(graphPath)
-        
         logger.info("Starting Desktop Application with graph: $graphPath")
         errorTracker.recordBreadcrumb("Graph path resolved: $graphPath", "SYSTEM")
 
-        var viewModel: com.logseq.kmp.ui.LogseqViewModel? = null
-
         Window(
-            onCloseRequest = {
-                logger.info("Closing application - flushing pending changes")
-                runBlocking {
-                    try {
-                        viewModel?.savePendingChanges()
-                    } catch (e: Exception) {
-                        logger.error("Error during shutdown flush", e)
-                    }
-                }
-                exitApplication()
-            },
+            onCloseRequest = ::exitApplication,
             state = windowState,
             title = "Logseq KMP"
         ) {
             LogseqApp(
                 fileSystem = fileSystem,
-                graphPath = graphPath,
-                onViewModelCreated = { viewModel = it }
+                graphPath = graphPath
             )
         }
     }

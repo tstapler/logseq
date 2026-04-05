@@ -5,6 +5,10 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import java.io.File
 
 actual class DriverFactory actual constructor() {
+    actual fun init(context: Any) {
+        // No-op on JVM
+    }
+
     actual fun createDriver(jdbcUrl: String): SqlDriver {
         // Ensure parent directory exists for file-based URLs
         if (jdbcUrl.startsWith("jdbc:sqlite:") && !jdbcUrl.contains(":memory:")) {

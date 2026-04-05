@@ -19,7 +19,8 @@ internal fun KClass<LogseqDatabase>.newInstance(driver: SqlDriver): LogseqDataba
 
 private class LogseqDatabaseImpl(
   driver: SqlDriver,
-) : TransacterImpl(driver), LogseqDatabase {
+) : TransacterImpl(driver),
+    LogseqDatabase {
   override val logseqDatabaseQueries: LogseqDatabaseQueries = LogseqDatabaseQueries(driver)
 
   public object Schema : SqlSchema<QueryResult.Value<Unit>> {
