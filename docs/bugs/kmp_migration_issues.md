@@ -19,11 +19,11 @@
 ### 3. JVM Runtime Crash (Skiko Incompatibility)
 *   **Status**: ✅ Fixed
 *   **Symptom**: `java.lang.NoSuchMethodError: 'void org.jetbrains.skiko.SkiaLayer.<init>(...)'` at runtime.
-*   **Resolution**: Pinned Skiko to version `0.8.9` in `kmp/build.gradle.kts`. This resolves the binary incompatibility with Compose Multiplatform 1.7.1 while allowing the use of Kotlin 2.0.21.
+*   **Resolution**: Resolved by removing manual Skiko version pinning and allowing Compose Multiplatform 1.7.1 to manage its own compatible transitive dependencies. This correctly resolves to Skiko `0.8.18`, which is compatible with Kotlin 2.0.21.
 
 ### 4. JVM Internal Compiler Error
 *   **Status**: ✅ Fixed
-*   **Resolution**: While a downgrade to `1.9.24` was previously used as a workaround, the project now successfully compiles and runs on Kotlin `2.0.21` by pinning compatible dependency versions.
+*   **Resolution**: While a downgrade to `1.9.24` was previously used as a workaround, the project now successfully compiles and runs on Kotlin `2.0.21` by allowing transitive dependency resolution.
 
 ### 5. Missing Platform Implementations
 *   **Status**: ✅ Fixed

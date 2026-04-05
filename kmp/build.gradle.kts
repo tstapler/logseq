@@ -54,9 +54,6 @@ kotlin {
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
 
-                // Skiko fix: Pin to 0.8.9 for compatibility with Compose 1.7.1
-                implementation("org.jetbrains.skiko:skiko:0.8.9")
-
                 // OpenTelemetry API for common metrics
                 implementation("io.opentelemetry:opentelemetry-api:1.43.0")
             }

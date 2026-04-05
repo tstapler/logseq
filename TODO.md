@@ -11,7 +11,7 @@
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent, Skiko pinned to 0.8.9 |
+| JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent, Skiko resolved transitively (0.8.18) |
 | Android | ✅ PASSING | Stable, SQLDelight persistent |
 | JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
 | iOS | ⏸️ Disabled | Ivy repository issues |
@@ -39,7 +39,7 @@ kmp/
 ## Active Remediation (Post-Review March 2026)
 
 ### P0: STABILITY & COMPATIBILITY
-- [x] **[JVM-001] Fix Skiko Runtime Crash** - Pin Skiko to 0.8.9 to resolve `NoSuchMethodError` with Compose 1.7.1 on Kotlin 2.0.21.
+- [x] **[JVM-001] Fix Skiko Runtime Crash** - Resolved transitively via Compose 1.7.1 on Kotlin 2.0.21.
 
 ### P0: ARCHITECTURE & MAINTAINABILITY
 - [x] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into BlockGutter, BlockEditor, BlockViewer, BlockItem, BlockList components.
