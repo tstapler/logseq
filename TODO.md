@@ -2,16 +2,16 @@
 
 ## Current Status
 - **Migration State**: Feature Implementation Phase - Core features complete!
-- **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.0.2 (Persistent)**
+- **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.1.0 (Persistent)**
 - **Recent Activity**: Migrated to SQLDelight, fixed hierarchy data integrity bugs, extracted MarkdownEngine.
-- **Last Updated**: March 31, 2026
-- **Current Focus**: Multi-Graph Support Complete - Ready for testing
+- **Last Updated**: April 4, 2026
+- **Current Focus**: Stability and Multi-platform Support
 
 ## Build Status
 
 | Target | Status | Notes |
 |--------|--------|-------|
-| JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent |
+| JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent, Skiko pinned to 0.8.9 |
 | Android | ✅ PASSING | Stable, SQLDelight persistent |
 | JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
 | iOS | ⏸️ Disabled | Ivy repository issues |
@@ -37,6 +37,9 @@ kmp/
 ---
 
 ## Active Remediation (Post-Review March 2026)
+
+### P0: STABILITY & COMPATIBILITY
+- [x] **[JVM-001] Fix Skiko Runtime Crash** - Pin Skiko to 0.8.9 to resolve `NoSuchMethodError` with Compose 1.7.1 on Kotlin 2.0.21.
 
 ### P0: ARCHITECTURE & MAINTAINABILITY
 - [x] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into BlockGutter, BlockEditor, BlockViewer, BlockItem, BlockList components.
