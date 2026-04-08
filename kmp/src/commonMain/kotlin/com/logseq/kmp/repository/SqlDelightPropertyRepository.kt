@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.Result.Companion.success
 
 /**
@@ -110,7 +110,7 @@ class SqlDelightPropertyRepository(
                     blockUuid = blockUuid,
                     key = parts[0],
                     value = parts[1],
-                    createdAt = kotlinx.datetime.Clock.System.now()
+                    createdAt = kotlin.time.Clock.System.now()
                 )
             } else null
         } ?: emptyList()

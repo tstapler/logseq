@@ -2,7 +2,7 @@ package com.logseq.kmp.ui.fixtures
 
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 
 object TestFixtures {

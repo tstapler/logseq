@@ -1,7 +1,7 @@
 package com.logseq.kmp.outliner
 
 import com.logseq.kmp.model.Block
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

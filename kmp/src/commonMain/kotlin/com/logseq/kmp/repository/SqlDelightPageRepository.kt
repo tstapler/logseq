@@ -9,7 +9,7 @@ import app.cash.sqldelight.coroutines.mapToOne
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.Result.Companion.success
 
 /**
@@ -36,6 +36,18 @@ class SqlDelightPageRepository(
 
     override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = 
         queries.selectPagesByNamespaceUnpaginated(namespace)
+            .asFlow()
+            .mapToList(PlatformDispatcher.IO)
+            .map { list -> success(list.map { it.toModel() }) }
+
+    override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> = 
+        queries.selectAllPagesPaginated(limit.toLong(), offset.toLong())
+            .asFlow()
+            .mapToList(PlatformDispatcher.IO)
+            .map { list -> success(list.map { it.toModel() }) }
+
+    override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> = 
+        queries.selectPagesByNameLikePaginated("%$query%", limit.toLong(), offset.toLong())
             .asFlow()
             .mapToList(PlatformDispatcher.IO)
             .map { list -> success(list.map { it.toModel() }) }

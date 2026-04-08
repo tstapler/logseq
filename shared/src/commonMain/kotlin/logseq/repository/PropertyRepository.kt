@@ -1,7 +1,7 @@
 package logseq.repository
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Security validation for repository data

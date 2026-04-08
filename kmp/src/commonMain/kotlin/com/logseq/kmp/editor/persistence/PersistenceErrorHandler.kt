@@ -4,7 +4,7 @@ import com.logseq.kmp.model.Validation
 import com.logseq.kmp.ui.NotificationManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.Result
 import kotlin.math.pow
 
@@ -400,7 +400,7 @@ data class RetryOperation(
     val operation: String,
     val blockUuid: String?,
     val error: Throwable,
-    val timestamp: kotlinx.datetime.Instant,
+    val timestamp: kotlin.time.Instant,
     val context: PersistenceContext,
     val retryCount: Int,
     val maxRetries: Int
@@ -480,8 +480,8 @@ data class RecoveryResult(
 data class RecoveryAttempt(
     val id: String,
     val type: RecoveryType,
-    val startTime: kotlinx.datetime.Instant,
-    val endTime: kotlinx.datetime.Instant,
+    val startTime: kotlin.time.Instant,
+    val endTime: kotlin.time.Instant,
     val success: Boolean,
     val recoveredOperations: Int,
     val failedOperations: Int
@@ -502,7 +502,7 @@ enum class RecoveryType {
  */
 data class RecoveryBackup(
     val id: String,
-    val createdAt: kotlinx.datetime.Instant,
+    val createdAt: kotlin.time.Instant,
     val failedOperations: List<RetryOperation>,
     val systemState: Map<String, Any>
 )
@@ -516,7 +516,7 @@ data class RecoveryStats(
     val recoverableFailures: Int,
     val successfulRecoveries: Int,
     val totalRecoveryAttempts: Int,
-    val lastRecoveryTime: kotlinx.datetime.Instant?,
+    val lastRecoveryTime: kotlin.time.Instant?,
     val averageRecoveryTime: Double
 ) {
     val recoveryRate: Double

@@ -7,7 +7,7 @@ import com.logseq.kmp.coroutines.PlatformDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.Result.Companion.success
 
 /**

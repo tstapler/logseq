@@ -43,6 +43,24 @@ class DatascriptPageRepository : PageRepository {
         }
     }
 
+    override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return pages.map { map ->
+            val result = map.values.sortedBy { it.name }.drop(offset).take(limit)
+            success(result)
+        }
+    }
+
+    override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return pages.map { map ->
+            val result = map.values
+                .filter { it.name.contains(query, ignoreCase = true) }
+                .sortedBy { it.name }
+                .drop(offset)
+                .take(limit)
+            success(result)
+        }
+    }
+
     override fun getAllPages(): Flow<Result<List<Page>>> {
         return pages.map { map ->
             success(map.values.toList())
@@ -93,7 +111,7 @@ class DatascriptPageRepository : PageRepository {
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
         return try {
             val page = pages.value[pageUuid] ?: return Result.failure(Exception("Page not found"))
-            val newPage = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
+            val newPage = page.copy(name = newName, updatedAt = kotlin.time.Clock.System.now())
             savePage(newPage)
         } catch (e: Exception) {
             Result.failure(e)

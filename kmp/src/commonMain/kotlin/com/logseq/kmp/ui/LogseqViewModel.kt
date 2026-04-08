@@ -21,7 +21,7 @@ import com.logseq.kmp.performance.DebounceManager
 import com.logseq.kmp.ui.screens.SearchResultItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -302,7 +302,7 @@ class LogseqViewModel(
             val siblingsToShift = siblings.filter { it.position >= newPosition }
             val updatedSiblings = siblingsToShift.map { it.copy(position = it.position + 1) }
 
-            val now = kotlinx.datetime.Clock.System.now()
+            val now = kotlin.time.Clock.System.now()
             val newBlock = Block(
                 uuid = generateUuid(),
                 pageUuid = currentBlock.pageUuid,
@@ -340,7 +340,7 @@ class LogseqViewModel(
             val lastBlock = topLevelBlocks.lastOrNull()
             
             val newPosition = (lastBlock?.position ?: 0) + 1
-            val now = kotlinx.datetime.Clock.System.now()
+            val now = kotlin.time.Clock.System.now()
             
             val newBlock = Block(
                 uuid = generateUuid(),
@@ -605,7 +605,7 @@ class LogseqViewModel(
      */
     private suspend fun createPage(pageName: String): Page? {
         return try {
-            val now = kotlinx.datetime.Clock.System.now()
+            val now = kotlin.time.Clock.System.now()
             val uuid = generateUuid()
 
             // Detect if this is a journal page (matches date patterns like 2026-01-21 or 2026_01_21)

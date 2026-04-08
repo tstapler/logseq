@@ -152,6 +152,9 @@ SELECT * FROM blocks WHERE page_uuid = ? ORDER BY position;
 selectBlocksWithContentLike:
 SELECT * FROM blocks WHERE content LIKE ?;
 
+selectBlocksWithContentLikePaginated:
+SELECT * FROM blocks WHERE content LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?;
+
 countBlocksByPageUuid:
 SELECT COUNT(*) FROM blocks WHERE page_uuid = ?;
 
@@ -331,6 +334,9 @@ LIMIT ?;
 -- Search queries
 selectPagesByNameLike:
 SELECT * FROM pages WHERE name LIKE ?;
+
+selectPagesByNameLikePaginated:
+SELECT * FROM pages WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?;
 
 selectBlocksReferencing:
 SELECT DISTINCT b.* FROM blocks b

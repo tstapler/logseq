@@ -24,8 +24,8 @@ fun SqlCursor.toBlock(): Block {
         content = getString(5) ?: "", // content
         level = getLong(6)?.toInt() ?: 0, // level
         position = getLong(7)?.toInt() ?: 0, // position
-        createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(8) ?: 0L), // created_at
-        updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(9) ?: 0L), // updated_at
+        createdAt = kotlin.time.Instant.fromEpochMilliseconds(getLong(8) ?: 0L), // created_at
+        updatedAt = kotlin.time.Instant.fromEpochMilliseconds(getLong(9) ?: 0L), // updated_at
         properties = getString(10)?.let { parseJsonProperties(it) } ?: emptyMap(), // properties
         contentHash = getString(12) // content_hash (nullable)
     )
@@ -40,8 +40,8 @@ fun SqlCursor.toPage(): Page {
         name = getString(1) ?: "", // name
         namespace = getString(2), // namespace
         filePath = getString(3), // file_path
-        createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(4) ?: 0L), // created_at
-        updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(5) ?: 0L), // updated_at
+        createdAt = kotlin.time.Instant.fromEpochMilliseconds(getLong(4) ?: 0L), // created_at
+        updatedAt = kotlin.time.Instant.fromEpochMilliseconds(getLong(5) ?: 0L), // updated_at
         properties = getString(6)?.let { parseJsonProperties(it) } ?: emptyMap() // properties
     )
 }
@@ -55,7 +55,7 @@ fun SqlCursor.toProperty(): Property {
         blockUuid = getString(1) ?: "", // block_uuid
         key = getString(2) ?: "", // key
         value = getString(3) ?: "", // value
-        createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(getLong(4) ?: 0L) // created_at
+        createdAt = kotlin.time.Instant.fromEpochMilliseconds(getLong(4) ?: 0L) // created_at
     )
 }
 

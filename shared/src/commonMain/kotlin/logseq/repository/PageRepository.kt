@@ -1,7 +1,7 @@
 package logseq.repository
 
 import kotlinx.coroutines.flow.Flow
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import logseq.model.Page
 
 /**
@@ -47,6 +47,16 @@ interface PageRepository : BaseRepository<Page, Long> {
     suspend fun search(criteria: PageSearchCriteria, pagination: Pagination = Pagination()): Page<Page>
     suspend fun searchByName(query: String, pagination: Pagination = Pagination()): Page<Page>
     suspend fun searchByProperties(properties: Map<String, String>, pagination: Pagination = Pagination()): Page<Page>
+
+    /**
+     * Get pages with pagination (reactive)
+     */
+    fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>>
+
+    /**
+     * Search pages by name with pagination (reactive)
+     */
+    fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>>
 
     // Content-related queries
     suspend fun findPagesWithBlocks(blockIds: List<Long>): List<Page>

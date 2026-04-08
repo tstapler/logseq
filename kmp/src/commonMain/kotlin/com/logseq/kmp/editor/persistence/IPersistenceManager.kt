@@ -216,7 +216,7 @@ data class ConflictInfo(
     val blockUuid: String,
     val changeType: String,
     val conflictingChanges: List<BlockChange>,
-    val detectedAt: kotlinx.datetime.Instant,
+    val detectedAt: kotlin.time.Instant,
     val severity: ConflictSeverity,
     val description: String
 )
@@ -238,7 +238,7 @@ enum class ConflictSeverity {
  */
 data class BackupInfo(
     val backupId: String,
-    val createdAt: kotlinx.datetime.Instant,
+    val createdAt: kotlin.time.Instant,
     val size: Long,
     val blockCount: Int,
     val description: String,

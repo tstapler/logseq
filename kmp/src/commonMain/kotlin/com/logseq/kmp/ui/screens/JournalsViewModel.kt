@@ -137,7 +137,7 @@ class JournalsViewModel(
      * Ensures today's journal entry exists.
      */
     fun generateTodayJournal(): Job = scope.launch {
-        val today = kotlinx.datetime.Clock.System.now()
+        val today = kotlin.time.Clock.System.now()
             .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
         val pageName = today.toString() // Standard YYYY-MM-DD
         
@@ -148,7 +148,7 @@ class JournalsViewModel(
                 uuid = pageUuid,
                 name = pageName,
                 createdAt = today.atStartOfDayIn(kotlinx.datetime.TimeZone.currentSystemDefault()),
-                updatedAt = kotlinx.datetime.Clock.System.now(),
+                updatedAt = kotlin.time.Clock.System.now(),
                 isJournal = true,
                 journalDate = today
             )
@@ -160,8 +160,8 @@ class JournalsViewModel(
                 pageUuid = pageUuid,
                 content = "",
                 position = 0,
-                createdAt = kotlinx.datetime.Clock.System.now(),
-                updatedAt = kotlinx.datetime.Clock.System.now()
+                createdAt = kotlin.time.Clock.System.now(),
+                updatedAt = kotlin.time.Clock.System.now()
             )
             blockRepository.saveBlock(initialBlock)
             
@@ -393,7 +393,7 @@ class JournalsViewModel(
         
         val newPosition = if (lastBlock != null) (lastBlock.position) + 1 else 0
 
-        val now = kotlinx.datetime.Clock.System.now()
+        val now = kotlin.time.Clock.System.now()
         val newBlock = Block(
             uuid = generateUuid(),
             pageUuid = page.uuid,

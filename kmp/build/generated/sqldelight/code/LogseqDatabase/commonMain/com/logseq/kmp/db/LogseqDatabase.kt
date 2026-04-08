@@ -15,7 +15,6 @@ public interface LogseqDatabase : Transacter {
     public val Schema: SqlSchema<QueryResult.Value<Unit>>
       get() = LogseqDatabase::class.schema
 
-    public operator fun invoke(driver: SqlDriver): LogseqDatabase =
-        LogseqDatabase::class.newInstance(driver)
+    public operator fun invoke(driver: SqlDriver): LogseqDatabase = LogseqDatabase::class.newInstance(driver)
   }
 }

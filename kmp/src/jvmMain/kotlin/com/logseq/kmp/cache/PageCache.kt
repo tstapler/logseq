@@ -160,6 +160,40 @@ class PageCache(
     }.flowOn(Dispatchers.IO)
 
     /**
+     * Get pages with pagination.
+     */
+    fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> = flow {
+        try {
+            metrics.value = metrics.value.withPageMiss()
+            delegate.getPages(limit, offset).collect { result ->
+                result.getOrNull()?.let { pages ->
+                    pages.forEach { cachePage(it) }
+                    emit(success(pages))
+                } ?: emit(result)
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
+     * Search pages with pagination.
+     */
+    fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> = flow {
+        try {
+            metrics.value = metrics.value.withPageMiss()
+            delegate.searchPages(query, limit, offset).collect { result ->
+                result.getOrNull()?.let { pages ->
+                    pages.forEach { cachePage(it) }
+                    emit(success(pages))
+                } ?: emit(result)
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    /**
      * Save page - invalidates cache.
      */
     suspend fun savePage(page: Page): Result<Unit> {

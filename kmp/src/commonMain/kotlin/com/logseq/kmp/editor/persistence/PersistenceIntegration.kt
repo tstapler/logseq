@@ -10,7 +10,7 @@ import com.logseq.kmp.repository.DatascriptBlockRepository
 import com.logseq.kmp.ui.NotificationManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * Factory for creating and integrating persistence components.
@@ -350,7 +350,7 @@ data class HealthCheckResult(
     val healthScore: Int,
     val issues: List<String>,
     val warnings: List<String>,
-    val timestamp: kotlinx.datetime.Instant
+    val timestamp: kotlin.time.Instant
 )
 
 /**
@@ -412,8 +412,8 @@ object PersistenceExample {
             content = "This is a test block",
             level = 0,
             position = 0,
-            createdAt = kotlinx.datetime.Clock.System.now(),
-            updatedAt = kotlinx.datetime.Clock.System.now()
+            createdAt = kotlin.time.Clock.System.now(),
+            updatedAt = kotlin.time.Clock.System.now()
         )
         
         val saveResult = system.saveBlockIntegrated(block)
@@ -423,7 +423,7 @@ object PersistenceExample {
         val change = BlockChange(
             blockUuid = block.uuid,
             type = ChangeType.CONTENT,
-            timestamp = kotlinx.datetime.Clock.System.now(),
+            timestamp = kotlin.time.Clock.System.now(),
             oldContent = "This is a test block",
             newContent = "This is an updated test block"
         )

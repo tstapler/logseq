@@ -7,7 +7,7 @@ import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.Result
 import kotlin.Result.Companion.success
 

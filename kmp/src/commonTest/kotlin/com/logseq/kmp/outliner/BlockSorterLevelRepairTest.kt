@@ -1,7 +1,7 @@
 package com.logseq.kmp.outliner
 
 import com.logseq.kmp.model.Block
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

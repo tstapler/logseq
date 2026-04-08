@@ -4,7 +4,7 @@ import com.logseq.kmp.performance.PerformanceMonitor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.sync.Mutex

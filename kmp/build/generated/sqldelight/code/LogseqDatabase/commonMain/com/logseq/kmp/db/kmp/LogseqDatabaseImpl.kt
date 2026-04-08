@@ -14,8 +14,7 @@ import kotlin.reflect.KClass
 internal val KClass<LogseqDatabase>.schema: SqlSchema<QueryResult.Value<Unit>>
   get() = LogseqDatabaseImpl.Schema
 
-internal fun KClass<LogseqDatabase>.newInstance(driver: SqlDriver): LogseqDatabase =
-    LogseqDatabaseImpl(driver)
+internal fun KClass<LogseqDatabase>.newInstance(driver: SqlDriver): LogseqDatabase = LogseqDatabaseImpl(driver)
 
 private class LogseqDatabaseImpl(
   driver: SqlDriver,
@@ -109,11 +108,9 @@ private class LogseqDatabaseImpl(
       driver.execute(null, "CREATE INDEX idx_properties_block_uuid ON properties(block_uuid)", 0)
       driver.execute(null, "CREATE INDEX idx_properties_key ON properties(key)", 0)
       driver.execute(null, "CREATE INDEX idx_plugin_data_plugin_id ON plugin_data(plugin_id)", 0)
-      driver.execute(null,
-          "CREATE INDEX idx_plugin_data_entity ON plugin_data(entity_type, entity_uuid)", 0)
+      driver.execute(null, "CREATE INDEX idx_plugin_data_entity ON plugin_data(entity_type, entity_uuid)", 0)
       driver.execute(null, "CREATE INDEX idx_plugin_data_key ON plugin_data(key)", 0)
-      driver.execute(null, "CREATE INDEX idx_references_from ON block_references(from_block_uuid)",
-          0)
+      driver.execute(null, "CREATE INDEX idx_references_from ON block_references(from_block_uuid)", 0)
       driver.execute(null, "CREATE INDEX idx_references_to ON block_references(to_block_uuid)", 0)
       driver.execute(null, """
           |CREATE TRIGGER blocks_ai AFTER INSERT ON blocks BEGIN

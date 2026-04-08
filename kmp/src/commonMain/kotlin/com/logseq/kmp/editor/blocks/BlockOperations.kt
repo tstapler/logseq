@@ -8,7 +8,7 @@ import com.logseq.kmp.repository.BlockWithDepth
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.Result
 
 /**
@@ -49,8 +49,8 @@ class BlockOperations(
                 leftUuid = leftId,
                 position = position ?: 0,
                 level = 0, // Level should be determined based on parent, but keeping it simple for now
-                createdAt = createdAt ?: kotlinx.datetime.Clock.System.now(),
-                updatedAt = kotlinx.datetime.Clock.System.now(),
+                createdAt = createdAt ?: kotlin.time.Clock.System.now(),
+                updatedAt = kotlin.time.Clock.System.now(),
                 properties = properties
             )
             
@@ -77,7 +77,7 @@ class BlockOperations(
             val updatedBlock = block.copy(
                 content = content,
                 properties = properties ?: block.properties,
-                updatedAt = kotlinx.datetime.Clock.System.now()
+                updatedAt = kotlin.time.Clock.System.now()
             )
             
             val result = blockRepository.saveBlock(updatedBlock)
@@ -106,7 +106,7 @@ class BlockOperations(
             
             val updatedBlock = block.copy(
                 properties = newProperties,
-                updatedAt = kotlinx.datetime.Clock.System.now()
+                updatedAt = kotlin.time.Clock.System.now()
             )
             
             val result = blockRepository.saveBlock(updatedBlock)
@@ -205,8 +205,8 @@ class BlockOperations(
             val duplicate = originalBlock.copy(
                 uuid = generateBlockUuid(),
                 content = originalBlock.content + " (copy)",
-                createdAt = kotlinx.datetime.Clock.System.now(),
-                updatedAt = kotlinx.datetime.Clock.System.now(),
+                createdAt = kotlin.time.Clock.System.now(),
+                updatedAt = kotlin.time.Clock.System.now(),
                 version = 0L
             )
             

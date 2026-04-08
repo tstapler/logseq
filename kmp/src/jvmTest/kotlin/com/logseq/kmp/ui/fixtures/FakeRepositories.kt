@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlin.Result
 
@@ -54,6 +54,19 @@ open class FakePageRepository(initialPages: List<Page> = emptyList()) : PageRepo
 
     override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> =
         _pages.map { pages -> Result.success(pages.values.filter { it.namespace == namespace }) }
+
+    override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> =
+        _pages.map { pages -> Result.success(pages.values.sortedBy { it.name }.drop(offset).take(limit)) }
+
+    override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> =
+        _pages.map { pages ->
+            val result = pages.values
+                .filter { it.name.contains(query, ignoreCase = true) }
+                .sortedBy { it.name }
+                .drop(offset)
+                .take(limit)
+            Result.success(result)
+        }
 
     override suspend fun savePage(page: Page): Result<Unit> {
         _pages.value = _pages.value + (page.uuid to page)
@@ -304,7 +317,9 @@ open class FakeBlockRepository(blocksByPage: Map<String, List<Block>> = emptyMap
     override fun getBlockAncestors(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
     override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
     override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+    override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+    override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
     override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
     override fun findDuplicateBlocks(limit: Int): Flow<Result<List<DuplicateGroup>>> = flowOf(Result.success(emptyList()))
     override suspend fun clear() { _blocks.value = emptyMap() }

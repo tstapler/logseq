@@ -2,7 +2,7 @@ package com.logseq.kmp.editor
 
 import com.logseq.kmp.editor.text.TextRange
 import com.logseq.kmp.editor.text.TextSelection
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 // EditorState, EditorConfig, EditorMode, EditorTheme moved to com.logseq.kmp.editor.state
 // TextState, TextSelection, TextRange moved to com.logseq.kmp.editor.text

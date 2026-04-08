@@ -2,8 +2,8 @@ package com.logseq.kmp.editor.persistence
 
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.logging.Logger
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 

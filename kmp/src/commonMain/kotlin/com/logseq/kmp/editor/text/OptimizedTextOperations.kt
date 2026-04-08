@@ -27,7 +27,7 @@ class OptimizedTextOperations(
     
     // Performance optimization: bounded state map
     private val maxStates = 1000
-    private var lastCleanup = kotlinx.datetime.Clock.System.now()
+    private var lastCleanup = kotlin.time.Clock.System.now()
 
     override fun getTextState(blockId: String): StateFlow<TextState> {
         return _textStates.map { it[blockId] ?: TextState() }
@@ -65,7 +65,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newText,
                 selection = TextSelection.cursor(newCursorPosition),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -107,7 +107,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newContent,
                 selection = TextSelection.cursor(newCursorPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -137,7 +137,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newContent,
                 selection = TextSelection.cursor(range.start),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -163,7 +163,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(position),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -181,7 +181,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection(range),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -197,7 +197,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -213,7 +213,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -229,7 +229,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -245,7 +245,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -263,7 +263,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection(TextRange(start, rangeEnd)),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -281,7 +281,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection(TextRange(start, rangeEnd)),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -298,7 +298,7 @@ class OptimizedTextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection(TextRange(0, rangeEnd)),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -324,7 +324,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newContent,
                 selection = TextSelection.cursor(range.start),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             updateBlockContentOptimized(blockId, newContent)
@@ -359,7 +359,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newContent,
                 selection = TextSelection.cursor(newCursorPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             updateBlockContentOptimized(blockId, newContent)
@@ -395,7 +395,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = newText,
                 selection = TextSelection.cursor(insertPos + textToInsert.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -440,7 +440,7 @@ class OptimizedTextOperations(
             val newState = currentState.copy(
                 content = updatedContent,
                 selection = TextSelection.cursor(range.start + newText.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -467,7 +467,7 @@ class OptimizedTextOperations(
     }
 
     private fun cleanupOldStates() {
-        val now = kotlinx.datetime.Clock.System.now()
+        val now = kotlin.time.Clock.System.now()
         if (now > lastCleanup + CLEANUP_INTERVAL) {
             val cutoff = now.minus(STALE_STATE_DURATION)
             val filtered = _textStates.value.filter { (_, state) ->
@@ -546,7 +546,7 @@ class OptimizedTextOperations(
                 val newState = TextState(
                     content = content,
                     selection = TextSelection.cursor(0),
-                    lastModified = kotlinx.datetime.Clock.System.now()
+                    lastModified = kotlin.time.Clock.System.now()
                 )
                 updateTextState(blockId, newState)
             }

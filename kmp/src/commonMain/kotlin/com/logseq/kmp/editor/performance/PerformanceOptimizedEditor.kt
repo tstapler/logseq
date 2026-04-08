@@ -62,7 +62,7 @@ fun PerformanceOptimizedEditor(
         debounceJob.value = scope.launch {
             delay(16L) // ~60fps for responsive typing
             // Update only if not within debounce window
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
             if (now - lastContentUpdate > 16L) {
                 lastContentUpdate = now
             }
@@ -96,7 +96,7 @@ fun PerformanceOptimizedEditor(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .animateItemPlacement()
+                        .animateItem()
                 )
             } else {
                 // Performance: Render placeholder for off-screen blocks
@@ -144,7 +144,7 @@ private fun PerformanceOptimizedBlockEditor(
         },
         onContentChange = { newContent ->
             // Performance: Debounce rapid changes
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            val now = kotlin.time.Clock.System.now().toEpochMilliseconds()
             if (now - lastChangeTime > changeDebounceMs) {
                 lastChangeTime = now
                 scope.launch {

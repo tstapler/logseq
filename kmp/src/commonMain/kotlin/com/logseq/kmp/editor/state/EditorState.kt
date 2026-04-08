@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Configuration for the rich text editor.
@@ -814,7 +814,7 @@ class EditorStateManager(
      * Mark changes as saved (clear unsaved flag).
      */
     fun markAsSaved() {
-        val now = kotlinx.datetime.Clock.System.now()
+        val now = kotlin.time.Clock.System.now()
         updateState { 
             it
                 .withUnsavedChanges(false)

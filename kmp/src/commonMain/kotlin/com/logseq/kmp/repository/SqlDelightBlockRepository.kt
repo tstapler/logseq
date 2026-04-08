@@ -12,8 +12,8 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.Result.Companion.success
@@ -660,6 +660,23 @@ class SqlDelightBlockRepository(
         }
     }.flowOn(PlatformDispatcher.IO)
 
+    override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flow {
+        try {
+            // Optimized: Use SQL LIKE query first to filter candidates
+            val candidates = queries.selectBlocksWithContentLikePaginated("%[[${pageName}]]%", limit.toLong(), offset.toLong())
+                .executeAsList()
+                .map { it.toBlockModel() }
+            
+            // Then verify with exact regex in memory (to handle edge cases)
+            val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+            val linked = candidates.filter { wikiLinkPattern.containsMatchIn(it.content) }
+            
+            emit(success(linked))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flow {
         try {
             val allBlocks = queries.selectAllBlocks().executeAsList().map { it.toBlockModel() }
@@ -667,6 +684,26 @@ class SqlDelightBlockRepository(
             val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
 
             val unlinked = allBlocks.filter { block ->
+                plainTextPattern.containsMatchIn(block.content) &&
+                        !wikiLinkPattern.containsMatchIn(block.content)
+            }
+            emit(success(unlinked))
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }.flowOn(PlatformDispatcher.IO)
+
+    override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flow {
+        try {
+            // More efficient for large graphs: only query blocks with similar content
+            val candidates = queries.selectBlocksWithContentLikePaginated("%$pageName%", limit.toLong(), offset.toLong())
+                .executeAsList()
+                .map { it.toBlockModel() }
+
+            val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+            val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
+
+            val unlinked = candidates.filter { block ->
                 plainTextPattern.containsMatchIn(block.content) &&
                         !wikiLinkPattern.containsMatchIn(block.content)
             }

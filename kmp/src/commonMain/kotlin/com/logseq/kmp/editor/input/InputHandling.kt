@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 // Helper function for i18n
 private fun t(key: String, vararg args: Any): String {
@@ -69,7 +69,7 @@ class ImeCompositionManager(
                 cursorOffset = preeditText.length,
                 targetStart = 0,
                 targetEnd = preeditText.length,
-                startTime = kotlinx.datetime.Clock.System.now()
+                startTime = kotlin.time.Clock.System.now()
             )
             
             _compositionState.value = newState
@@ -124,7 +124,7 @@ class ImeCompositionManager(
                 val finalState = currentState.copy(
                     isComposing = false,
                     committedText = committedText,
-                    endTime = kotlinx.datetime.Clock.System.now()
+                    endTime = kotlin.time.Clock.System.now()
                 )
                 
                 _compositionState.value = finalState
@@ -155,7 +155,7 @@ class ImeCompositionManager(
                 val cancelState = currentState.copy(
                     isComposing = false,
                     cancelled = true,
-                    endTime = kotlinx.datetime.Clock.System.now()
+                    endTime = kotlin.time.Clock.System.now()
                 )
                 
                 _compositionState.value = cancelState
@@ -214,8 +214,8 @@ data class ImeCompositionState(
     val targetStart: Int = 0,
     val targetEnd: Int = 0,
     val cancelled: Boolean = false,
-    val startTime: Instant = kotlinx.datetime.Instant.DISTANT_PAST,
-    val endTime: Instant = kotlinx.datetime.Instant.DISTANT_PAST
+    val startTime: Instant = kotlin.time.Instant.DISTANT_PAST,
+    val endTime: Instant = kotlin.time.Instant.DISTANT_PAST
 ) {
     /**
      * The effective cursor position in the composed text.
@@ -225,7 +225,7 @@ data class ImeCompositionState(
     /**
      * The duration of the composition process.
      */
-    val duration: Long get() = if (startTime != kotlinx.datetime.Instant.DISTANT_PAST && endTime != kotlinx.datetime.Instant.DISTANT_PAST) {
+    val duration: Long get() = if (startTime != kotlin.time.Instant.DISTANT_PAST && endTime != kotlin.time.Instant.DISTANT_PAST) {
         (endTime - startTime).inWholeMilliseconds
     } else 0L
 }
@@ -266,7 +266,7 @@ class KeyboardEventHandler(
     fun handleKeyPress(
         key: String,
         modifiers: Set<KeyModifier> = emptySet(),
-        timestamp: Instant = kotlinx.datetime.Clock.System.now()
+        timestamp: Instant = kotlin.time.Clock.System.now()
     ): Boolean {
         val traceId = PerformanceMonitor.startTrace("keyboard-handle-key")
         
@@ -419,7 +419,7 @@ class KeyboardEventHandler(
     fun handleKeyRelease(
         key: String,
         modifiers: Set<KeyModifier> = emptySet(),
-        timestamp: Instant = kotlinx.datetime.Clock.System.now()
+        timestamp: Instant = kotlin.time.Clock.System.now()
     ) {
         val event = KeyboardEvent.KeyRelease(key, modifiers, timestamp)
         addToHistory(event)
@@ -437,7 +437,7 @@ class KeyboardEventHandler(
         val traceId = PerformanceMonitor.startTrace("keyboard-special-input")
         
         return try {
-            val event = KeyboardEvent.SpecialInput(input, inputType, kotlinx.datetime.Clock.System.now())
+            val event = KeyboardEvent.SpecialInput(input, inputType, kotlin.time.Clock.System.now())
             addToHistory(event)
             
             when (inputType) {

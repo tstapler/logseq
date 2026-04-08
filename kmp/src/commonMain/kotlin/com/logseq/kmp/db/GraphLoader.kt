@@ -3,7 +3,7 @@ package com.logseq.kmp.db
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.model.ParsedBlock
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import com.logseq.kmp.outliner.JournalUtils
 import com.logseq.kmp.outliner.OutlinerPipeline
 import com.logseq.kmp.parser.MarkdownParser
@@ -15,7 +15,7 @@ import com.logseq.kmp.logging.Logger
 import com.logseq.kmp.performance.PerformanceMonitor
 import com.logseq.kmp.util.FileUtils
 import com.logseq.kmp.util.UuidGenerator
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -764,7 +764,7 @@ class GraphLoader(
         pageUuid: String,
         parentUuid: String?,
         baseLevel: Int,
-        now: kotlinx.datetime.Instant,
+        now: kotlin.time.Instant,
         destinationList: MutableList<Block>,
         mode: ParseMode,
         existingVersions: Map<String, Long> = emptyMap(),

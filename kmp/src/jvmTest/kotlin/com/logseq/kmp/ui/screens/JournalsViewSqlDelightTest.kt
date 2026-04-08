@@ -14,7 +14,7 @@ import com.logseq.kmp.ui.fixtures.FakeFileSystem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import org.junit.Rule
 import org.junit.Test

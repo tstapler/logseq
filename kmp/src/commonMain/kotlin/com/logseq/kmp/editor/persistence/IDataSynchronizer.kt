@@ -241,8 +241,8 @@ data class SyncResult(
     val sessionId: String,
     val operationType: SyncOperationType,
     val success: Boolean,
-    val startTime: kotlinx.datetime.Instant,
-    val endTime: kotlinx.datetime.Instant,
+    val startTime: kotlin.time.Instant,
+    val endTime: kotlin.time.Instant,
     val processedBlocks: Int = 0,
     val conflicts: List<SyncConflict> = emptyList(),
     val errors: List<String> = emptyList(),
@@ -299,7 +299,7 @@ data class SyncConflict(
     val conflictType: ConflictType,
     val localVersion: BlockVersion,
     val remoteVersion: BlockVersion,
-    val detectedAt: kotlinx.datetime.Instant,
+    val detectedAt: kotlin.time.Instant,
     val severity: ConflictSeverity,
     val description: String,
     val suggestions: List<ConflictResolution> = emptyList()
@@ -324,7 +324,7 @@ data class BlockVersion(
     val content: String,
     val properties: Map<String, String>,
     val version: Long,
-    val lastModified: kotlinx.datetime.Instant,
+    val lastModified: kotlin.time.Instant,
     val modifiedBy: String? = null,
     val checksum: String? = null
 )
@@ -348,7 +348,7 @@ data class ConflictResolutionResult(
     val conflictId: String,
     val strategy: ConflictResolutionStrategy,
     val success: Boolean,
-    val resolvedAt: kotlinx.datetime.Instant,
+    val resolvedAt: kotlin.time.Instant,
     val notes: String? = null
 )
 
@@ -358,7 +358,7 @@ data class ConflictResolutionResult(
 data class SyncSession(
     val sessionId: String,
     val operationType: SyncOperationType,
-    val startTime: kotlinx.datetime.Instant,
+    val startTime: kotlin.time.Instant,
     val status: SyncState,
     val progress: SyncProgress? = null,
     val metadata: Map<String, String> = emptyMap()
@@ -369,7 +369,7 @@ data class SyncSession(
  */
 data class RemoteStatus(
     val isAccessible: Boolean,
-    val lastSyncTime: kotlinx.datetime.Instant? = null,
+    val lastSyncTime: kotlin.time.Instant? = null,
     val totalBlocks: Long = 0L,
     val totalSize: Long = 0L,
     val serverVersion: String? = null,
@@ -408,7 +408,7 @@ data class TrackedChange(
     val changeId: String,
     val blockUuid: String,
     val changeType: ChangeType,
-    val timestamp: kotlinx.datetime.Instant,
+    val timestamp: kotlin.time.Instant,
     val data: Map<String, String>,
     val synced: Boolean = false
 )

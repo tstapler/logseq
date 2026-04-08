@@ -36,6 +36,14 @@ class CachedPageRepository(
         return cache.getRecentPages(limit)
     }
 
+    override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return cache.getPages(limit, offset)
+    }
+
+    override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return cache.searchPages(query, limit, offset)
+    }
+
     override fun getJournalPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
         return delegate.getJournalPages(limit, offset)
     }

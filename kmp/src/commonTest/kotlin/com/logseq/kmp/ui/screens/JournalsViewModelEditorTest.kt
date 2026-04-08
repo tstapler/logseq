@@ -18,7 +18,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -123,7 +123,13 @@ class JournalsViewModelEditorTest {
         override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> =
             flowOf(Result.success(emptyList()))
 
+        override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> =
+            flowOf(Result.success(emptyList()))
+
         override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> =
+            flowOf(Result.success(emptyList()))
+
+        override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> =
             flowOf(Result.success(emptyList()))
 
         override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> =
@@ -242,6 +248,20 @@ class JournalsViewModelEditorTest {
 
         override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = 
             flowOf(Result.success(pages.filter { it.namespace == namespace }))
+
+        override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+            val result = pages.sortedBy { it.name }.drop(offset).take(limit)
+            return flowOf(Result.success(result))
+        }
+
+        override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> {
+            val result = pages
+                .filter { it.name.contains(query, ignoreCase = true) }
+                .sortedBy { it.name }
+                .drop(offset)
+                .take(limit)
+            return flowOf(Result.success(result))
+        }
 
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> =
             flowOf(Result.success(pages.find { it.uuid == uuid }))

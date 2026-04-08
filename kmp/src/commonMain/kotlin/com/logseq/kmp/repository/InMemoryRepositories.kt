@@ -403,6 +403,16 @@ class InMemoryBlockRepository : BlockRepository {
         }
     }
 
+    override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+        return blocks.map { map ->
+            val linkedBlocks = map.values.filter { block ->
+                wikiLinkPattern.containsMatchIn(block.content)
+            }
+            success(linkedBlocks.sortedBy { it.pageUuid }.drop(offset).take(limit))
+        }
+    }
+
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
         val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
@@ -412,6 +422,18 @@ class InMemoryBlockRepository : BlockRepository {
                     !wikiLinkPattern.containsMatchIn(block.content)
             }
             success(unlinkedBlocks.sortedBy { it.pageUuid })
+        }
+    }
+
+    override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+        val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
+        return blocks.map { map ->
+            val unlinkedBlocks = map.values.filter { block ->
+                plainTextPattern.containsMatchIn(block.content) &&
+                    !wikiLinkPattern.containsMatchIn(block.content)
+            }
+            success(unlinkedBlocks.sortedBy { it.pageUuid }.drop(offset).take(limit))
         }
     }
 
@@ -449,6 +471,24 @@ class InMemoryPageRepository : PageRepository {
     override fun getAllPages(): Flow<Result<List<Page>>> {
         return pages.map { map ->
             success(map.values.toList())
+        }
+    }
+
+    override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return pages.map { map ->
+            val result = map.values.sortedBy { it.name }.drop(offset).take(limit)
+            success(result)
+        }
+    }
+
+    override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> {
+        return pages.map { map ->
+            val result = map.values
+                .filter { it.name.contains(query, ignoreCase = true) }
+                .sortedBy { it.name }
+                .drop(offset)
+                .take(limit)
+            success(result)
         }
     }
 
@@ -508,7 +548,7 @@ class InMemoryPageRepository : PageRepository {
     override suspend fun renamePage(pageUuid: String, newName: String): Result<Unit> {
         val current = pages.value.toMutableMap()
         val page = current[pageUuid] ?: return Result.failure(Exception("Page not found"))
-        current[pageUuid] = page.copy(name = newName, updatedAt = kotlinx.datetime.Clock.System.now())
+        current[pageUuid] = page.copy(name = newName, updatedAt = kotlin.time.Clock.System.now())
         pages.value = current
         return success(Unit)
     }

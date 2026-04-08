@@ -2,7 +2,7 @@ package com.logseq.kmp.editor.text
 
 import com.logseq.kmp.model.Validation
 import kotlinx.serialization.Serializable
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Represents a range of text with start and end positions.
@@ -205,7 +205,7 @@ data class TextState(
     val content: String = "",
     val selection: TextSelection = TextSelection.Empty,
     val version: Int = 1,
-    val lastModified: Instant = kotlinx.datetime.Clock.System.now(),
+    val lastModified: Instant = kotlin.time.Clock.System.now(),
     val isDirty: Boolean = false,
     val undoStack: List<TextOperation> = emptyList(),
     val redoStack: List<TextOperation> = emptyList(),
@@ -214,7 +214,7 @@ data class TextState(
     init {
         Validation.validateContent(content)
         require(version > 0) { "Version must be positive" }
-        require(lastModified != kotlinx.datetime.Instant.DISTANT_PAST) { "Invalid last modified timestamp" }
+        require(lastModified != kotlin.time.Instant.DISTANT_PAST) { "Invalid last modified timestamp" }
         metadata.forEach { (key, value) ->
             Validation.validateName(key)
             Validation.validateContent(value)
@@ -255,7 +255,7 @@ data class TextState(
         return copy(
             content = newContent,
             version = version + 1,
-            lastModified = kotlinx.datetime.Clock.System.now(),
+            lastModified = kotlin.time.Clock.System.now(),
             isDirty = true
         )
     }
@@ -341,7 +341,7 @@ sealed class TextOperation {
     data class Insert(
         val position: Int,
         val text: String,
-        override val timestamp: Instant = kotlinx.datetime.Clock.System.now(),
+        override val timestamp: Instant = kotlin.time.Clock.System.now(),
         override val description: String = "Insert '${text.take(20)}${if (text.length > 20) "..." else ""}' at $position"
     ) : TextOperation() {
         init {
@@ -367,7 +367,7 @@ sealed class TextOperation {
     data class Delete(
         val position: Int,
         val text: String,
-        override val timestamp: Instant = kotlinx.datetime.Clock.System.now(),
+        override val timestamp: Instant = kotlin.time.Clock.System.now(),
         override val description: String = "Delete '${text.take(20)}${if (text.length > 20) "..." else ""}' at $position"
     ) : TextOperation() {
         init {
@@ -393,7 +393,7 @@ sealed class TextOperation {
         val position: Int,
         val oldText: String,
         val newText: String,
-        override val timestamp: Instant = kotlinx.datetime.Clock.System.now(),
+        override val timestamp: Instant = kotlin.time.Clock.System.now(),
         override val description: String = "Replace '${oldText.take(20)}${if (oldText.length > 20) "..." else ""}' with '${newText.take(20)}${if (newText.length > 20) "..." else ""}' at $position"
     ) : TextOperation() {
         init {

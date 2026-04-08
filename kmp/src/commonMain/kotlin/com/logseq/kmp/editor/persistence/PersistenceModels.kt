@@ -1,7 +1,7 @@
 package com.logseq.kmp.editor.persistence
 
 import com.logseq.kmp.model.Block
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 /**
@@ -210,7 +210,7 @@ data class PersistenceResult(
                 operation = operation,
                 blockUuid = blockUuid,
                 message = message,
-                timestamp = kotlinx.datetime.Clock.System.now(),
+                timestamp = kotlin.time.Clock.System.now(),
                 duration = duration
             )
             
@@ -220,7 +220,7 @@ data class PersistenceResult(
                 operation = operation,
                 blockUuid = blockUuid,
                 message = message,
-                timestamp = kotlinx.datetime.Clock.System.now(),
+                timestamp = kotlin.time.Clock.System.now(),
                 retryCount = retryCount,
                 duration = duration
             )

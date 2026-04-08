@@ -62,6 +62,6 @@ data class Page(
     val name: String,
     val namespace: String?,
     val filePath: String?,
-    val createdAt: kotlinx.datetime.Instant,
-    val updatedAt: kotlinx.datetime.Instant
+    val createdAt: kotlin.time.Instant,
+    val updatedAt: kotlin.time.Instant
 )

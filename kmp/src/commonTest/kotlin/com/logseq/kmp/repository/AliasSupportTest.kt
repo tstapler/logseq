@@ -5,7 +5,7 @@ import com.logseq.kmp.ui.LogseqViewModel
 import com.logseq.kmp.ui.screens.SearchResultItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -122,10 +122,20 @@ interface BlockRepository {
     fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>>
 
     /**
+     * Find all blocks that contain a wiki link to the given page name with pagination.
+     */
+    fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>>
+
+    /**
      * Find all blocks that mention the page name as plain text
      * (not as a wiki link)
      */
     fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>>
+
+    /**
+     * Find all blocks that mention the page name as plain text with pagination.
+     */
+    fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>>
 
     /**
      * Search blocks by content
@@ -167,7 +177,17 @@ interface PageRepository {
     fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>>
 
     /**
-     * Get all pages (with optional filtering)
+     * Get all pages with pagination
+     */
+    fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>>
+
+    /**
+     * Search pages by name with pagination
+     */
+    fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>>
+
+    /**
+     * Get all pages (unpaginated)
      */
     fun getAllPages(): Flow<Result<List<Page>>>
 
@@ -373,8 +393,8 @@ data class SearchRequest(
  * Date range for filtering
  */
 data class DateRange(
-    val startDate: kotlinx.datetime.Instant? = null,
-    val endDate: kotlinx.datetime.Instant? = null
+    val startDate: kotlin.time.Instant? = null,
+    val endDate: kotlin.time.Instant? = null
 )
 
 /**

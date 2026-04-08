@@ -1,7 +1,7 @@
 package com.logseq.kmp.util
 
 import com.logseq.kmp.model.Block
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 object TestUtils {
     // Helper to pad UUID segments

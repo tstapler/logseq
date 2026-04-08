@@ -114,8 +114,16 @@ class CachedBlockRepository(
         return delegate.getLinkedReferences(pageName)
     }
 
+    override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        return delegate.getLinkedReferences(pageName, limit, offset)
+    }
+
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         return delegate.getUnlinkedReferences(pageName)
+    }
+
+    override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        return delegate.getUnlinkedReferences(pageName, limit, offset)
     }
 
     fun getCacheMetrics(): CacheMetrics = cache.getMetrics()

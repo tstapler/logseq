@@ -427,7 +427,7 @@ data class BlockVersion(
     val blockUuid: String,
     val version: Long,
     val content: String,
-    val timestamp: kotlinx.datetime.Instant,
+    val timestamp: kotlin.time.Instant,
     val changeDescription: String,
     val author: String
 )
@@ -449,7 +449,7 @@ data class BlockRepositoryStatistics(
     val maxDepth: Int,
     val averageDepth: Float,
     val orphanedBlocks: Long,
-    val lastModified: kotlinx.datetime.Instant,
+    val lastModified: kotlin.time.Instant,
     val repositorySize: Long
 )
 

@@ -47,7 +47,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = newText,
                 selection = TextSelection.cursor(currentState.cursorPosition + text.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -86,7 +86,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = updatedText,
                 selection = TextSelection.cursor(newCursorPosition),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -124,7 +124,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = updatedText,
                 selection = TextSelection.cursor(newCursorPosition),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -159,7 +159,7 @@ class TextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(position),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -182,7 +182,7 @@ class TextOperations(
             val selection = TextSelection(TextRange(range.start, range.end))
             val newState = currentState.copy(
                 selection = selection,
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -209,7 +209,7 @@ class TextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -225,7 +225,7 @@ class TextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -241,7 +241,7 @@ class TextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -257,7 +257,7 @@ class TextOperations(
             
             val newState = currentState.copy(
                 selection = TextSelection.cursor(newPos),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             updateTextState(blockId, newState)
             Result.success(Unit)
@@ -363,7 +363,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = newText,
                 selection = TextSelection.cursor(currentState.cursorPosition + clipboardText.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -404,7 +404,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = newText,
                 selection = TextSelection.cursor(insertPos + textToInsert.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -450,7 +450,7 @@ class TextOperations(
             val newState = currentState.copy(
                 content = updatedContent,
                 selection = TextSelection.cursor(range.start + newText.length),
-                lastModified = kotlinx.datetime.Clock.System.now()
+                lastModified = kotlin.time.Clock.System.now()
             )
             
             updateTextState(blockId, newState)
@@ -476,7 +476,7 @@ class TextOperations(
                 val newState = TextState(
                     content = content,
                     selection = TextSelection.cursor(0),
-                    lastModified = kotlinx.datetime.Clock.System.now()
+                    lastModified = kotlin.time.Clock.System.now()
                 )
                 updateTextState(blockId, newState)
             }

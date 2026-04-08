@@ -4,7 +4,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.model.Page
 import com.logseq.kmp.platform.PlatformFileSystem
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals

@@ -72,8 +72,8 @@ class RepositoryBenchmark(
                         content = "Test block content $i",
                         level = if (i > 1) 1 else 0,
                         position = i,
-                        createdAt = kotlinx.datetime.Clock.System.now(),
-                        updatedAt = kotlinx.datetime.Clock.System.now(),
+                        createdAt = kotlin.time.Clock.System.now(),
+                        updatedAt = kotlin.time.Clock.System.now(),
                         properties = mapOf("test" to "value$i")
                     )
                 }
@@ -111,8 +111,8 @@ class RepositoryBenchmark(
                         name = "test-page-$i",
                         namespace = if (i % 2 == 0) "test" else null,
                         filePath = "/test/page$i.md",
-                        createdAt = kotlinx.datetime.Clock.System.now(),
-                        updatedAt = kotlinx.datetime.Clock.System.now(),
+                        createdAt = kotlin.time.Clock.System.now(),
+                        updatedAt = kotlin.time.Clock.System.now(),
                         properties = mapOf("type" to "test")
                     )
                 }

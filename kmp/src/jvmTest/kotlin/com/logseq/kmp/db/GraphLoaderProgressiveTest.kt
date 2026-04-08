@@ -8,7 +8,7 @@ import com.logseq.kmp.repository.InMemoryPageRepository
 import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

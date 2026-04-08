@@ -5,7 +5,7 @@
 - **Technology Stack**: Kotlin 2.0.21, Compose Multiplatform 1.7.1, **SQLDelight 2.1.0 (Persistent)**
 - **Recent Activity**: Migrated to SQLDelight, fixed hierarchy data integrity bugs, extracted MarkdownEngine.
 - **Last Updated**: April 4, 2026
-- **Current Focus**: Stability and Multi-platform Support
+- **Current Focus**: Stability, Progressive Loading, and Advanced Search
 
 ## Build Status
 
@@ -13,7 +13,7 @@
 |--------|--------|-------|
 | JVM/Desktop | ✅ PASSING | Stable, SQLDelight persistent, Skiko resolved transitively (0.8.18) |
 | Android | ✅ PASSING | Stable, SQLDelight persistent |
-| JS | ⏸️ Disabled | BUG-003: OutOfMemoryError |
+| JS | ✅ PASSING | Fixed via BUG-003, SQLDelight web-worker-driver + SQL.js |
 | iOS | ⏸️ Disabled | Ivy repository issues |
 
 ## Project Structure (Multiplatform)
@@ -27,7 +27,7 @@ kmp/
     │       ├── platform/          # expect classes
     │       ├── model/             # Page, Block, Property
     │       ├── repository/        # SQLDelight implementations
-    │       ├── db/                # GraphLoader, DriverFactory
+    │       ├── db/                # GraphLoader, DriverFactory, GraphManager
     │       ├── editor/            # Editor core logic
     │       └── ui/                # Compose UI components
     ├── jvmMain/                   # JVM/Desktop implementations
@@ -40,32 +40,21 @@ kmp/
 
 ### P0: STABILITY & COMPATIBILITY
 - [x] **[JVM-001] Fix Skiko Runtime Crash** - Resolved transitively via Compose 1.7.1 on Kotlin 2.0.21.
+- [x] **[BUG-003] Fix JS/Android Target Issues** - Re-enabled targets with proper driver initialization and memory settings.
 
 ### P0: ARCHITECTURE & MAINTAINABILITY
 - [x] **[UI-001] Decompose BlockRenderer** - Split 600+ line God Object into BlockGutter, BlockEditor, BlockViewer, BlockItem, BlockList components.
 - [x] **[ED-001] Implement Undo/Redo Command Pattern** - Undo/redo stack in JournalsViewModel: lightweight content edits + full page snapshots for structural ops. Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y wired in App.kt.
 - [x] **[ED-002] Decouple UI from Editor Core** - Moved `AutocompleteMenu` from `editor.components` to `ui.components`; removed cross-package Compose dependency.
 - [x] **[TEST-001] Fix Flaky Test Sync** - Replace `delay(50)` with `UnconfinedTestDispatcher(testScheduler)` + `backgroundScope` for deterministic, non-hanging tests.
-
-### P0: DATA ARCHITECTURE (Replication & Merge Readiness)
-- [x] **[DB-001] UUID-Native Block Storage** - Moved from numeric IDs to UUID-native storage across the entire application (Schema, Models, Repositories, GraphLoader, ViewModels). Enables cross-device merge, content deduplication, and replication support.
-  - [x] Phase 1: Schema migration (UUID PKs, FTS5 compat, query rewrites)
-  - [x] Phase 2: Model & repository layer (remove `id: Long`, UUID-only identity)
-  - [x] Phase 3: GraphLoader UUID-native loading (populate `left_uuid`, content hashing)
-  - [x] Phase 4: Test refactor (all 130+ tests updated to UUIDs)
-  - [x] Phase 5: Extra: Removed Encryption logic (EncryptedRepositories.kt) as per user request
-  - [x] Phase 6: Extra: Implemented file system watcher in GraphLoader for auto-reload from disk
-  - [x] Extra: Added `generateTodayJournal()` in JournalsViewModel
-  - [x] Extra: Implemented large-scale deletion safety check in GraphWriter
+- [x] **[DB-001] UUID-Native Block Storage** - Moved from numeric IDs to UUID-native storage across the entire application. Enables cross-device merge.
+- [x] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases.
 
 ### P1: FEATURE COMPLETION
-- [x] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are implemented in `BlockTreeOperations.kt` and delegated to from `BlockOperations.kt`. `moveBlockEnhanced` is also implemented with positioning support and sibling shifting.
-- [x] **[FTS-001] Native Search Optimization** - `searchWithFilters` and `searchBlocksByContent` now use FTS5 instead of loading all blocks into memory; FTS query sanitized to prevent syntax errors.
-- [x] **[MG-001] Multi-Graph Support** - Allow users to manage multiple knowledge graphs with per-graph SQLite databases.
-  - [x] Phase 1: Foundation (hashing, GraphInfo model, canonicalizePath, databaseUrlForGraph) - COMPLETED
-  - [x] Phase 2: Repository lifecycle (GraphManager, driver close/open, StateFlow<RepositorySet>) - COMPLETED
-  - [x] Phase 3: ViewModel + UI integration (graph switcher, key-scoped ViewModels) - COMPLETED
-  - [x] Phase 4: Migration + polish (single-DB migration, remove graph, status bar) - COMPLETED
+- [x] **[OPS-001] Implement Subtree Operations** - `promoteSubtree`, `demoteSubtree`, and `duplicateSubtree` are implemented.
+- [x] **[FTS-001] Native Search Optimization** - `searchWithFilters` and `searchBlocksByContent` now use FTS5.
+- [ ] **[PL-001] Progressive Data Loading** - Implement pagination for all pages and linked references. ([plan](docs/tasks/progressive-loading.md))
+- [ ] **[SR-001] Advanced Search & Query** - Implement Datalog engine via Datascript. ([plan](docs/tasks/search-system.md))
 
 ---
 
@@ -82,6 +71,8 @@ kmp/
 - [x] GraphLoader with progressive loading
 - [x] Block and Page repositories (SQLDelight)
 - [x] Performance monitoring infrastructure
+- [x] UUID-Native storage
+- [x] Multi-graph support (GraphManager)
 
 ### ✅ UI Framework
 - [x] Main application window with menu bar
@@ -102,10 +93,11 @@ kmp/
 
 | ID | Severity | Description | Status |
 |----|----------|-------------|--------|
-| BUG-003 | Medium | JS/Android targets disabled (Kotlin 2.0.21 compatibility) | Open |
+| iOS-001 | Medium | iOS target disabled due to Ivy repository issues | Open |
+| PL-001 | High | "All Pages" loads all pages into memory; linked refs unpaginated | Planned ([plan](docs/tasks/progressive-loading.md)) |
+| SR-001 | High | Datalog engine (Datascript) not implemented | Planned ([plan](docs/tasks/search-system.md)) |
 | - | Low | ClickableText deprecated API | Warning only |
 | - | Low | expect/actual beta warnings | Cosmetic |
-| - | Low | Large-scale deletion safety check needs manual override | Pending |
 
 ---
 

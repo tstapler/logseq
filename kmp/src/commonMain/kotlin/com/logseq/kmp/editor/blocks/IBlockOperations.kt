@@ -4,7 +4,7 @@ import com.logseq.kmp.model.Block
 import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.repository.BlockWithDepth
 import kotlinx.coroutines.flow.Flow
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.Result
 
 /**

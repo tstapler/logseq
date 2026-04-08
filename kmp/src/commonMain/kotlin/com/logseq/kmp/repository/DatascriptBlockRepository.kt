@@ -124,6 +124,16 @@ class DatascriptBlockRepository : BlockRepository {
         }
     }
 
+    override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+        return blocks.map { map ->
+            val linkedBlocks = map.values.filter { block ->
+                wikiLinkPattern.containsMatchIn(block.content)
+            }
+            success(linkedBlocks.sortedBy { it.pageUuid }.drop(offset).take(limit))
+        }
+    }
+
     override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> {
         val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
         val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
@@ -133,6 +143,18 @@ class DatascriptBlockRepository : BlockRepository {
                     !wikiLinkPattern.containsMatchIn(block.content)
             }
             success(unlinkedBlocks.sortedBy { it.pageUuid })
+        }
+    }
+
+    override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> {
+        val wikiLinkPattern = "\\[\\[${Regex.escape(pageName)}\\]\\]".toRegex(RegexOption.IGNORE_CASE)
+        val plainTextPattern = "\\b${Regex.escape(pageName)}\\b".toRegex(RegexOption.IGNORE_CASE)
+        return blocks.map { map ->
+            val unlinkedBlocks = map.values.filter { block ->
+                plainTextPattern.containsMatchIn(block.content) &&
+                    !wikiLinkPattern.containsMatchIn(block.content)
+            }
+            success(unlinkedBlocks.sortedBy { it.pageUuid }.drop(offset).take(limit))
         }
     }
 

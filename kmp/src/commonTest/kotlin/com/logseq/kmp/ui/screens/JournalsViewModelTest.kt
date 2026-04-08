@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -49,7 +49,9 @@ class JournalsViewModelTest {
         override fun getBlockParent(blockUuid: String): Flow<Result<Block?>> = flowOf(Result.success(null))
         override fun getBlockSiblings(blockUuid: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getLinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getLinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun getUnlinkedReferences(pageName: String): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
+        override fun getUnlinkedReferences(pageName: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         override fun searchBlocksByContent(query: String, limit: Int, offset: Int): Flow<Result<List<Block>>> = flowOf(Result.success(emptyList()))
         
         override suspend fun saveBlock(block: Block): Result<Unit> = Result.success(Unit)
@@ -83,6 +85,21 @@ class JournalsViewModelTest {
         }
 
         override fun getPagesInNamespace(namespace: String): Flow<Result<List<Page>>> = flowOf(Result.success(emptyList()))
+        
+        override fun getPages(limit: Int, offset: Int): Flow<Result<List<Page>>> {
+            val result = pages.sortedBy { it.name }.drop(offset).take(limit)
+            return flowOf(Result.success(result))
+        }
+
+        override fun searchPages(query: String, limit: Int, offset: Int): Flow<Result<List<Page>>> {
+            val result = pages
+                .filter { it.name.contains(query, ignoreCase = true) }
+                .sortedBy { it.name }
+                .drop(offset)
+                .take(limit)
+            return flowOf(Result.success(result))
+        }
+
         override fun getPageByUuid(uuid: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.uuid == uuid }))
         override fun getPageByName(name: String): Flow<Result<Page?>> = flowOf(Result.success(pages.find { it.name == name }))
         override suspend fun savePage(page: Page): Result<Unit> {

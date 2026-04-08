@@ -129,7 +129,7 @@ data class CommandHistoryEntry(
     val command: EditorCommand,
     val context: CommandContext,
     val result: CommandResult,
-    val timestamp: kotlinx.datetime.Instant,
+    val timestamp: kotlin.time.Instant,
     val executionTimeMs: Long
 )
 
