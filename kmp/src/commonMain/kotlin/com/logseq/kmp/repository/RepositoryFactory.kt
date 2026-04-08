@@ -110,6 +110,16 @@ class RepositoryFactoryImpl(
         )
     }
 
+    override fun close() {
+        // SQLDelight driver must be closed
+        try {
+            database.driver.close()
+        } catch (e: Exception) {
+            // Driver might not be initialized or already closed
+        }
+        instances.clear()
+    }
+
     private inline fun <reified T : Any> getOrCreateInstance(key: String, factory: () -> T): T {
         val existing = instances[key]
         if (existing != null) return existing as T

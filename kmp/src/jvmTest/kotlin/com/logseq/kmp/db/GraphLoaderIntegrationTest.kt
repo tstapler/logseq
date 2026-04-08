@@ -46,7 +46,7 @@ class GraphLoaderIntegrationTest {
 - Root 2
         """.trimIndent()
         
-        val path = "/graph/pages/TestPage.md"
+        val path = "/graph/pages/testpage.md"
         fileSystem.files[path] = content
         
         graphLoader.loadGraph("/graph") { _ -> }
@@ -55,7 +55,7 @@ class GraphLoaderIntegrationTest {
         val pages = pageRepository.getAllPages().first().getOrNull() ?: emptyList()
         assertEquals(1, pages.size)
         val page = pages[0]
-        assertEquals("TestPage", page.name)
+        assertEquals("testpage", page.name)
         
         // Verify Blocks
         val blocks = blockRepository.getBlocksForPage(page.uuid).first().getOrNull() ?: emptyList()

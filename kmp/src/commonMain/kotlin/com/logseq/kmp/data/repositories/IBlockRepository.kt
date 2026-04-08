@@ -101,26 +101,26 @@ interface IBlockRepository {
     /**
      * Get all blocks for a specific page.
      * 
-     * @param pageId The page ID
+     * @param pageUuid The page UUID
      * @return Flow emitting Result with list of blocks
      */
-    fun getBlocksForPage(pageId: Long): Flow<Result<List<Block>>>
+    fun getBlocksForPage(pageUuid: String): Flow<Result<List<Block>>>
     
     /**
      * Get all blocks for a page in hierarchical order.
      * 
-     * @param pageId The page ID
+     * @param pageUuid The page UUID
      * @return Flow emitting Result with list of blocks with depths
      */
-    fun getBlocksForPageHierarchy(pageId: Long): Flow<Result<List<BlockWithDepth>>>
+    fun getBlocksForPageHierarchy(pageUuid: String): Flow<Result<List<BlockWithDepth>>>
     
     /**
      * Delete all blocks associated with a specific page.
      * 
-     * @param pageId The page ID
+     * @param pageUuid The page UUID
      * @return Result indicating success or error
      */
-    suspend fun deleteBlocksForPage(pageId: Long): Result<Unit>
+    suspend fun deleteBlocksForPage(pageUuid: String): Result<Unit>
     
     // ===== BLOCK MANIPULATION OPERATIONS =====
     

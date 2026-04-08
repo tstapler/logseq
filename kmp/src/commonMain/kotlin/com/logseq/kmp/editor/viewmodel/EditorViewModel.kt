@@ -14,6 +14,7 @@ import com.logseq.kmp.repository.BlockRepository
 import com.logseq.kmp.model.Block
 import com.logseq.kmp.ui.i18n.Language
 import com.logseq.kmp.ui.theme.LogseqThemeMode
+import com.logseq.kmp.util.UuidGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -376,6 +377,16 @@ class EditorViewModel(
                 
                 val blockResult = blockRepository.getBlockByUuid(blockUuid).first()
                 blockResult.getOrNull()?.let { block ->
+                    // Set block content using text operations
+                    val focusedBlockId = _editorState.value.metadata["blockUuid"]
+                    if (focusedBlockId != null) {
+                        val currentContent = currentTextOperations.getText(focusedBlockId).getOrNull() ?: ""
+                        currentTextOperations.deleteText(focusedBlockId, TextRange(0, currentContent.length))
+                        currentTextOperations.insertText(focusedBlockId, block.content)
+                    } else {
+                        // If no block was focused, we are loading a new one.
+                    }
+                    
                     updateEditorState { 
                         it
                             .withDocumentInfo(
@@ -466,7 +477,7 @@ class EditorViewModel(
                     currentTextOperations.getText(currentBlockUuid).getOrNull() ?: ""
                 } else ""
                 
-                val newUuid = generateUuid()
+                val newUuid = UuidGenerator.generateV7()
                 val now = Clock.System.now()
                 val newBlock = Block(
                     uuid = newUuid,
@@ -498,10 +509,6 @@ class EditorViewModel(
                 handleError(EditorError.BlockCreateError("Failed to create block", e))
             }
         }
-    }
-    
-    private fun generateUuid(): String {
-        return com.logseq.kmp.util.UuidGenerator.generateV7()
     }
     
     // ===== ERROR HANDLING =====

@@ -411,6 +411,10 @@ interface RepositoryFactory {
     fun createPropertyRepository(backend: GraphBackend): PropertyRepository
     fun createReferenceRepository(backend: GraphBackend): ReferenceRepository
     fun createSearchRepository(backend: GraphBackend): SearchRepository
+    /**
+     * Close the underlying database connection and release resources.
+     */
+    fun close()
 }
 
 /**
