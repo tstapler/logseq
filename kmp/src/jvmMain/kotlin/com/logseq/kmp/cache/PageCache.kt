@@ -226,7 +226,9 @@ class PageCache(
         nameIndex[page.name] = page.uuid
         page.namespace?.let { ns ->
             val list = namespaceIndex.getOrPut(ns) { mutableListOf<String>() }
-            list.add(page.uuid)
+            if (!list.contains(page.uuid)) {
+                list.add(page.uuid)
+            }
         }
     }
 }

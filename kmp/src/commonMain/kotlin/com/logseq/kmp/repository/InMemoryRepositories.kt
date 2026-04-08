@@ -88,7 +88,7 @@ class InMemoryBlockRepository : BlockRepository {
             val siblings = if (block.parentUuid != null) {
                 map.values.filter { it.parentUuid == block.parentUuid && it.uuid != blockUuid }
             } else {
-                map.values.filter { it.parentUuid == null && it.uuid != blockUuid }
+                map.values.filter { it.parentUuid == null && it.uuid != blockUuid && it.pageUuid == block.pageUuid }
             }
             success(siblings.sortedBy { it.position })
         }

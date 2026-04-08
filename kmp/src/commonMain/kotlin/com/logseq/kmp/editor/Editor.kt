@@ -16,10 +16,10 @@ import com.logseq.kmp.editor.state.EditorState
 import com.logseq.kmp.editor.state.EditorConfig
 import com.logseq.kmp.editor.state.EditorMode
 import com.logseq.kmp.editor.blocks.IBlockOperations
+import com.logseq.kmp.editor.blocks.DeleteStrategy
 import com.logseq.kmp.editor.format.IFormatProcessor
 import com.logseq.kmp.performance.PerformanceMonitor
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.Result
 
@@ -147,21 +147,6 @@ class Editor(
             
             val result = command.execute(context)
             
-            if (result is CommandResult.Success) {
-                // Update cursor state based on command result
-                when (command.id) {
-                    "text.insert" -> {
-                        // Cursor position handled by text operations
-                    }
-                    "block.new" -> {
-                        // Focus new block
-                    }
-                    "block.delete" -> {
-                        // Move focus to next sibling
-                    }
-                }
-            }
-            
             com.logseq.kmp.performance.PerformanceMonitor.endTrace(traceId)
             if (result is CommandResult.Success) Result.success(Unit) else Result.failure(Exception((result as CommandResult.Error).message))
         } catch (e: Exception) {
@@ -222,6 +207,7 @@ class Editor(
             
             if (focusedBlockUuid != null) {
                 val focusedBlock = blockRepository.getBlockByUuid(focusedBlockUuid).first().getOrNull()
+                // If we have a focused block, we likely want to create a sibling (same parent)
                 parentUuid = focusedBlock?.parentUuid
             }
             

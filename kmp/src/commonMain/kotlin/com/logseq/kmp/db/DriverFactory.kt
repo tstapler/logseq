@@ -13,9 +13,14 @@ expect class DriverFactory() {
     fun createDriver(jdbcUrl: String): SqlDriver
 
     /**
-     * Platform-specific initialization (e.g. passing Android Context).
+     * Get the database URL for a specific graph.
      */
-    fun init(context: Any)
+    fun getDatabaseUrl(graphId: String): String
+
+    /**
+     * Get the directory where databases are stored.
+     */
+    fun getDatabaseDirectory(): String
 }
 
 /**

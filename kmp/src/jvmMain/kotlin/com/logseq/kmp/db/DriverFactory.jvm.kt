@@ -41,6 +41,30 @@ actual class DriverFactory actual constructor() {
 
         return driver
     }
+
+    actual fun getDatabaseUrl(graphId: String): String {
+        val basePath = getDatabaseDirectory()
+        return "jdbc:sqlite:$basePath/logseq-graph-$graphId.db"
+    }
+
+    actual fun getDatabaseDirectory(): String {
+        val os = System.getProperty("os.name").lowercase()
+        val userHome = System.getProperty("user.home")
+
+        return when {
+            os.contains("win") -> {
+                val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
+                "$appData\\Logseq"
+            }
+            os.contains("mac") -> {
+                "$userHome/Library/Application Support/Logseq"
+            }
+            else -> { // Linux and others
+                val xdgData = System.getenv("XDG_DATA_HOME") ?: "$userHome/.local/share"
+                "$xdgData/logseq"
+            }
+        }
+    }
 }
 
 actual val defaultDatabaseUrl: String

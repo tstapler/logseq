@@ -102,11 +102,10 @@ kmp/
 
 | ID | Severity | Description | Status |
 |----|----------|-------------|--------|
-| BUG-003 | Medium | JS/iOS targets disabled | Open |
-| DB-001 | High | Integer PKs incompatible with replication/merge | Planned ([plan](docs/tasks/uuid-native-block-storage.md)) |
+| BUG-003 | Medium | JS/Android targets disabled (Kotlin 2.0.21 compatibility) | Open |
 | - | Low | ClickableText deprecated API | Warning only |
 | - | Low | expect/actual beta warnings | Cosmetic |
-| MG-001 | Medium | Single-graph hardcoded; no multi-graph support | Planned ([plan](docs/tasks/multi-graph-support.md)) |
+| - | Low | Large-scale deletion safety check needs manual override | Pending |
 
 ---
 
